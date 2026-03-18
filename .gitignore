@@ -57,3 +57,4 @@ screenshots/
 debug-screenshots/
 debug-screenshots-view/
 debug-*.png
+.deploy.pid
