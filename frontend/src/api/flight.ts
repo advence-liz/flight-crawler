@@ -341,5 +341,5 @@ export const discoverTransferDestinations = (params: {
   endDate?: string;
   maxTransfers?: number;
 }): Promise<DiscoverTransferResponse> => {
-  return api.post('/routes/discover-transfer', params);
+  return api.post('/routes/discover-transfer', params, { timeout: 120000 }); // 中转搜索最多等 2 分钟
 };
