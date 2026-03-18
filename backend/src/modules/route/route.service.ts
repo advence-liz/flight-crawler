@@ -90,27 +90,49 @@ export class RouteService {
     origin: string;
     destination: string;
     departureDate: string;
-    departureDateEnd?: string;  // 不填则等于 departureDate（向后兼容）
+    departureDateEnd?: string;
     maxTransfers?: number;
     minLayoverHours?: number;
     maxLayoverHours?: number;
   }): Promise<RouteResultDto[]> {
     const endDate = params.departureDateEnd || params.departureDate;
-    const flights = await this.flightService.queryFlights({
+    const maxTransfers = params.maxTransfers ?? 2;
+
+    // 查起点出发的所有航班
+    const firstLegFlights = await this.flightService.queryFlights({
       origin: params.origin,
-      destination: params.destination,
       startDate: params.departureDate,
       endDate,
     });
 
-    const graph = this.buildGraph(flights);
+    const allFlights = [...firstLegFlights];
+
+    if (maxTransfers > 0) {
+      // 查中转城市出发的航班
+      const transitCities = new Set<string>();
+      for (const f of firstLegFlights) {
+        if (f.destination !== params.origin) {
+          transitCities.add(f.destination);
+        }
+      }
+      for (const city of transitCities) {
+        const legs = await this.flightService.queryFlights({
+          origin: city,
+          startDate: params.departureDate,
+          endDate,
+        });
+        allFlights.push(...legs);
+      }
+    }
+
+    const graph = this.buildGraph(allFlights);
     const routes = this.findAllRoutes(
       graph,
       params.origin,
       params.destination,
-      params.maxTransfers || 2,
-      params.minLayoverHours || 2,
-      params.maxLayoverHours || 24,
+      maxTransfers,
+      params.minLayoverHours ?? 2,
+      params.maxLayoverHours ?? 24,
     );
 
     const scoredRoutes = routes.map((route) => this.calculateScore(route));
@@ -120,8 +142,8 @@ export class RouteService {
   }
 
   /**
-   * 获取所有相关航班
-   * 支持固定日期或日期区间查询
+   * 获取所有相关航班（用于路径搜索）
+   * 注意：不传 destination，查询起点出发的所有航班，以及后续中转城市的航班
    */
   private async getAllRelevantFlights(
     dto: PlanRouteDto,
@@ -130,20 +152,47 @@ export class RouteService {
     let endDate: Date;
 
     if (dto.endDate) {
-      // 如果提供了 endDate，使用日期区间
       endDate = new Date(dto.endDate);
     } else {
-      // 否则查询当天和次日（用于路径搜索的连续性）
+      // 查询当天和次日，支持跨天中转
       endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + 1);
     }
 
-    return this.flightService.queryFlights({
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    // 第一步：查询起点出发的所有航班（不过滤 destination）
+    const firstLegFlights = await this.flightService.queryFlights({
       origin: dto.origin,
-      destination: dto.destination,
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0],
+      startDate: startDateStr,
+      endDate: endDateStr,
     });
+
+    if (!dto.destination || dto.maxTransfers === 0) {
+      // 无目的地或不允许中转：只返回直飞
+      return firstLegFlights;
+    }
+
+    // 第二步：收集所有中转城市，查询它们出发的航班
+    const transitCities = new Set<string>();
+    for (const f of firstLegFlights) {
+      if (f.destination !== dto.origin) {
+        transitCities.add(f.destination);
+      }
+    }
+
+    const allFlights = [...firstLegFlights];
+    for (const city of transitCities) {
+      const legs = await this.flightService.queryFlights({
+        origin: city,
+        startDate: startDateStr,
+        endDate: endDateStr,
+      });
+      allFlights.push(...legs);
+    }
+
+    return allFlights;
   }
 
   /**
