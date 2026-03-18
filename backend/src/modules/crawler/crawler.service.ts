@@ -198,7 +198,7 @@ export class CrawlerService {
       );
 
       // 监听浏览器控制台输出
-      page.on('console', (msg) => {
+      page.on('console', (msg: any) => {
         const text = msg.text();
         // 只记录我们的调试信息
         if (text.includes('===') || text.includes('选择器') || text.includes('日期元素') || text.includes('✓') || text.includes('✗')) {
@@ -207,7 +207,7 @@ export class CrawlerService {
       });
 
       // 监听所有网络请求
-      page.on('response', async (response) => {
+      page.on('response', async (response: any) => {
         const url = response.url();
         const status = response.status();
 
@@ -942,7 +942,7 @@ export class CrawlerService {
 
       // 策略 2: 查找出发地输入框（通过 placeholder）
       this.logger.log(`[策略2] 尝试通过 placeholder 查找输入框`);
-      const strategy2 = await page.evaluate((cityName) => {
+      const strategy2 = await page.evaluate((cityName: string) => {
         console.log(`[策略2] 查找出发地输入框`);
         const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
         console.log(`[策略2] 找到 ${inputs.length} 个输入框`);
@@ -986,7 +986,7 @@ export class CrawlerService {
 
       // 策略 3: 查找包含"出发地"文本的可点击元素
       this.logger.log(`[策略3] 尝试通过文本查找`);
-      const strategy3 = await page.evaluate((cityName) => {
+      const strategy3 = await page.evaluate((cityName: string) => {
         console.log(`[策略3] 查找包含"出发地"的元素`);
         const allElements = Array.from(document.querySelectorAll('div, span, button, a'));
         console.log(`[策略3] 找到 ${allElements.length} 个元素`);
@@ -1021,7 +1021,7 @@ export class CrawlerService {
 
       // 策略 4: 查找 select 下拉框
       this.logger.log(`[策略4] 尝试通过 select 下拉框`);
-      const strategy4 = await page.evaluate((cityName) => {
+      const strategy4 = await page.evaluate((cityName: string) => {
         console.log(`[策略4] 查找 select 下拉框`);
         const selects = document.querySelectorAll('select');
         console.log(`[策略4] 找到 ${selects.length} 个 select`);
@@ -1207,7 +1207,7 @@ export class CrawlerService {
     try {
       this.logger.log(`🔍 尝试从下拉列表选择城市: ${cityName}`);
 
-      const citySelected = await page.evaluate((city) => {
+      const citySelected = await page.evaluate((city: string) => {
         console.log(`查找城市: ${city}`);
         // 查找所有可能的城市列表项
         const selectors = [
@@ -1262,7 +1262,7 @@ export class CrawlerService {
     try {
       // 策略 1: 通过 .search-item 直接点击（针对海南航空页面）
       this.logger.log(`[策略1] 尝试通过 .search-item 选择`);
-      const strategy1 = await page.evaluate((targetCardType) => {
+      const strategy1 = await page.evaluate((targetCardType: string) => {
         const items = document.querySelectorAll('.search-item');
         console.log(`[策略1] 找到 ${items.length} 个 .search-item 元素`);
 
@@ -1290,7 +1290,7 @@ export class CrawlerService {
 
       // 策略 2: 通过 radio 单选按钮 + label 组合
       this.logger.log(`[策略2] 尝试通过 radio 选择`);
-      const strategy2 = await page.evaluate((targetCardType) => {
+      const strategy2 = await page.evaluate((targetCardType: string) => {
         // 查找所有 radio 输入框
         const radioInputs = document.querySelectorAll('input[type="radio"]');
         console.log(`[策略2] 找到 ${radioInputs.length} 个 radio 元素`);
@@ -1344,7 +1344,7 @@ export class CrawlerService {
       this.logger.log(`[策略3] 尝试通过文本匹配选择`);
       const cardTypeNumber = cardType.match(/\d+/)?.[0]; // 提取 "666" 或 "2666"
       if (cardTypeNumber) {
-        const strategy3 = await page.evaluate((number) => {
+        const strategy3 = await page.evaluate((number: string) => {
           console.log(`[策略3] 查找包含数字 "${number}" 的元素`);
           const allElements = Array.from(document.querySelectorAll('div, span, label, button, a'));
           console.log(`[策略3] 找到 ${allElements.length} 个元素`);
@@ -1382,7 +1382,7 @@ export class CrawlerService {
 
       // 策略 4: 通过 class 或 data 属性查找
       this.logger.log(`[策略4] 尝试通过属性选择`);
-      const strategy4 = await page.evaluate((targetCardType, number) => {
+      const strategy4 = await page.evaluate((targetCardType: string, number: string) => {
         console.log(`[策略4] 查找属性包含 "${number}" 的元素`);
         // 查找包含特定 class 或 data 属性的元素
         // 查找包含特定 class 或 data 属性的元素
@@ -1412,7 +1412,7 @@ export class CrawlerService {
 
       // 策略 5: 模糊匹配（最后的尝试）
       this.logger.log(`[策略5] 尝试完全匹配`);
-      const strategy5 = await page.evaluate((targetCardType) => {
+      const strategy5 = await page.evaluate((targetCardType: string) => {
         console.log(`[策略5] 查找完全匹配 "${targetCardType}" 的元素`);
         const allElements = Array.from(document.querySelectorAll('*'));
         console.log(`[策略5] 扫描 ${allElements.length} 个元素`);
@@ -1501,7 +1501,7 @@ export class CrawlerService {
 
       // 策略 2: 直接通过 data-date 属性精确选择日期
       this.logger.log(`[策略2] 通过 data-date="${dataDateValue}" 精确选择日期`);
-      const dateSelected = await page.evaluate((dataDate) => {
+      const dateSelected = await page.evaluate((dataDate: string) => {
         // 通过 data-date 属性精确定位日期格子
         const cell = document.querySelector(`.cell[data-date="${dataDate}"]`);
         if (!cell) {

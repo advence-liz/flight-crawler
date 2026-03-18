@@ -1,12 +1,16 @@
-import { Controller, Post, Get, Delete, HttpCode, HttpStatus, Body, Query, Param, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Delete, HttpCode, HttpStatus, Body, Query, Param, BadRequestException, Inject } from '@nestjs/common';
 import { CrawlerService } from './crawler.service';
+import { CrawlerServiceStub } from './crawler.service.stub';
 import { InitializeDiscoverDto, InitializeRefreshFlightsDto } from './dto/initialize.dto';
 import { QueryLogsDto } from './dto/query-logs.dto';
 import { CleanLogsDto } from './dto/clean-logs.dto';
 
 @Controller('crawler')
 export class CrawlerController {
-  constructor(private readonly crawlerService: CrawlerService) {}
+  constructor(
+    @Inject('CrawlerService')
+    private readonly crawlerService: CrawlerService | CrawlerServiceStub,
+  ) {}
 
   /**
    * 调试爬虫 - 单次爬取指定城市和日期
@@ -82,7 +86,7 @@ export class CrawlerController {
 
     if (dto.planOnly) {
       return {
-        message: `执行计划已生成：${result.executionPlan.totalTasks} 个任务，预计 ${result.executionPlan.estimatedTime}`,
+        message: `执行计划已生成：${result.executionPlan?.totalTasks} 个任务，预计 ${result.executionPlan?.estimatedTime}`,
         ...result,
       };
     }
