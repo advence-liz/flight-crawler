@@ -15,9 +15,9 @@ import {
   Statistic,
   Radio,
 } from 'antd';
-import { SearchOutlined, SwapOutlined, ArrowRightOutlined } from '@ant-design/icons';
+import { SearchOutlined, SwapOutlined, ArrowRightOutlined, NodeIndexOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { queryDestinations, getAvailableCities, DestinationResult } from '@/api/flight';
+import { queryDestinations, getAvailableCities, DestinationResult, discoverTransferDestinations, TransferRoundTripDest, TransferOneWayDest } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie } from '@/utils/cookie';
 
 // ─── 主页面 ──────────────────────────────────────────────────
@@ -28,9 +28,15 @@ function FlightMap() {
   const [destinations, setDestinations] = useState<DestinationResult[]>([]);
   const [availableOrigins, setAvailableOrigins] = useState<string[]>([]);
   const [origin, setOrigin] = useState('');
-  const [viewMode, setViewMode] = useState<'all' | 'return' | 'oneway'>('all');
+  const [viewMode, setViewMode] = useState<'all' | 'return' | 'oneway' | 'transfer'>('all');
+  const [transferRoundTrip, setTransferRoundTrip] = useState<TransferRoundTripDest[]>([]);
+  const [transferOneWay, setTransferOneWay] = useState<TransferOneWayDest[]>([]);
+  const [transferLoading, setTransferLoading] = useState(false);
+
   const doSearch = async (originVal: string, startDate: string, endDate: string, flightType: string) => {
     setLoading(true);
+    setTransferRoundTrip([]);
+    setTransferOneWay([]);
     try {
       const result = await queryDestinations({
         origin: originVal,
@@ -44,9 +50,26 @@ function FlightMap() {
       if (result.totalCount === 0) message.warning('未找到航班数据');
     } catch {
       message.error('查询失败，请稍后重试');
+      return;
     } finally {
       setLoading(false);
     }
+
+    // 主查询完成后，异步触发中转目的地发现（不阻塞主流程）
+    setTransferLoading(true);
+    discoverTransferDestinations({
+      origin: originVal,
+      departureDate: startDate,
+      endDate,
+      maxTransfers: 1,
+    }).then(transferResult => {
+      setTransferRoundTrip(transferResult.roundTrip);
+      setTransferOneWay(transferResult.oneWay);
+    }).catch(() => {
+      // 中转查询失败不阻断主流程
+    }).finally(() => {
+      setTransferLoading(false);
+    });
   };
 
   useEffect(() => {
@@ -76,25 +99,26 @@ function FlightMap() {
   const visibleDests = useMemo(() => {
     if (viewMode === 'return') return returnDests;
     if (viewMode === 'oneway') return onewayDests;
+    if (viewMode === 'transfer') return [];
     return destinations;
   }, [destinations, viewMode, returnDests, onewayDests]);
 
-  const chartOption = useMemo(() => {
-    if (!origin || visibleDests.length === 0) return null;
+  // 在 transfer 模式下只显示中转节点；其他模式叠加中转节点
+  const showTransfer = viewMode === 'all' || viewMode === 'transfer';
 
-    // 节点：出发地固定在画布中心（50%, 50%）
+  const chartOption = useMemo(() => {
+    const hasDirectDests = visibleDests.length > 0;
+    const hasTransferDests = showTransfer && (transferRoundTrip.length > 0 || transferOneWay.length > 0);
+    if (!origin || (!hasDirectDests && !hasTransferDests)) return null;
+
+    // 节点：出发地固定在画布中心
     const nodes: any[] = [
       {
         id: origin,
         name: origin,
         symbolSize: 48,
         itemStyle: { color: '#facc15' },
-        label: {
-          show: true,
-          color: '#1a1a1a',
-          fontWeight: 700,
-          fontSize: 13,
-        },
+        label: { show: true, color: '#1a1a1a', fontWeight: 700, fontSize: 13 },
         category: 0,
         fixed: true,
         x: 0,
@@ -103,33 +127,33 @@ function FlightMap() {
     ];
 
     const edges: any[] = [];
+    const addedNodeIds = new Set<string>([origin]);
 
+    // 直飞目的地
     visibleDests.forEach(dest => {
       const isReturn = dest.hasReturn;
+      if (!addedNodeIds.has(dest.destination)) {
+        nodes.push({
+          id: dest.destination,
+          name: dest.destination,
+          symbolSize: Math.max(20, Math.min(38, dest.flightCount * 1.2 + 14)),
+          itemStyle: {
+            color: isReturn ? '#4ade80' : '#60a5fa',
+            borderColor: isReturn ? '#16a34a' : '#2563eb',
+            borderWidth: 1.5,
+          },
+          label: { show: true, color: '#e2e8f0', fontSize: 11 },
+          category: isReturn ? 1 : 2,
+          flightCount: dest.flightCount,
+          returnFlightCount: dest.returnFlightCount,
+          hasReturn: isReturn,
+          availableDates: dest.availableDates,
+          returnAvailableDates: dest.returnAvailableDates,
+          nodeType: 'direct',
+        });
+        addedNodeIds.add(dest.destination);
+      }
 
-      nodes.push({
-        id: dest.destination,
-        name: dest.destination,
-        symbolSize: Math.max(20, Math.min(38, dest.flightCount * 1.2 + 14)),
-        itemStyle: {
-          color: isReturn ? '#4ade80' : '#60a5fa',
-          borderColor: isReturn ? '#16a34a' : '#2563eb',
-          borderWidth: 1.5,
-        },
-        label: {
-          show: true,
-          color: '#e2e8f0',
-          fontSize: 11,
-        },
-        category: isReturn ? 1 : 2,
-        flightCount: dest.flightCount,
-        returnFlightCount: dest.returnFlightCount,
-        hasReturn: isReturn,
-        availableDates: dest.availableDates,
-        returnAvailableDates: dest.returnAvailableDates,
-      });
-
-      // 去程边
       edges.push({
         source: origin,
         target: dest.destination,
@@ -145,18 +169,11 @@ function FlightMap() {
         hasReturn: isReturn,
       });
 
-      // 返程边（反向，虚线）
       if (isReturn) {
         edges.push({
           source: dest.destination,
           target: origin,
-          lineStyle: {
-            color: '#a3e635',
-            width: 1.5,
-            opacity: 0.5,
-            curveness: 0.15,
-            type: 'dashed',
-          },
+          lineStyle: { color: '#a3e635', width: 1.5, opacity: 0.5, curveness: 0.15, type: 'dashed' },
           symbol: ['none', 'arrow'],
           symbolSize: [0, 6],
           value: dest.returnFlightCount,
@@ -165,6 +182,64 @@ function FlightMap() {
         });
       }
     });
+
+    // 中转目的地
+    if (showTransfer) {
+      const addTransferNode = (city: string, isRoundTrip: boolean, via: string, outboundCount: number, returnCount?: number) => {
+        if (!addedNodeIds.has(city)) {
+          nodes.push({
+            id: city,
+            name: city,
+            symbolSize: 18,
+            itemStyle: {
+              color: isRoundTrip ? '#fb923c' : '#94a3b8',
+              borderColor: isRoundTrip ? '#c2410c' : '#64748b',
+              borderWidth: 1.5,
+            },
+            label: { show: true, color: '#e2e8f0', fontSize: 10 },
+            category: isRoundTrip ? 3 : 4,
+            nodeType: 'transfer',
+            isRoundTrip,
+            via,
+            outboundCount,
+            returnCount,
+          });
+          addedNodeIds.add(city);
+        }
+
+        // 中转虚线边（经由城市 → 目的地，或 origin → 目的地虚线）
+        edges.push({
+          source: origin,
+          target: city,
+          lineStyle: {
+            color: isRoundTrip ? '#fb923c' : '#94a3b8',
+            width: 1,
+            opacity: 0.35,
+            curveness: 0.25,
+            type: 'dashed',
+          },
+          symbol: ['none', 'arrow'],
+          symbolSize: [0, 5],
+          isTransfer: true,
+          isRoundTrip,
+          via,
+          outboundCount,
+          returnCount,
+        });
+      };
+
+      transferRoundTrip.forEach(item => {
+        const outSeg = item.outboundRoutes[0].segments;
+        const via = outSeg.length > 1 ? outSeg.slice(0, -1).map((s: any) => s.destination).join('、') : '';
+        addTransferNode(item.city, true, via, item.outboundCount, item.returnCount);
+      });
+
+      transferOneWay.forEach(item => {
+        const outSeg = item.routes[0].segments;
+        const via = outSeg.length > 1 ? outSeg.slice(0, -1).map((s: any) => s.destination).join('、') : '';
+        addTransferNode(item.city, false, via, item.routeCount);
+      });
+    }
 
     return {
       backgroundColor: '#0f172a',
@@ -178,6 +253,20 @@ function FlightMap() {
             const d = params.data;
             if (d.id === origin) {
               return `<div style="font-weight:700;font-size:14px;color:#facc15">${d.name}</div><div style="color:#94a3b8;margin-top:2px">出发地</div>`;
+            }
+            if (d.nodeType === 'transfer') {
+              const lines = [
+                `<div style="font-weight:700;font-size:14px;margin-bottom:6px">${d.name}</div>`,
+                d.via ? `<div style="color:#fb923c;font-size:12px">经 ${d.via} 中转</div>` : '',
+                `<div>去程：<b style="color:#fb923c">${d.outboundCount} 条方案</b></div>`,
+              ];
+              if (d.isRoundTrip) {
+                lines.push(`<div>返程：<b style="color:#fb923c">${d.returnCount} 条方案</b></div>`);
+                lines.push(`<div style="margin-top:6px;color:#fb923c;font-size:12px">⇄ 中转往返</div>`);
+              } else {
+                lines.push(`<div style="margin-top:6px;color:#94a3b8;font-size:12px">→ 中转单程</div>`);
+              }
+              return lines.join('');
             }
             const lines = [
               `<div style="font-weight:700;font-size:14px;margin-bottom:6px">${d.name}</div>`,
@@ -193,6 +282,9 @@ function FlightMap() {
           }
           if (params.dataType === 'edge') {
             const d = params.data;
+            if (d.isTransfer) {
+              return `<div style="color:${d.isRoundTrip ? '#fb923c' : '#94a3b8'}">⇌ 中转${d.isRoundTrip ? '往返' : '单程'}</div><div>${d.source} → ${d.target}${d.via ? `（经 ${d.via}）` : ''}</div>`;
+            }
             if (d.isReturn) {
               return `<div style="color:#a3e635">↩ 返程航线</div><div>${d.source} → ${d.target}：${d.value} 班</div>`;
             }
@@ -206,6 +298,8 @@ function FlightMap() {
           { name: '出发地', icon: 'circle', itemStyle: { color: '#facc15' } },
           { name: '可往返', icon: 'circle', itemStyle: { color: '#4ade80' } },
           { name: '仅单程', icon: 'circle', itemStyle: { color: '#60a5fa' } },
+          { name: '中转往返', icon: 'circle', itemStyle: { color: '#fb923c' } },
+          { name: '中转单程', icon: 'circle', itemStyle: { color: '#94a3b8' } },
         ],
         textStyle: { color: '#94a3b8' },
         top: 12,
@@ -223,6 +317,8 @@ function FlightMap() {
             { name: '出发地' },
             { name: '可往返' },
             { name: '仅单程' },
+            { name: '中转往返' },
+            { name: '中转单程' },
           ],
           center: ['50%', '50%'],
           zoom: 0.6,
@@ -246,7 +342,7 @@ function FlightMap() {
         },
       ],
     };
-  }, [origin, visibleDests]);
+  }, [origin, visibleDests, showTransfer, transferRoundTrip, transferOneWay]);
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -315,6 +411,14 @@ function FlightMap() {
                     prefix={<ArrowRightOutlined />}
                   />
                 </Col>
+                <Col>
+                  <Statistic
+                    value={transferRoundTrip.length + transferOneWay.length}
+                    suffix={transferLoading ? '搜索中...' : '个中转'}
+                    valueStyle={{ color: '#fb923c', fontSize: 18 }}
+                    prefix={<NodeIndexOutlined />}
+                  />
+                </Col>
               </Row>
             </Space>
           }
@@ -324,6 +428,7 @@ function FlightMap() {
                 <Tag color="warning">出发地</Tag>
                 <Tag color="success">可往返</Tag>
                 <Tag color="processing">仅单程</Tag>
+                <Tag color="orange">中转</Tag>
               </Space>
               <Radio.Group
                 value={viewMode}
@@ -335,6 +440,7 @@ function FlightMap() {
                 <Radio.Button value="all">全部</Radio.Button>
                 <Radio.Button value="return">仅往返</Radio.Button>
                 <Radio.Button value="oneway">仅单程</Radio.Button>
+                <Radio.Button value="transfer">仅中转</Radio.Button>
               </Radio.Group>
             </Space>
           }

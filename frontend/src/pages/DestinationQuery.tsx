@@ -38,7 +38,6 @@ import {
   queryRoundTripFlights,
   RoundTripFlights,
   Flight,
-  planRoute,
   RouteResult,
   discoverTransferDestinations,
   TransferRoundTripDest,
@@ -250,11 +249,8 @@ function DestinationQuery() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
-  // 中转方案 Modal 状态（点击具体目的地后弹出）
-  const [transferDest, setTransferDest] = useState<DestinationResult | null>(null);
-  const [transferRoutes, setTransferRoutes] = useState<RouteResult[]>([]);
-  const [transferLoading, setTransferLoading] = useState(false);
-  const [isTransferModalVisible, setIsTransferModalVisible] = useState(false);
+  // 中转方案 Modal 状态（点击气泡后弹出，直接用已有数据）
+  const [transferModalCity, setTransferModalCity] = useState<string | null>(null);
 
   // 中转目的地分区状态
   const [transferRoundTrip, setTransferRoundTrip] = useState<TransferRoundTripDest[]>([]);
@@ -302,6 +298,10 @@ function DestinationQuery() {
 
   const handleSearch = async (values: any) => {
     setLoading(true);
+    // 重置中转分区
+    setTransferRoundTrip([]);
+    setTransferOneWay([]);
+    setTransferDiscovered(false);
     try {
       const [startDate, endDate] = values.dateRange;
       const result = await queryDestinations({
@@ -312,16 +312,31 @@ function DestinationQuery() {
       });
       setDestinations(result.destinations);
       setOriginCookie(values.origin);
-      // 重置中转分区
-      setTransferRoundTrip([]);
-      setTransferOneWay([]);
-      setTransferDiscovered(false);
       message.success(`查询成功，共 ${result.totalCount} 个目的地`);
     } catch {
       message.error('查询失败，请稍后重试');
+      return;
     } finally {
       setLoading(false);
     }
+
+    // 主查询完成后，异步触发中转目的地发现（不阻塞主流程）
+    const [startDate, endDate] = values.dateRange;
+    setDiscoverTransferLoading(true);
+    discoverTransferDestinations({
+      origin: values.origin,
+      departureDate: startDate.format('YYYY-MM-DD'),
+      endDate: endDate.format('YYYY-MM-DD'),
+      maxTransfers: 1,
+    }).then(transferResult => {
+      setTransferRoundTrip(transferResult.roundTrip);
+      setTransferOneWay(transferResult.oneWay);
+      setTransferDiscovered(true);
+    }).catch(() => {
+      // 中转查询失败不阻断主流程
+    }).finally(() => {
+      setDiscoverTransferLoading(false);
+    });
   };
 
   const handleShowDetail = async (dest: DestinationResult) => {
@@ -346,59 +361,9 @@ function DestinationQuery() {
     }
   };
 
-  const handleShowTransfer = async (dest: DestinationResult) => {
-    setTransferDest(dest);
-    setIsTransferModalVisible(true);
-    setTransferLoading(true);
-    setTransferRoutes([]);
-    try {
-      const values = form.getFieldsValue();
-      const [startDate, endDate] = values.dateRange;
-      const result = await planRoute({
-        origin: values.origin,
-        destination: dest.destination,
-        departureDate: startDate.format('YYYY-MM-DD'),
-        endDate: endDate.format('YYYY-MM-DD'),
-        maxTransfers: 2,
-      });
-      setTransferRoutes(result.routes);
-    } catch {
-      message.error('查询中转方案失败');
-    } finally {
-      setTransferLoading(false);
-    }
-  };
-
-  // 点击中转目的地气泡，弹出该城市的中转路线 Modal
-  const handleShowTransferRoutes = async (city: string) => {
-    const fakeRecord = { destination: city } as DestinationResult;
-    await handleShowTransfer(fakeRecord);
-  };
-
-  const handleDiscoverTransfer = async () => {
-    const values = form.getFieldsValue();
-    const [startDate, endDate] = values.dateRange || [];
-    if (!values.origin || !startDate) {
-      message.warning('请先选择出发地和日期范围');
-      return;
-    }
-    setDiscoverTransferLoading(true);
-    try {
-      const result = await discoverTransferDestinations({
-        origin: values.origin,
-        departureDate: startDate.format('YYYY-MM-DD'),
-        endDate: endDate ? endDate.format('YYYY-MM-DD') : startDate.format('YYYY-MM-DD'),
-        maxTransfers: 1,
-      });
-      setTransferRoundTrip(result.roundTrip);
-      setTransferOneWay(result.oneWay);
-      setTransferDiscovered(true);
-      message.success(`发现中转往返 ${result.roundTrip.length} 个，中转单程 ${result.oneWay.length} 个`);
-    } catch {
-      message.error('查询中转目的地失败');
-    } finally {
-      setDiscoverTransferLoading(false);
-    }
+  // 点击中转目的地气泡，弹出该城市的中转路线 Modal（直接用已有数据，无需再请求）
+  const handleShowTransferRoutes = (city: string) => {
+    setTransferModalCity(city);
   };
 
   // 统计
@@ -472,7 +437,7 @@ function DestinationQuery() {
             size="small"
             icon={<NodeIndexOutlined />}
             style={{ color: '#fa8c16' }}
-            onClick={() => handleShowTransfer(record)}
+            onClick={() => handleShowTransferRoutes(record.destination)}
           >
             中转方案
           </Button>
@@ -599,14 +564,14 @@ function DestinationQuery() {
                   valueStyle={{ fontSize: 28 }}
                 />
               </Col>
-              {transferDiscovered && (
+              {(discoverTransferLoading || transferDiscovered) && (
                 <Col>
                   <Statistic
                     title="中转可达"
-                    value={transferRoundTrip.length + transferOneWay.length}
-                    suffix="个"
+                    value={discoverTransferLoading ? '搜索中' : transferRoundTrip.length + transferOneWay.length}
+                    suffix={discoverTransferLoading ? '...' : '个'}
                     valueStyle={{ color: '#fa8c16', fontSize: 28 }}
-                    prefix={<NodeIndexOutlined />}
+                    prefix={discoverTransferLoading ? <Spin size="small" /> : <NodeIndexOutlined />}
                   />
                 </Col>
               )}
@@ -634,7 +599,7 @@ function DestinationQuery() {
                 <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
                   {destinations.filter(d => d.hasReturn).map(dest => (
                     <Col key={dest.destination}>
-                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest)} onTransfer={() => handleShowTransfer(dest)} />
+                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest)} onTransfer={() => handleShowTransferRoutes(dest.destination)} />
                     </Col>
                   ))}
                 </Row>
@@ -653,7 +618,7 @@ function DestinationQuery() {
                 <Row gutter={[10, 10]}>
                   {destinations.filter(d => !d.hasReturn).map(dest => (
                     <Col key={dest.destination}>
-                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest)} onTransfer={() => handleShowTransfer(dest)} />
+                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest)} onTransfer={() => handleShowTransferRoutes(dest.destination)} />
                     </Col>
                   ))}
                 </Row>
@@ -665,15 +630,8 @@ function DestinationQuery() {
               <Space>
                 <NodeIndexOutlined style={{ color: '#fa8c16' }} />
                 <span style={{ color: '#fa8c16', fontWeight: 600 }}>中转可达</span>
-                {!transferDiscovered && (
-                  <Button
-                    size="small"
-                    loading={discoverTransferLoading}
-                    onClick={handleDiscoverTransfer}
-                    style={{ fontSize: 12, height: 24 }}
-                  >
-                    发现中转目的地
-                  </Button>
+                {discoverTransferLoading && (
+                  <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>搜索中...</span>
                 )}
                 {transferDiscovered && (
                   <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>
@@ -701,8 +659,8 @@ function DestinationQuery() {
                       <TransferDestCard
                         city={item.city}
                         hasReturn={true}
-                        outboundRoute={item.bestOutbound}
-                        returnRoute={item.bestReturn}
+                        outboundRoute={item.outboundRoutes[0]}
+                        returnRoute={item.returnRoutes[0]}
                         outboundCount={item.outboundCount}
                         returnCount={item.returnCount}
                         onShowRoutes={() => handleShowTransferRoutes(item.city)}
@@ -725,7 +683,7 @@ function DestinationQuery() {
                       <TransferDestCard
                         city={item.city}
                         hasReturn={false}
-                        outboundRoute={item.bestRoute}
+                        outboundRoute={item.routes[0]}
                         outboundCount={item.routeCount}
                         onShowRoutes={() => handleShowTransferRoutes(item.city)}
                       />
@@ -753,109 +711,95 @@ function DestinationQuery() {
         </>
       )}
 
-      {/* 中转方案 Modal */}
-      <Modal
-        title={
-          <Space>
-            <NodeIndexOutlined style={{ color: '#fa8c16' }} />
-            <span>中转方案：</span>
-            <span>{form.getFieldValue('origin')}</span>
-            <ArrowRightOutlined style={{ color: '#fa8c16' }} />
-            <span>{transferDest?.destination}</span>
-          </Space>
-        }
-        open={isTransferModalVisible}
-        onCancel={() => setIsTransferModalVisible(false)}
-        width={760}
-        footer={null}
-      >
-        {transferLoading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
-            正在搜索中转方案...
-          </div>
-        ) : transferRoutes.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#bfbfbf', background: '#fafafa', borderRadius: 6 }}>
-            未找到中转方案（直飞或无可用中转航班）
-          </div>
-        ) : (
-          <Space direction="vertical" style={{ width: '100%' }} size={12}>
-            <div style={{ color: '#999', fontSize: 12 }}>
-              共找到 {transferRoutes.length} 条方案，按综合评分排序（含直飞）
+      {/* 中转方案 Modal（直接使用已发现的数据，无需再请求） */}
+      {(() => {
+        const city = transferModalCity;
+        const roundTripItem = transferRoundTrip.find(i => i.city === city);
+        const oneWayItem = transferOneWay.find(i => i.city === city);
+        const origin = form.getFieldValue('origin');
+
+        const renderRoute = (route: RouteResult, label: string, color: string) => (
+          <div style={{ border: `1px solid ${color === 'orange' ? '#ffd591' : '#91d5ff'}`, borderRadius: 8, padding: '12px 16px', background: color === 'orange' ? '#fff7e6' : '#e6f7ff', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <Space>
+                <Tag color={color}>{label}</Tag>
+                <Space size={4}>
+                  <ClockCircleOutlined style={{ color: '#999', fontSize: 12 }} />
+                  <span style={{ fontSize: 12, color: '#666' }}>
+                    总耗时 {Math.floor(route.totalDuration / 60)}h{route.totalDuration % 60}m
+                  </span>
+                </Space>
+                <Tag color="orange">{route.transferCount} 次中转</Tag>
+              </Space>
+              <span style={{ fontSize: 12, color: '#999' }}>评分 {route.score.toFixed(1)}</span>
             </div>
-            {transferRoutes.map((route, idx) => (
-              <div
-                key={idx}
-                style={{
-                  border: `1px solid ${route.transferCount === 0 ? '#91d5ff' : '#ffd591'}`,
-                  borderRadius: 8,
-                  padding: '12px 16px',
-                  background: route.transferCount === 0 ? '#e6f7ff' : '#fff7e6',
-                }}
-              >
-                {/* 标题行 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <Space>
-                    <Tag color={route.transferCount === 0 ? 'blue' : 'orange'}>
-                      {route.transferCount === 0 ? '直飞' : `${route.transferCount} 次中转`}
-                    </Tag>
-                    <Space size={4}>
-                      <ClockCircleOutlined style={{ color: '#999', fontSize: 12 }} />
-                      <span style={{ fontSize: 12, color: '#666' }}>
-                        总耗时 {Math.floor(route.totalDuration / 60)}h{route.totalDuration % 60}m
-                      </span>
-                    </Space>
-                  </Space>
-                  <span style={{ fontSize: 12, color: '#999' }}>评分 {route.score.toFixed(1)}</span>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+              {route.segments.map((seg, si) => (
+                <>
+                  <div key={`seg-${si}`} style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 6, padding: '6px 10px', fontSize: 12, minWidth: 160 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 2 }}>{seg.origin} → {seg.destination}</div>
+                    <div style={{ color: '#666' }}>
+                      {seg.flightNo}&nbsp;
+                      {new Date(seg.departureTime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      {' → '}
+                      {new Date(seg.arrivalTime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <div style={{ color: '#999', fontSize: 11 }}>飞行 {Math.floor(seg.duration / 60)}h{seg.duration % 60}m</div>
+                  </div>
+                  {si < route.layovers.length && (
+                    <div key={`layover-${si}`} style={{ textAlign: 'center', fontSize: 11, color: '#fa8c16', padding: '0 4px' }}>
+                      <div>⏱</div>
+                      <div>{route.layovers[si].city}</div>
+                      <div>停 {Math.floor(route.layovers[si].duration / 60)}h{route.layovers[si].duration % 60}m</div>
+                    </div>
+                  )}
+                </>
+              ))}
+            </div>
+          </div>
+        );
 
-                {/* 航段时间轴 */}
-                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                  {route.segments.map((seg, si) => (
-                    <>
-                      {/* 航段 */}
-                      <div key={`seg-${si}`} style={{
-                        background: '#fff',
-                        border: '1px solid #e8e8e8',
-                        borderRadius: 6,
-                        padding: '6px 10px',
-                        fontSize: 12,
-                        minWidth: 160,
-                      }}>
-                        <div style={{ fontWeight: 600, marginBottom: 2 }}>
-                          {seg.origin} → {seg.destination}
-                        </div>
-                        <div style={{ color: '#666' }}>
-                          {seg.flightNo}
-                          {new Date(seg.departureTime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                          {' → '}
-                          {new Date(seg.arrivalTime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                        <div style={{ color: '#999', fontSize: 11 }}>
-                          飞行 {Math.floor(seg.duration / 60)}h{seg.duration % 60}m
-                        </div>
-                      </div>
-
-                      {/* 中转停留信息 */}
-                      {si < route.layovers.length && (
-                        <div key={`layover-${si}`} style={{
-                          textAlign: 'center',
-                          fontSize: 11,
-                          color: '#fa8c16',
-                          padding: '0 4px',
-                        }}>
-                          <div>⏱</div>
-                          <div>{route.layovers[si].city}</div>
-                          <div>停 {Math.floor(route.layovers[si].duration / 60)}h{route.layovers[si].duration % 60}m</div>
-                        </div>
-                      )}
-                    </>
-                  ))}
+        return (
+          <Modal
+            title={
+              <Space>
+                <NodeIndexOutlined style={{ color: '#fa8c16' }} />
+                <span>中转方案：</span>
+                <span>{origin}</span>
+                <SwapOutlined style={{ color: '#fa8c16' }} />
+                <span>{city}</span>
+              </Space>
+            }
+            open={!!city}
+            onCancel={() => setTransferModalCity(null)}
+            width={780}
+            footer={null}
+          >
+            {roundTripItem ? (
+              <Space direction="vertical" style={{ width: '100%' }} size={0}>
+                <div style={{ color: '#fa8c16', fontWeight: 600, marginBottom: 8 }}>
+                  去程（共 {roundTripItem.outboundCount} 条，展示 Top {roundTripItem.outboundRoutes.length}）
                 </div>
-              </div>
-            ))}
-          </Space>
-        )}
-      </Modal>
+                {roundTripItem.outboundRoutes.filter(r => r.transferCount > 0).map((r, i) => renderRoute(r, `去程 #${i + 1}`, 'orange'))}
+                <div style={{ color: '#fa8c16', fontWeight: 600, margin: '16px 0 8px' }}>
+                  返程（共 {roundTripItem.returnCount} 条，展示 Top {roundTripItem.returnRoutes.length}）
+                </div>
+                {roundTripItem.returnRoutes.filter(r => r.transferCount > 0).map((r, i) => renderRoute(r, `返程 #${i + 1}`, 'orange'))}
+              </Space>
+            ) : oneWayItem ? (
+              <Space direction="vertical" style={{ width: '100%' }} size={0}>
+                <div style={{ color: '#8c8c8c', fontWeight: 600, marginBottom: 8 }}>
+                  去程（共 {oneWayItem.routeCount} 条，展示 Top {oneWayItem.routes.length}）
+                </div>
+                {oneWayItem.routes.filter(r => r.transferCount > 0).map((r, i) => renderRoute(r, `去程 #${i + 1}`, 'blue'))}
+                <div style={{ color: '#bfbfbf', fontSize: 13, marginTop: 12 }}>无返程方案</div>
+              </Space>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40, color: '#bfbfbf' }}>无中转方案数据</div>
+            )}
+          </Modal>
+        );
+      })()}
 
       {/* 往返航班详情 Modal */}
       <Modal

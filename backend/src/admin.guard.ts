@@ -3,8 +3,11 @@ import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
+    // 本地开发环境直接放行
+    if (process.env.NODE_ENV === 'development') return true;
+
     const adminToken = process.env.ADMIN_TOKEN;
-    if (!adminToken) return true; // 未配置时放行（本地开发）
+    if (!adminToken) return true; // 未配置 Token 时放行
 
     const request = context.switchToHttp().getRequest();
     const authHeader = request.headers['authorization'];

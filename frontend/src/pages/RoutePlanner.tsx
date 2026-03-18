@@ -173,7 +173,10 @@ function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
       title={
         <Space>
           <span style={{ fontSize: 15, fontWeight: 600 }}>{dest.city}</span>
-          {isDirect && <Tag color="green" style={{ fontSize: 11 }}>直飞往返</Tag>}
+          {isDirect
+            ? <Tag color="green" style={{ fontSize: 11 }}>直飞往返</Tag>
+            : <Tag color="orange" style={{ fontSize: 11 }}>含中转</Tag>
+          }
         </Space>
       }
       extra={
@@ -275,7 +278,7 @@ function ExploreTab({ cities, urlParams }: ExploreTabProps) {
         departureDateEnd: depEnd.format('YYYY-MM-DD'),
         returnDate: retStart.format('YYYY-MM-DD'),
         returnDateEnd: retEnd.format('YYYY-MM-DD'),
-        maxTransfers: 0,
+        maxTransfers: 1,
       });
       setResults(resp.destinations);
       setOriginCookie(values.origin);
@@ -308,7 +311,7 @@ function ExploreTab({ cities, urlParams }: ExploreTabProps) {
         departureDateEnd: depEnd.format('YYYY-MM-DD'),
         returnDate: retStart.format('YYYY-MM-DD'),
         returnDateEnd: retEnd.format('YYYY-MM-DD'),
-        maxTransfers: 0,
+        maxTransfers: 1,
       });
       setRoundTripRoutes(resp.routes);
     } catch {
@@ -527,7 +530,7 @@ function PlanTab({ cities, urlParams }: PlanTabProps) {
           onFinish={handleSearch}
           initialValues={{
             departureRange: [dayjs().add(3, 'day'), dayjs().add(5, 'day')],
-            maxTransfers: 0,
+            maxTransfers: 1,
           }}
         >
           <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>

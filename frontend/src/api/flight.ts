@@ -317,15 +317,15 @@ export const planRoute = (params: {
 // 发现中转目的地（中转往返 + 中转单程）
 export interface TransferRoundTripDest {
   city: string;
-  bestOutbound: RouteResult;
-  bestReturn: RouteResult;
+  outboundRoutes: RouteResult[];
+  returnRoutes: RouteResult[];
   outboundCount: number;
   returnCount: number;
 }
 
 export interface TransferOneWayDest {
   city: string;
-  bestRoute: RouteResult;
+  routes: RouteResult[];
   routeCount: number;
 }
 

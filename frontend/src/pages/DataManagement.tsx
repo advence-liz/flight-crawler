@@ -536,36 +536,38 @@ function DataManagement() {
         管理航班数据的爬取和更新
       </Paragraph>
 
-      {/* Admin Token 配置 */}
-      <Card
-        size="small"
-        style={{ marginBottom: 24, background: '#fafafa' }}
-      >
-        <Space align="center" style={{ width: '100%' }}>
-          <Text strong style={{ whiteSpace: 'nowrap' }}>管理员 Token：</Text>
-          <Input.Password
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            placeholder="输入管理员 Token（未配置时留空）"
-            style={{ width: 320 }}
-            allowClear
-          />
-          <Button
-            type="primary"
-            icon={<SaveOutlined />}
-            onClick={() => {
-              setAdminToken(tokenInput);
-              setAdminTokenState(tokenInput);
-              message.success(tokenInput ? 'Token 已保存' : 'Token 已清除');
-            }}
-          >
-            保存
-          </Button>
-          {adminToken && (
-            <Text type="success" style={{ fontSize: 12 }}>✓ Token 已配置</Text>
-          )}
-        </Space>
-      </Card>
+      {/* Admin Token 配置（仅生产环境显示） */}
+      {import.meta.env.PROD && (
+        <Card
+          size="small"
+          style={{ marginBottom: 24, background: '#fafafa' }}
+        >
+          <Space align="center" style={{ width: '100%' }}>
+            <Text strong style={{ whiteSpace: 'nowrap' }}>管理员 Token：</Text>
+            <Input.Password
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="输入管理员 Token（未配置时留空）"
+              style={{ width: 320 }}
+              allowClear
+            />
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={() => {
+                setAdminToken(tokenInput);
+                setAdminTokenState(tokenInput);
+                message.success(tokenInput ? 'Token 已保存' : 'Token 已清除');
+              }}
+            >
+              保存
+            </Button>
+            {adminToken && (
+              <Text type="success" style={{ fontSize: 12 }}>✓ Token 已配置</Text>
+            )}
+          </Space>
+        </Card>
+      )}
 
       <Divider />
 
@@ -702,7 +704,6 @@ function DataManagement() {
               htmlType="submit"
               icon={<ReloadOutlined />}
               loading={discoverLoading}
-              disabled={!discoverPlan}
               block
             >
               开始发现机场
@@ -877,7 +878,6 @@ function DataManagement() {
               htmlType="submit"
               icon={<ReloadOutlined />}
               loading={refreshLoading}
-              disabled={!executionPlan}
               block
             >
               开始执行
