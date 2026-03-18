@@ -8,7 +8,8 @@ set -e
 
 echo "▶ 安装后端依赖..."
 cd backend
-npm install
+# 跳过 Puppeteer 自动下载 Chrome（服务端不需要爬虫功能）
+PUPPETEER_SKIP_DOWNLOAD=true npm install
 
 echo "▶ 构建后端..."
 npm run build
