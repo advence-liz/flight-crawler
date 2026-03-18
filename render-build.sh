@@ -8,11 +8,12 @@ set -e
 
 echo "▶ 安装后端依赖..."
 cd backend
-# 跳过 Puppeteer 自动下载 Chrome（服务端不需要爬虫功能）
-PUPPETEER_SKIP_DOWNLOAD=true npm install
+# 跳过 optional 依赖（puppeteer），保留 dev 依赖（构建需要 @nestjs/cli）
+npm install --omit=optional
 
 echo "▶ 构建后端..."
-npm run build
+# 使用 tsconfig.prod.json（关闭 noImplicitAny，兼容 puppeteer any 类型）
+npx nest build --tsc -p tsconfig.prod.json
 
 echo "▶ 拉取最新数据库（data 分支）..."
 mkdir -p data

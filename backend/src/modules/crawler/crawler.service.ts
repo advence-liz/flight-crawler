@@ -2,7 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
-import * as puppeteer from 'puppeteer';
+// puppeteer 为可选依赖，仅本地爬虫环境需要，生产环境动态加载
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const puppeteer = (() => { try { return require('puppeteer'); } catch { return null; } })();
 import * as fs from 'fs';
 import * as path from 'path';
 import { FlightService } from '../flight/flight.service';
@@ -16,7 +18,7 @@ import {
 @Injectable()
 export class CrawlerService {
   private readonly logger = new Logger(CrawlerService.name);
-  private browser: puppeteer.Browser | null = null;
+  private browser: any | null = null;
   private readonly screenshotDir = path.join(process.cwd(), 'debug-screenshots');
   private isCrawlerRunning = false; // 并发锁：防止多个爬虫同时运行
   private runningTaskId: number | null = null; // 当前运行的任务 ID
@@ -44,7 +46,7 @@ export class CrawlerService {
   /**
    * 安全截图：失败时只记录警告，不抛出异常
    */
-  private async safeScreenshot(page: puppeteer.Page, filePath: string, label: string): Promise<void> {
+  private async safeScreenshot(page: any, filePath: string, label: string): Promise<void> {
     try {
       this.ensureScreenshotDir();
       await page.screenshot({ path: filePath, fullPage: true });
@@ -176,7 +178,7 @@ export class CrawlerService {
     origin: string,
     date: string,
     cardTypes: string | string[],
-    externalBrowser?: puppeteer.Browser,
+    externalBrowser?: any,
     enableScreenshot = false,
   ): Promise<Partial<Flight>[]> {
     // 统一处理为数组
@@ -903,7 +905,7 @@ export class CrawlerService {
   /**
    * 选择出发地（多种策略）
    */
-  private async selectOrigin(page: puppeteer.Page, origin: string): Promise<boolean> {
+  private async selectOrigin(page: any, origin: string): Promise<boolean> {
     this.logger.log(`🛫 尝试选择出发地: ${origin}`);
 
     try {
@@ -1059,7 +1061,7 @@ export class CrawlerService {
   /**
    * 点击查询按钮（多种策略）
    */
-  private async clickSearchButton(page: puppeteer.Page): Promise<boolean> {
+  private async clickSearchButton(page: any): Promise<boolean> {
     this.logger.log('🔍 尝试点击查询按钮');
 
     try {
@@ -1201,7 +1203,7 @@ export class CrawlerService {
   /**
    * 从下拉列表中选择城市
    */
-  private async selectCityFromDropdown(page: puppeteer.Page, cityName: string): Promise<boolean> {
+  private async selectCityFromDropdown(page: any, cityName: string): Promise<boolean> {
     try {
       this.logger.log(`🔍 尝试从下拉列表选择城市: ${cityName}`);
 
@@ -1254,7 +1256,7 @@ export class CrawlerService {
   /**
    * 选择权益卡类型（多种策略）
    */
-  private async selectCardType(page: puppeteer.Page, cardType: string): Promise<boolean> {
+  private async selectCardType(page: any, cardType: string): Promise<boolean> {
     this.logger.log(`🎫 尝试选择权益卡类型: ${cardType}`);
 
     try {
@@ -1450,7 +1452,7 @@ export class CrawlerService {
    * - 日期格子：.cell，有 data-date="YYYYMMDD" 属性
    * - 禁用日期：.cell.disabled
    */
-  private async selectDate(page: puppeteer.Page, targetDate: string): Promise<boolean> {
+  private async selectDate(page: any, targetDate: string): Promise<boolean> {
     this.logger.log(`📅 尝试选择日期: ${targetDate}`);
 
     try {
@@ -1854,7 +1856,7 @@ export class CrawlerService {
     executionPlan: any,
   ): Promise<void> {
     // 独立浏览器实例（不使用 this.browser，避免与其他任务冲突）
-    let browser: puppeteer.Browser | null = null;
+    let browser: any | null = null;
 
     try {
       // 生成所有（机场, 日期）任务组合（seedAirports/dates 已在上方生成）
@@ -1979,7 +1981,7 @@ export class CrawlerService {
    * 直接委托给 crawlFlightsByDate，传入 externalBrowser 参数
    */
   private async crawlSinglePageWithBrowser(
-    browser: puppeteer.Browser,
+    browser: any,
     origin: string,
     date: string,
   ): Promise<Partial<Flight>[]> {
@@ -2240,7 +2242,7 @@ export class CrawlerService {
         details: JSON.stringify({ dateRange: [date], totalAirports: airports.length }),
       });
     }
-    let browser: puppeteer.Browser | null = null;
+    let browser: any | null = null;
 
     const launchBrowser = () => puppeteer.launch({
       headless: true,
