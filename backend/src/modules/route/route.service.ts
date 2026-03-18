@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { FlightService } from '../flight/flight.service';
@@ -19,7 +19,7 @@ interface GraphNode {
 const TRANSFER_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
 @Injectable()
-export class RouteService {
+export class RouteService implements OnApplicationBootstrap {
   private readonly logger = new Logger(RouteService.name);
 
   constructor(
@@ -514,5 +514,58 @@ export class RouteService {
   async clearTransferCache(): Promise<void> {
     const result = await this.queryCacheRepository.delete({});
     this.logger.log(`已清除 ${result.affected ?? 0} 条 DB 缓存`);
+  }
+
+  /**
+   * 应用启动后异步预热所有出发地的中转缓存
+   * 已有有效缓存的出发地跳过，只补全缺失或过期的
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    // 异步执行，不阻塞启动
+    this.warmupTransferCache().catch(err =>
+      this.logger.error(`中转缓存预热失败: ${err.message}`),
+    );
+  }
+
+  private async warmupTransferCache(): Promise<void> {
+    // 等待 3 秒，确保数据库连接完全就绪
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    const cities = await this.flightService.getAvailableCities();
+    const { origins, minDate, maxDate } = cities;
+
+    if (!minDate || !maxDate || origins.length === 0) {
+      this.logger.log('中转缓存预热：无航班数据，跳过');
+      return;
+    }
+
+    this.logger.log(`中转缓存预热开始：${origins.length} 个出发地，日期 ${minDate} ~ ${maxDate}`);
+
+    let warmed = 0;
+    let skipped = 0;
+
+    for (const origin of origins) {
+      const cacheKey = `transfer|${origin}|${minDate}|${maxDate}|1|2|24`;
+      const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
+      if (cached && cached.expireAt > new Date()) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        await this.discoverTransferDestinations({
+          origin,
+          departureDate: minDate,
+          endDate: maxDate,
+          maxTransfers: 1,
+        });
+        warmed++;
+        this.logger.log(`预热进度 [${warmed + skipped}/${origins.length}] ${origin} ✓`);
+      } catch (err) {
+        this.logger.warn(`预热 ${origin} 失败: ${err.message}`);
+      }
+    }
+
+    this.logger.log(`中转缓存预热完成：新增 ${warmed} 个，跳过 ${skipped} 个（已有缓存）`);
   }
 }
