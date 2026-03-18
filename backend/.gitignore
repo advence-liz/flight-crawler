@@ -10,6 +10,8 @@ logs/
 data/
 *.db
 *.db-journal
+# 保留初始数据库
+!data/flight-crawler.db
 
 # 环境变量
 .env
