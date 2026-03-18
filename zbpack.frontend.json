@@ -1,5 +1,0 @@
-{
-  "app_dir": "frontend",
-  "build_command": "npm ci && npm run build",
-  "start_command": "npx vite preview --port $PORT --host 0.0.0.0"
-}
