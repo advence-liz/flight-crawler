@@ -118,7 +118,7 @@ export const planRoundTrip = (params: PlanRoundTripParams): Promise<RoundTripPla
   return api.post('/routes/round-trip', params);
 };
 
-// 探索模式：发现所有可往返目的地
+// 探索模式：发现所有可往返目的地（首次无缓存时耗时较长，timeout 延长至 120s）
 export const exploreDestinations = (params: ExploreParams): Promise<ExplorePlanResponse> => {
-  return api.post('/routes/explore', params);
+  return api.post('/routes/explore', params, { timeout: 120000 });
 };

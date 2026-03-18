@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { FlightService } from '../flight/flight.service';
 import { RouteService } from './route.service';
 import { PlanRoundTripDto } from './dto/plan-round-trip.dto';
@@ -12,6 +14,10 @@ import {
   ExploreDestinationDto,
   ExplorePlanResponseDto,
 } from './dto/explore-result.dto';
+import { QueryCache } from './entities/query-cache.entity';
+
+// 探索查询缓存 TTL：6 小时
+const EXPLORE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /**
  * 往返行程规划服务
@@ -24,6 +30,8 @@ export class RoundTripService {
   constructor(
     private readonly flightService: FlightService,
     private readonly routeService: RouteService,
+    @InjectRepository(QueryCache)
+    private readonly queryCacheRepository: Repository<QueryCache>,
   ) {}
 
   /**
@@ -233,6 +241,14 @@ export class RoundTripService {
     const departureDateEnd = dto.departureDateEnd || dto.departureDate;
     const returnDateEnd = dto.returnDateEnd || dto.returnDate;
 
+    // 检查 DB 缓存
+    const cacheKey = `explore|${dto.origin}|${dto.departureDate}|${departureDateEnd}|${dto.returnDate}|${returnDateEnd}|${maxTransfers}`;
+    const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
+    if (cached && cached.expireAt > new Date()) {
+      this.logger.log(`探索查询命中缓存: ${cacheKey}`);
+      return JSON.parse(cached.data);
+    }
+
     // 1. 查询出发地所有去程航班（日期范围内）
     const outboundFlights = await this.flightService.queryFlights({
       origin: dto.origin,
@@ -309,7 +325,7 @@ export class RoundTripService {
 
     this.logger.log(`✅ 探索完成，找到 ${destinations_result.length} 个可往返目的地`);
 
-    return {
+    const result: ExplorePlanResponseDto = {
       destinations: destinations_result,
       searchParams: {
         origin: dto.origin,
@@ -318,5 +334,17 @@ export class RoundTripService {
         maxTransfers,
       },
     };
+
+    // 写入 DB 缓存
+    const expireAt = new Date(Date.now() + EXPLORE_CACHE_TTL_MS);
+    await this.queryCacheRepository.save({
+      cacheKey,
+      data: JSON.stringify(result),
+      expireAt,
+      createdAt: new Date(),
+    });
+    this.logger.log(`探索结果已缓存，TTL 6h: ${cacheKey}`);
+
+    return result;
   }
 }

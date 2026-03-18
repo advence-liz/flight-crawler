@@ -665,4 +665,25 @@ export class FlightService {
     const result = await this.flightRepository.delete(ids);
     return result.affected || 0;
   }
+
+  /**
+   * 清除所有查询缓存（destinations + explore）
+   */
+  async clearQueryCache(): Promise<{ deletedCount: number }> {
+    const result = await this.queryCacheRepository.clear();
+    this.logger.log(`已清除所有查询缓存`);
+    return { deletedCount: (result as any)?.affected ?? 0 };
+  }
+
+  /**
+   * 查询缓存统计
+   */
+  async getQueryCacheStats(): Promise<{ total: number; expired: number; valid: number }> {
+    const total = await this.queryCacheRepository.count();
+    const expired = await this.queryCacheRepository
+      .createQueryBuilder('c')
+      .where('c.expireAt <= :now', { now: new Date() })
+      .getCount();
+    return { total, expired, valid: total - expired };
+  }
 }

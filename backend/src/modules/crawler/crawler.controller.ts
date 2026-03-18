@@ -2,6 +2,7 @@ import { Controller, Post, Get, Delete, HttpCode, HttpStatus, Body, Query, Param
 import { AdminGuard } from '../../admin.guard';
 import { CrawlerService } from './crawler.service';
 import { CrawlerServiceStub } from './crawler.service.stub';
+import { FlightService } from '../flight/flight.service';
 import { InitializeDiscoverDto, InitializeRefreshFlightsDto } from './dto/initialize.dto';
 import { QueryLogsDto } from './dto/query-logs.dto';
 import { CleanLogsDto } from './dto/clean-logs.dto';
@@ -11,6 +12,7 @@ export class CrawlerController {
   constructor(
     @Inject('CrawlerService')
     private readonly crawlerService: CrawlerService | CrawlerServiceStub,
+    private readonly flightService: FlightService,
   ) {}
 
   /**
@@ -202,5 +204,30 @@ export class CrawlerController {
       message: `成功清理 ${result.deletedCount} 条日志`,
       ...result,
     };
+  }
+
+  /**
+   * 清除所有查询缓存（destinations + explore）
+   * DELETE /api/crawler/cache/clear
+   */
+  @Delete('cache/clear')
+  @UseGuards(AdminGuard)
+  @HttpCode(HttpStatus.OK)
+  async clearQueryCache() {
+    const result = await this.flightService.clearQueryCache();
+    return {
+      message: `已清除所有查询缓存`,
+      ...result,
+    };
+  }
+
+  /**
+   * 查询缓存统计
+   * GET /api/crawler/cache/stats
+   */
+  @Get('cache/stats')
+  @HttpCode(HttpStatus.OK)
+  async getQueryCacheStats() {
+    return this.flightService.getQueryCacheStats();
   }
 }

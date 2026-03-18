@@ -201,6 +201,16 @@ export const cleanAllLogs = (): Promise<{ deletedCount: number; message: string 
   return api.delete('/crawler/logs/clean-all');
 };
 
+// 清除所有查询缓存
+export const clearQueryCache = (): Promise<{ deletedCount: number; message: string }> => {
+  return api.delete('/crawler/cache/clear');
+};
+
+// 查询缓存统计
+export const getQueryCacheStats = (): Promise<{ total: number; expired: number; valid: number }> => {
+  return api.get('/crawler/cache/stats');
+};
+
 // 查询往返航班详情
 export interface RoundTripFlights {
   outboundFlights: Flight[];

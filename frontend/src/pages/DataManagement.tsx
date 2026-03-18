@@ -46,6 +46,8 @@ import {
   stopCrawler,
   cleanOldLogs,
   cleanAllLogs,
+  clearQueryCache,
+  getQueryCacheStats,
   warmupTransferCache,
   getWarmupCacheStatus,
   type CrawlerLog,
@@ -87,6 +89,10 @@ function DataManagement() {
   const [warmupLoading, setWarmupLoading] = useState(false);
   const [warmupStatus, setWarmupStatus] = useState<WarmupStatus | null>(null);
   const warmupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 查询缓存管理
+  const [cacheStats, setCacheStats] = useState<{ total: number; expired: number; valid: number } | null>(null);
+  const [clearCacheLoading, setClearCacheLoading] = useState(false);
 
   // 日志相关状态
   const [logs, setLogs] = useState<CrawlerLog[]>([]);
@@ -196,7 +202,21 @@ function DataManagement() {
     }
   };
 
-  // 初始加载时获取预热状态
+  const handleClearCache = async () => {
+    setClearCacheLoading(true);
+    try {
+      await clearQueryCache();
+      message.success('查询缓存已清除，下次查询将重新计算');
+      // 刷新缓存统计
+      getQueryCacheStats().then(setCacheStats).catch(() => {});
+    } catch {
+      message.error('清除缓存失败');
+    } finally {
+      setClearCacheLoading(false);
+    }
+  };
+
+  // 初始加载时获取预热状态 + 缓存统计
   useEffect(() => {
     getWarmupCacheStatus().then(s => {
       setWarmupStatus(s);
@@ -205,6 +225,7 @@ function DataManagement() {
         startWarmupPoll();
       }
     }).catch(() => {});
+    getQueryCacheStats().then(setCacheStats).catch(() => {});
   }, []);
 
   // 清理轮询定时器
@@ -1028,14 +1049,52 @@ function DataManagement() {
           </div>
         )}
 
+        <Space wrap>
+          <Button
+            type="primary"
+            icon={<ThunderboltOutlined />}
+            loading={warmupLoading}
+            onClick={handleWarmupCache}
+            disabled={warmupStatus?.running}
+          >
+            {warmupStatus?.running ? '预热中...' : '立即预热'}
+          </Button>
+        </Space>
+      </Card>
+
+      {/* 查询缓存管理卡片 */}
+      <Card
+        title={
+          <Space>
+            <SyncOutlined style={{ color: '#1677ff' }} />
+            查询缓存管理
+          </Space>
+        }
+        style={{ marginBottom: 24 }}
+      >
+        <Paragraph type="secondary">
+          目的地查询和探索查询结果会缓存到数据库（TTL 6-24h）。数据更新后可手动清除缓存，下次查询将重新计算最新结果。
+        </Paragraph>
+        {cacheStats && (
+          <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Col span={8}>
+              <Statistic title="缓存总数" value={cacheStats.total} suffix="条" />
+            </Col>
+            <Col span={8}>
+              <Statistic title="有效缓存" value={cacheStats.valid} suffix="条" valueStyle={{ color: '#3f8600' }} />
+            </Col>
+            <Col span={8}>
+              <Statistic title="已过期" value={cacheStats.expired} suffix="条" valueStyle={{ color: '#cf1322' }} />
+            </Col>
+          </Row>
+        )}
         <Button
-          type="primary"
-          icon={<ThunderboltOutlined />}
-          loading={warmupLoading}
-          onClick={handleWarmupCache}
-          disabled={warmupStatus?.running}
+          danger
+          icon={<DeleteOutlined />}
+          loading={clearCacheLoading}
+          onClick={handleClearCache}
         >
-          {warmupStatus?.running ? '预热中...' : '立即预热'}
+          清除所有查询缓存
         </Button>
       </Card>
 
