@@ -103,21 +103,34 @@ mkdir -p data logs
 log_section "启动后端服务（端口 $BACKEND_PORT）"
 mkdir -p "$ROOT_DIR/logs"
 
+# 释放端口占用
+OCCUPIED=$(lsof -ti tcp:$BACKEND_PORT 2>/dev/null || true)
+if [ -n "$OCCUPIED" ]; then
+  log_warn "端口 $BACKEND_PORT 被占用，正在释放..."
+  echo "$OCCUPIED" | xargs kill -9 2>/dev/null || true
+  sleep 1
+fi
+
 NODE_ENV=production node dist/main.js \
   > "$ROOT_DIR/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
 
-# 等待后端就绪
+# 等待后端就绪（检查端口是否监听）
 echo -n "  等待后端启动"
-for i in $(seq 1 15); do
+for i in $(seq 1 20); do
   sleep 1
   echo -n "."
-  if curl -sf "http://localhost:$BACKEND_PORT/api" &>/dev/null; then
+  if lsof -ti tcp:$BACKEND_PORT &>/dev/null; then
     echo ""
     log_info "后端服务已就绪 (PID: $BACKEND_PID)"
     break
   fi
-  if [ $i -eq 15 ]; then
+  if ! kill -0 $BACKEND_PID 2>/dev/null; then
+    echo ""
+    log_error "后端进程意外退出，请查看日志: logs/backend.log"
+    exit 1
+  fi
+  if [ $i -eq 20 ]; then
     echo ""
     log_error "后端启动超时，请查看日志: logs/backend.log"
     kill $BACKEND_PID 2>/dev/null
@@ -128,6 +141,13 @@ done
 # ── 启动前端静态服务 ─────────────────────────────────────────────
 
 log_section "启动前端服务（端口 $FRONTEND_PORT）"
+
+OCCUPIED=$(lsof -ti tcp:$FRONTEND_PORT 2>/dev/null || true)
+if [ -n "$OCCUPIED" ]; then
+  log_warn "端口 $FRONTEND_PORT 被占用，正在释放..."
+  echo "$OCCUPIED" | xargs kill -9 2>/dev/null || true
+  sleep 1
+fi
 
 # 用 vite preview 托管构建产物（自带反向代理配置）
 cd "$ROOT_DIR/frontend"
