@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, LessThan } from 'typeorm';
 import { FlightService } from '../flight/flight.service';
 import { PlanRouteDto } from './dto/plan-route.dto';
 import {
@@ -7,17 +9,24 @@ import {
   FlightSegmentDto,
 } from './dto/route-result.dto';
 import { Flight } from '../flight/entities/flight.entity';
+import { QueryCache } from './entities/query-cache.entity';
 
 interface GraphNode {
   city: string;
   flights: Flight[];
 }
 
+const TRANSFER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 分钟
+
 @Injectable()
 export class RouteService {
   private readonly logger = new Logger(RouteService.name);
 
-  constructor(private readonly flightService: FlightService) {}
+  constructor(
+    private readonly flightService: FlightService,
+    @InjectRepository(QueryCache)
+    private readonly queryCacheRepository: Repository<QueryCache>,
+  ) {}
 
   /**
    * 规划单程路线（对外接口）
@@ -373,6 +382,14 @@ export class RouteService {
     const minLayoverHours = params.minLayoverHours ?? 2;
     const maxLayoverHours = params.maxLayoverHours ?? 24;
 
+    // 缓存命中检查（DB）
+    const cacheKey = `transfer|${params.origin}|${params.departureDate}|${endDate}|${maxTransfers}|${minLayoverHours}|${maxLayoverHours}`;
+    const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
+    if (cached && cached.expireAt > new Date()) {
+      this.logger.log(`中转搜索命中 DB 缓存: ${cacheKey}`);
+      return JSON.parse(cached.data);
+    }
+
     // 1. 建去程完整图：A 出发的直飞 + 所有一跳中转城市出发的航班
     const firstLegFlights = await this.flightService.queryFlights({
       origin: params.origin,
@@ -464,10 +481,38 @@ export class RouteService {
 
     this.logger.log(`中转往返 ${roundTripResults.length} 个，中转单程 ${oneWayResults.length} 个`);
 
-    return {
+    const result = {
       roundTrip: roundTripResults,
       oneWay: oneWayResults,
       total: roundTripResults.length + oneWayResults.length,
     };
+
+    // 写入 DB 缓存（upsert）
+    const expireAt = new Date(Date.now() + TRANSFER_CACHE_TTL_MS);
+    await this.queryCacheRepository.save({
+      cacheKey,
+      data: JSON.stringify(result),
+      expireAt,
+      createdAt: new Date(),
+    });
+    this.logger.log(`中转搜索结果已写入 DB 缓存: ${cacheKey}，TTL 10 分钟`);
+
+    return result;
+  }
+
+  /**
+   * 清除过期的 DB 缓存（可定期调用）
+   */
+  async cleanExpiredCache(): Promise<void> {
+    const result = await this.queryCacheRepository.delete({ expireAt: LessThan(new Date()) });
+    this.logger.log(`已清除 ${result.affected ?? 0} 条过期 DB 缓存`);
+  }
+
+  /**
+   * 清除所有中转搜索缓存（爬虫更新数据后调用）
+   */
+  async clearTransferCache(): Promise<void> {
+    const result = await this.queryCacheRepository.delete({});
+    this.logger.log(`已清除 ${result.affected ?? 0} 条 DB 缓存`);
   }
 }
