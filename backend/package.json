@@ -5,6 +5,7 @@
   "main": "src/main.ts",
   "scripts": {
     "start": "nest start",
+    "start:prod": "node dist/main.js",
     "dev": "nest start --watch",
     "build": "nest build",
     "test": "jest",
