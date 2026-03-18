@@ -424,6 +424,7 @@ function FlightManagement() {
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
+            disabled
           >
             编辑
           </Button>
@@ -433,6 +434,7 @@ function FlightManagement() {
             danger
             icon={<DeleteOutlined />}
             onClick={() => handleDelete(record.id, record.flightNo)}
+            disabled
           >
             删除
           </Button>
@@ -550,7 +552,7 @@ function FlightManagement() {
               danger
               icon={<DeleteOutlined />}
               onClick={handleBatchDelete}
-              disabled={selectedRowKeys.length === 0}
+              disabled
             >
               批量删除 ({selectedRowKeys.length})
             </Button>
@@ -558,6 +560,7 @@ function FlightManagement() {
               danger
               icon={<DeleteOutlined />}
               onClick={handleDeleteOldFlights}
+              disabled
             >
               删除一周前数据
             </Button>
