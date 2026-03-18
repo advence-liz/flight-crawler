@@ -1,0 +1,5 @@
+{
+  "app_dir": "backend",
+  "build_command": "npm ci && npm run build && mkdir -p data && curl -fsSL \"https://raw.githubusercontent.com/${GITHUB_REPO}/data/backend/data/flight-crawler.db\" -o data/flight-crawler.db",
+  "start_command": "npm run start:prod"
+}
