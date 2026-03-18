@@ -57,56 +57,51 @@ interface TransferDestCardProps {
   outboundCount: number;
   returnCount?: number;
   onShowRoutes: () => void;
+  onPlan: () => void;
 }
 
-function TransferDestCard({ city, hasReturn, outboundRoute, outboundCount, returnCount, onShowRoutes }: TransferDestCardProps) {
+function TransferDestCard({ city, hasReturn, outboundRoute, outboundCount, returnCount, onShowRoutes, onPlan }: TransferDestCardProps) {
   const outSeg = outboundRoute.segments;
   const via = outSeg.length > 1 ? outSeg.slice(0, -1).map(s => s.destination).join('、') : '';
 
   return (
-    <Tooltip title={
-      hasReturn
-        ? `去程经 ${via} 中转，${outboundCount} 条方案 / 返程 ${returnCount} 条方案`
-        : `经 ${via} 中转，${outboundCount} 条方案`
-    }>
-      <div
-        style={{
-          cursor: 'pointer',
-          border: `1.5px solid ${hasReturn ? '#ffd591' : '#e8e8e8'}`,
-          borderRadius: 8,
-          padding: '10px 14px',
-          background: hasReturn ? '#fffbe6' : '#fafafa',
-          transition: 'all 0.2s',
-          userSelect: 'none',
-          minWidth: 120,
-        }}
-        onMouseEnter={e => {
-          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(250,140,22,0.25)';
-          (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)';
-        }}
-        onMouseLeave={e => {
-          (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
-          (e.currentTarget as HTMLDivElement).style.transform = 'none';
-        }}
-        onClick={onShowRoutes}
-      >
-        {/* 城市名 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <NodeIndexOutlined style={{ color: '#fa8c16', fontSize: 12 }} />
-          <span style={{ fontWeight: 600, fontSize: 14, color: hasReturn ? '#874d00' : '#595959' }}>
-            {city}
-          </span>
+    <div
+      style={{
+        border: `1.5px solid ${hasReturn ? '#ffd591' : '#e8e8e8'}`,
+        borderRadius: 8,
+        padding: '10px 14px',
+        background: hasReturn ? '#fffbe6' : '#fafafa',
+        transition: 'all 0.2s',
+        userSelect: 'none',
+        minWidth: 120,
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(250,140,22,0.25)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+        (e.currentTarget as HTMLDivElement).style.transform = 'none';
+      }}
+    >
+      {/* 城市名 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <NodeIndexOutlined style={{ color: '#fa8c16', fontSize: 12 }} />
+        <span style={{ fontWeight: 600, fontSize: 14, color: hasReturn ? '#874d00' : '#595959', cursor: 'pointer' }} onClick={onShowRoutes}>
+          {city}
+        </span>
+      </div>
+
+      {/* 经由城市 */}
+      {via && (
+        <div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>
+          经 {via}
         </div>
+      )}
 
-        {/* 经由城市 */}
-        {via && (
-          <div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>
-            经 {via}
-          </div>
-        )}
-
-        {/* 去程/返程方案数 */}
-        <div style={{ display: 'flex', gap: 8, fontSize: 12 }}>
+      {/* 去程/返程方案数 + 操作按钮 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 6, fontSize: 12 }}>
           <span style={{ color: '#fa8c16' }}>去 {outboundCount} 条</span>
           {hasReturn ? (
             <>
@@ -117,8 +112,28 @@ function TransferDestCard({ city, hasReturn, outboundRoute, outboundCount, retur
             <span style={{ color: '#bfbfbf' }}>无返程</span>
           )}
         </div>
+        <Space size={2}>
+          <Button
+            type="link"
+            size="small"
+            icon={<NodeIndexOutlined />}
+            style={{ padding: '0 2px', fontSize: 11, height: 'auto', color: '#fa8c16' }}
+            onClick={e => { e.stopPropagation(); onShowRoutes(); }}
+          >
+            方案
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<SendOutlined />}
+            style={{ padding: '0 2px', fontSize: 11, height: 'auto', color: hasReturn ? '#52c41a' : '#1677ff' }}
+            onClick={e => { e.stopPropagation(); onPlan(); }}
+          >
+            规划
+          </Button>
+        </Space>
       </div>
-    </Tooltip>
+    </div>
   );
 }
 
@@ -735,6 +750,7 @@ function DestinationQuery() {
                             outboundCount={item.outboundRoutes.filter(r => r.transferCount > 0).length}
                             returnCount={item.returnRoutes.filter(r => r.transferCount > 0).length}
                             onShowRoutes={() => handleShowTransferRoutes(item.city)}
+                            onPlan={() => goToPlan(item.city)}
                           />
                         </Col>
                       ))}
@@ -756,6 +772,7 @@ function DestinationQuery() {
                             outboundRoute={item.routes.find(r => r.transferCount > 0)!}
                             outboundCount={item.routes.filter(r => r.transferCount > 0).length}
                             onShowRoutes={() => handleShowTransferRoutes(item.city)}
+                            onPlan={() => goToPlan(item.city)}
                           />
                         </Col>
                       ))}
