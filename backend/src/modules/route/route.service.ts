@@ -16,7 +16,7 @@ interface GraphNode {
   flights: Flight[];
 }
 
-const TRANSFER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 分钟
+const TRANSFER_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
 @Injectable()
 export class RouteService {
