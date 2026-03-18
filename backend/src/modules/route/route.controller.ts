@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
 import { RouteService } from './route.service';
 import { RoundTripService } from './round-trip.service';
 import { PlanRouteDto } from './dto/plan-route.dto';
@@ -58,5 +58,25 @@ export class RouteController {
       throw new BadRequestException('origin 和 departureDate 为必填项');
     }
     return this.routeService.discoverTransferDestinations(body);
+  }
+
+  /**
+   * 手动触发中转缓存预热（异步，立即返回）
+   * POST /api/routes/warmup-cache
+   */
+  @Post('warmup-cache')
+  @HttpCode(HttpStatus.OK)
+  async warmupCache() {
+    this.routeService.warmupTransferCachePublic();
+    return { message: '缓存预热已触发，正在后台执行' };
+  }
+
+  /**
+   * 查询缓存预热状态
+   * GET /api/routes/warmup-cache/status
+   */
+  @Get('warmup-cache/status')
+  async warmupCacheStatus() {
+    return this.routeService.getWarmupStatus();
   }
 }

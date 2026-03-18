@@ -18,9 +18,29 @@ interface GraphNode {
 
 const TRANSFER_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
+export interface WarmupStatus {
+  running: boolean;
+  total: number;
+  warmed: number;
+  skipped: number;
+  current: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+}
+
 @Injectable()
 export class RouteService implements OnApplicationBootstrap {
   private readonly logger = new Logger(RouteService.name);
+
+  private warmupStatus: WarmupStatus = {
+    running: false,
+    total: 0,
+    warmed: 0,
+    skipped: 0,
+    current: null,
+    startedAt: null,
+    finishedAt: null,
+  };
 
   constructor(
     private readonly flightService: FlightService,
@@ -527,7 +547,25 @@ export class RouteService implements OnApplicationBootstrap {
     );
   }
 
+  /** 供 Controller 调用的公开预热入口（幂等：已在运行则跳过） */
+  warmupTransferCachePublic(): void {
+    if (this.warmupStatus.running) {
+      this.logger.log('中转缓存预热已在运行中，跳过重复触发');
+      return;
+    }
+    this.warmupTransferCache().catch(err =>
+      this.logger.error(`中转缓存预热失败: ${err.message}`),
+    );
+  }
+
+  /** 查询当前预热进度 */
+  getWarmupStatus(): WarmupStatus {
+    return { ...this.warmupStatus };
+  }
+
   private async warmupTransferCache(): Promise<void> {
+    if (this.warmupStatus.running) return;
+
     // 等待 3 秒，确保数据库连接完全就绪
     await new Promise(resolve => setTimeout(resolve, 3000));
 
@@ -539,16 +577,24 @@ export class RouteService implements OnApplicationBootstrap {
       return;
     }
 
+    this.warmupStatus = {
+      running: true,
+      total: origins.length,
+      warmed: 0,
+      skipped: 0,
+      current: null,
+      startedAt: new Date(),
+      finishedAt: null,
+    };
+
     this.logger.log(`中转缓存预热开始：${origins.length} 个出发地，日期 ${minDate} ~ ${maxDate}`);
 
-    let warmed = 0;
-    let skipped = 0;
-
     for (const origin of origins) {
+      this.warmupStatus.current = origin;
       const cacheKey = `transfer|${origin}|${minDate}|${maxDate}|1|2|24`;
       const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
       if (cached && cached.expireAt > new Date()) {
-        skipped++;
+        this.warmupStatus.skipped++;
         continue;
       }
 
@@ -559,13 +605,16 @@ export class RouteService implements OnApplicationBootstrap {
           endDate: maxDate,
           maxTransfers: 1,
         });
-        warmed++;
-        this.logger.log(`预热进度 [${warmed + skipped}/${origins.length}] ${origin} ✓`);
+        this.warmupStatus.warmed++;
+        this.logger.log(`预热进度 [${this.warmupStatus.warmed + this.warmupStatus.skipped}/${origins.length}] ${origin} ✓`);
       } catch (err) {
         this.logger.warn(`预热 ${origin} 失败: ${err.message}`);
       }
     }
 
-    this.logger.log(`中转缓存预热完成：新增 ${warmed} 个，跳过 ${skipped} 个（已有缓存）`);
+    this.warmupStatus.running = false;
+    this.warmupStatus.current = null;
+    this.warmupStatus.finishedAt = new Date();
+    this.logger.log(`中转缓存预热完成：新增 ${this.warmupStatus.warmed} 个，跳过 ${this.warmupStatus.skipped} 个（已有缓存）`);
   }
 }

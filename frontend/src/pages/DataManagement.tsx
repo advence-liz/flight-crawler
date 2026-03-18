@@ -31,7 +31,9 @@ import {
   ExclamationCircleOutlined,
   SyncOutlined,
   ClockCircleOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
+import { Progress } from 'antd';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 import {
@@ -44,9 +46,12 @@ import {
   stopCrawler,
   cleanOldLogs,
   cleanAllLogs,
+  warmupTransferCache,
+  getWarmupCacheStatus,
   type CrawlerLog,
   type LogStats,
   type DiscoverAirportsExecutionPlan,
+  type WarmupStatus,
 } from '@/api/flight';
 
 dayjs.extend(duration);
@@ -77,6 +82,11 @@ function DataManagement() {
 
   // 停止任务
   const [stopLoading, setStopLoading] = useState(false);
+
+  // 中转缓存预热
+  const [warmupLoading, setWarmupLoading] = useState(false);
+  const [warmupStatus, setWarmupStatus] = useState<WarmupStatus | null>(null);
+  const warmupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 日志相关状态
   const [logs, setLogs] = useState<CrawlerLog[]>([]);
@@ -156,6 +166,53 @@ function DataManagement() {
       console.error(error);
     }
   };
+
+  // 预热进度轮询
+  const startWarmupPoll = () => {
+    if (warmupPollRef.current) return;
+    warmupPollRef.current = setInterval(async () => {
+      try {
+        const status = await getWarmupCacheStatus();
+        setWarmupStatus(status);
+        if (!status.running) {
+          clearInterval(warmupPollRef.current!);
+          warmupPollRef.current = null;
+          setWarmupLoading(false);
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+  };
+
+  const handleWarmupCache = async () => {
+    setWarmupLoading(true);
+    try {
+      await warmupTransferCache();
+      message.success('缓存预热已启动，正在后台执行');
+      // 稍等再开始轮询，让后端状态更新
+      setTimeout(startWarmupPoll, 1000);
+    } catch {
+      message.error('预热启动失败');
+      setWarmupLoading(false);
+    }
+  };
+
+  // 初始加载时获取预热状态
+  useEffect(() => {
+    getWarmupCacheStatus().then(s => {
+      setWarmupStatus(s);
+      if (s.running) {
+        setWarmupLoading(true);
+        startWarmupPoll();
+      }
+    }).catch(() => {});
+  }, []);
+
+  // 清理轮询定时器
+  useEffect(() => {
+    return () => {
+      if (warmupPollRef.current) clearInterval(warmupPollRef.current);
+    };
+  }, []);
 
   // 初始加载
   useEffect(() => {
@@ -916,6 +973,70 @@ function DataManagement() {
             </Row>
           </Card>
         )}
+      </Card>
+
+      <Divider />
+
+      {/* 中转缓存预热卡片 */}
+      <Card
+        title={
+          <Space>
+            <ThunderboltOutlined style={{ color: '#fa8c16' }} />
+            中转缓存预热
+          </Space>
+        }
+        style={{ marginBottom: 24 }}
+      >
+        <Paragraph type="secondary">
+          预先计算所有出发地的中转搜索结果并写入数据库缓存，用户访问时直接命中缓存，无需等待计算。
+        </Paragraph>
+
+        {warmupStatus && (
+          <div style={{ marginBottom: 16 }}>
+            {warmupStatus.running ? (
+              <>
+                <div style={{ marginBottom: 8 }}>
+                  <Space>
+                    <SyncOutlined spin style={{ color: '#1677ff' }} />
+                    <Text>预热中：{warmupStatus.current}</Text>
+                    <Text type="secondary">
+                      {warmupStatus.warmed + warmupStatus.skipped} / {warmupStatus.total}
+                    </Text>
+                  </Space>
+                </div>
+                <Progress
+                  percent={warmupStatus.total > 0
+                    ? Math.round((warmupStatus.warmed + warmupStatus.skipped) / warmupStatus.total * 100)
+                    : 0}
+                  status="active"
+                  format={p => `${p}%`}
+                />
+              </>
+            ) : warmupStatus.finishedAt ? (
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Statistic title="新增缓存" value={warmupStatus.warmed} suffix="个" valueStyle={{ color: '#3f8600' }} />
+                </Col>
+                <Col span={8}>
+                  <Statistic title="已有缓存（跳过）" value={warmupStatus.skipped} suffix="个" valueStyle={{ color: '#1677ff' }} />
+                </Col>
+                <Col span={8}>
+                  <Statistic title="总出发地" value={warmupStatus.total} suffix="个" />
+                </Col>
+              </Row>
+            ) : null}
+          </div>
+        )}
+
+        <Button
+          type="primary"
+          icon={<ThunderboltOutlined />}
+          loading={warmupLoading}
+          onClick={handleWarmupCache}
+          disabled={warmupStatus?.running}
+        >
+          {warmupStatus?.running ? '预热中...' : '立即预热'}
+        </Button>
       </Card>
 
       <Divider />

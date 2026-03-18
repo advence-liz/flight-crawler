@@ -335,6 +335,26 @@ export interface DiscoverTransferResponse {
   total: number;
 }
 
+// 手动触发中转缓存预热
+export const warmupTransferCache = (): Promise<{ message: string }> => {
+  return api.post('/routes/warmup-cache');
+};
+
+// 查询缓存预热状态
+export interface WarmupStatus {
+  running: boolean;
+  total: number;
+  warmed: number;
+  skipped: number;
+  current: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export const getWarmupCacheStatus = (): Promise<WarmupStatus> => {
+  return api.get('/routes/warmup-cache/status');
+};
+
 export const discoverTransferDestinations = (params: {
   origin: string;
   departureDate: string;
