@@ -271,3 +271,45 @@ export const deleteFlightsBeforeDays = (days: number): Promise<{
 }> => {
   return api.delete(`/flights/before-days/${days}`);
 };
+
+// 路由规划相关类型
+export interface FlightSegment {
+  flightNo: string;
+  origin: string;
+  destination: string;
+  departureTime: string;
+  arrivalTime: string;
+  duration: number; // 分钟
+}
+
+export interface RouteResult {
+  segments: FlightSegment[];
+  totalDuration: number; // 分钟
+  transferCount: number;
+  layovers: { city: string; duration: number }[];
+  score: number;
+}
+
+export interface RoutePlanResponse {
+  routes: RouteResult[];
+  searchParams: {
+    origin: string;
+    destination?: string;
+    departureDate: string;
+    endDate?: string;
+    maxTransfers: number;
+  };
+}
+
+// 规划路线（支持中转）
+export const planRoute = (params: {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  endDate?: string;
+  maxTransfers?: number;
+  minLayoverHours?: number;
+  maxLayoverHours?: number;
+}): Promise<RoutePlanResponse> => {
+  return api.post('/routes/plan', params);
+};
