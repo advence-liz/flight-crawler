@@ -278,7 +278,10 @@ function DestinationQuery() {
       origin: values.origin || '',
       destination,
       departureDate: startDate ? startDate.format('YYYY-MM-DD') : '',
-      ...(shouldIncludeReturn && endDate ? { returnDate: endDate.format('YYYY-MM-DD') } : {}),
+      ...(endDate ? { departureDateEnd: endDate.format('YYYY-MM-DD') } : {}),
+      // 往返：returnDate 用 startDate（最早可返程），returnDateEnd 用 endDate（最晚可返程）
+      ...(shouldIncludeReturn && startDate ? { returnDate: startDate.format('YYYY-MM-DD') } : {}),
+      ...(shouldIncludeReturn && endDate ? { returnDateEnd: endDate.format('YYYY-MM-DD') } : {}),
       maxTransfers: isDirectFlight ? '0' : '1',
     });
     navigate(`/route-planner?${params.toString()}`);

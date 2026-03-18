@@ -229,7 +229,9 @@ interface UrlParams {
   origin: string;
   destination: string;
   departureDate: string;
+  departureDateEnd?: string;
   returnDate: string;
+  returnDateEnd?: string;
   tab: string;
   maxTransfers?: string;
 }
@@ -467,10 +469,11 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
     const max = dayjs(dateRange.maxDate!);
     const mid = min.add(Math.floor(max.diff(min, 'day') / 2), 'day');
 
-    // 去程：URL 参数优先，否则默认整个可用区间
+    // 去程：URL 参数优先（departureDateEnd 有值时用完整区间，否则 +2天）
     if (urlParams?.departureDate) {
       const dep = dayjs(urlParams.departureDate);
-      form.setFieldValue('departureRange', [dep, dep.add(2, 'day')]);
+      const depEnd = urlParams.departureDateEnd ? dayjs(urlParams.departureDateEnd) : dep.add(2, 'day');
+      form.setFieldValue('departureRange', [dep, depEnd]);
     } else {
       form.setFieldValue('departureRange', [min, mid]);
     }
@@ -478,7 +481,8 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
     // 返程：URL 参数有 returnDate 时设置；来自跳转且无 returnDate 时清空（单程）；否则默认后半段
     if (urlParams?.returnDate) {
       const ret = dayjs(urlParams.returnDate);
-      form.setFieldValue('returnRange', [ret, ret.add(2, 'day')]);
+      const retEnd = urlParams.returnDateEnd ? dayjs(urlParams.returnDateEnd) : ret.add(2, 'day');
+      form.setFieldValue('returnRange', [ret, retEnd]);
     } else if (urlParams?.destination) {
       form.setFieldValue('returnRange', [null, null]);
     } else {
@@ -676,7 +680,9 @@ function RoutePlanner() {
     origin: searchParams.get('origin') || '',
     destination: searchParams.get('destination') || '',
     departureDate: searchParams.get('departureDate') || '',
+    departureDateEnd: searchParams.get('departureDateEnd') || undefined,
     returnDate: searchParams.get('returnDate') || '',
+    returnDateEnd: searchParams.get('returnDateEnd') || undefined,
     tab: searchParams.get('tab') || 'explore',
     maxTransfers: searchParams.get('maxTransfers') || undefined,
   };
