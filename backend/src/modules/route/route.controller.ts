@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
 import { RouteService } from './route.service';
 import { RoundTripService } from './round-trip.service';
 import { PlanRouteDto } from './dto/plan-route.dto';
@@ -40,5 +40,23 @@ export class RouteController {
   @HttpCode(HttpStatus.OK)
   async explore(@Body() dto: ExploreRouteDto) {
     return this.roundTripService.exploreDestinations(dto);
+  }
+
+  /**
+   * 发现所有通过中转可达但直飞不可达的目的地
+   * POST /api/routes/discover-transfer
+   */
+  @Post('discover-transfer')
+  @HttpCode(HttpStatus.OK)
+  async discoverTransfer(@Body() body: {
+    origin: string;
+    departureDate: string;
+    endDate?: string;
+    maxTransfers?: number;
+  }) {
+    if (!body.origin || !body.departureDate) {
+      throw new BadRequestException('origin 和 departureDate 为必填项');
+    }
+    return this.routeService.discoverTransferDestinations(body);
   }
 }

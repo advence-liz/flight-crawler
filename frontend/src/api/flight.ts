@@ -313,3 +313,33 @@ export const planRoute = (params: {
 }): Promise<RoutePlanResponse> => {
   return api.post('/routes/plan', params);
 };
+
+// 发现中转目的地（中转往返 + 中转单程）
+export interface TransferRoundTripDest {
+  city: string;
+  bestOutbound: RouteResult;
+  bestReturn: RouteResult;
+  outboundCount: number;
+  returnCount: number;
+}
+
+export interface TransferOneWayDest {
+  city: string;
+  bestRoute: RouteResult;
+  routeCount: number;
+}
+
+export interface DiscoverTransferResponse {
+  roundTrip: TransferRoundTripDest[];
+  oneWay: TransferOneWayDest[];
+  total: number;
+}
+
+export const discoverTransferDestinations = (params: {
+  origin: string;
+  departureDate: string;
+  endDate?: string;
+  maxTransfers?: number;
+}): Promise<DiscoverTransferResponse> => {
+  return api.post('/routes/discover-transfer', params);
+};

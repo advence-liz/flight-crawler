@@ -16,6 +16,7 @@ import {
   Statistic,
   Tooltip,
   Divider,
+  Spin,
 } from 'antd';
 import {
   SearchOutlined,
@@ -39,10 +40,88 @@ import {
   Flight,
   planRoute,
   RouteResult,
+  discoverTransferDestinations,
+  TransferRoundTripDest,
+  TransferOneWayDest,
 } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie } from '@/utils/cookie';
 
 const { RangePicker } = DatePicker;
+
+// ─── 中转目的地气泡卡片 ──────────────────────────────────────
+
+interface TransferDestCardProps {
+  city: string;
+  hasReturn: boolean;
+  outboundRoute: RouteResult;
+  returnRoute?: RouteResult;
+  outboundCount: number;
+  returnCount?: number;
+  onShowRoutes: () => void;
+}
+
+function TransferDestCard({ city, hasReturn, outboundRoute, outboundCount, returnCount, onShowRoutes }: TransferDestCardProps) {
+  const outSeg = outboundRoute.segments;
+  const via = outSeg.length > 1 ? outSeg.slice(0, -1).map(s => s.destination).join('、') : '';
+
+  return (
+    <Tooltip title={
+      hasReturn
+        ? `去程经 ${via} 中转，${outboundCount} 条方案 / 返程 ${returnCount} 条方案`
+        : `经 ${via} 中转，${outboundCount} 条方案`
+    }>
+      <div
+        style={{
+          cursor: 'pointer',
+          border: `1.5px solid ${hasReturn ? '#ffd591' : '#e8e8e8'}`,
+          borderRadius: 8,
+          padding: '10px 14px',
+          background: hasReturn ? '#fffbe6' : '#fafafa',
+          transition: 'all 0.2s',
+          userSelect: 'none',
+          minWidth: 120,
+        }}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(250,140,22,0.25)';
+          (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)';
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+          (e.currentTarget as HTMLDivElement).style.transform = 'none';
+        }}
+        onClick={onShowRoutes}
+      >
+        {/* 城市名 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <NodeIndexOutlined style={{ color: '#fa8c16', fontSize: 12 }} />
+          <span style={{ fontWeight: 600, fontSize: 14, color: hasReturn ? '#874d00' : '#595959' }}>
+            {city}
+          </span>
+        </div>
+
+        {/* 经由城市 */}
+        {via && (
+          <div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>
+            经 {via}
+          </div>
+        )}
+
+        {/* 去程/返程方案数 */}
+        <div style={{ display: 'flex', gap: 8, fontSize: 12 }}>
+          <span style={{ color: '#fa8c16' }}>去 {outboundCount} 条</span>
+          {hasReturn ? (
+            <>
+              <SwapOutlined style={{ color: '#fa8c16', fontSize: 10 }} />
+              <span style={{ color: '#fa8c16' }}>返 {returnCount} 条</span>
+            </>
+          ) : (
+            <span style={{ color: '#bfbfbf' }}>无返程</span>
+          )}
+        </div>
+      </div>
+    </Tooltip>
+  );
+}
 
 // ─── 目的地气泡卡片 ──────────────────────────────────────────
 
@@ -171,11 +250,17 @@ function DestinationQuery() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
-  // 中转方案相关状态
+  // 中转方案 Modal 状态（点击具体目的地后弹出）
   const [transferDest, setTransferDest] = useState<DestinationResult | null>(null);
   const [transferRoutes, setTransferRoutes] = useState<RouteResult[]>([]);
   const [transferLoading, setTransferLoading] = useState(false);
   const [isTransferModalVisible, setIsTransferModalVisible] = useState(false);
+
+  // 中转目的地分区状态
+  const [transferRoundTrip, setTransferRoundTrip] = useState<TransferRoundTripDest[]>([]);
+  const [transferOneWay, setTransferOneWay] = useState<TransferOneWayDest[]>([]);
+  const [discoverTransferLoading, setDiscoverTransferLoading] = useState(false);
+  const [transferDiscovered, setTransferDiscovered] = useState(false);
 
   // 跳转到行程规划
   const goToPlan = (dest: DestinationResult) => {
@@ -227,6 +312,10 @@ function DestinationQuery() {
       });
       setDestinations(result.destinations);
       setOriginCookie(values.origin);
+      // 重置中转分区
+      setTransferRoundTrip([]);
+      setTransferOneWay([]);
+      setTransferDiscovered(false);
       message.success(`查询成功，共 ${result.totalCount} 个目的地`);
     } catch {
       message.error('查询失败，请稍后重试');
@@ -277,6 +366,38 @@ function DestinationQuery() {
       message.error('查询中转方案失败');
     } finally {
       setTransferLoading(false);
+    }
+  };
+
+  // 点击中转目的地气泡，弹出该城市的中转路线 Modal
+  const handleShowTransferRoutes = async (city: string) => {
+    const fakeRecord = { destination: city } as DestinationResult;
+    await handleShowTransfer(fakeRecord);
+  };
+
+  const handleDiscoverTransfer = async () => {
+    const values = form.getFieldsValue();
+    const [startDate, endDate] = values.dateRange || [];
+    if (!values.origin || !startDate) {
+      message.warning('请先选择出发地和日期范围');
+      return;
+    }
+    setDiscoverTransferLoading(true);
+    try {
+      const result = await discoverTransferDestinations({
+        origin: values.origin,
+        departureDate: startDate.format('YYYY-MM-DD'),
+        endDate: endDate ? endDate.format('YYYY-MM-DD') : startDate.format('YYYY-MM-DD'),
+        maxTransfers: 1,
+      });
+      setTransferRoundTrip(result.roundTrip);
+      setTransferOneWay(result.oneWay);
+      setTransferDiscovered(true);
+      message.success(`发现中转往返 ${result.roundTrip.length} 个，中转单程 ${result.oneWay.length} 个`);
+    } catch {
+      message.error('查询中转目的地失败');
+    } finally {
+      setDiscoverTransferLoading(false);
     }
   };
 
@@ -478,6 +599,17 @@ function DestinationQuery() {
                   valueStyle={{ fontSize: 28 }}
                 />
               </Col>
+              {transferDiscovered && (
+                <Col>
+                  <Statistic
+                    title="中转可达"
+                    value={transferRoundTrip.length + transferOneWay.length}
+                    suffix="个"
+                    valueStyle={{ color: '#fa8c16', fontSize: 28 }}
+                    prefix={<NodeIndexOutlined />}
+                  />
+                </Col>
+              )}
             </Row>
 
             {/* 可往返目的地气泡 */}
@@ -526,6 +658,85 @@ function DestinationQuery() {
                   ))}
                 </Row>
               </>
+            )}
+
+            {/* 中转目的地分区入口 */}
+            <Divider orientation="left" style={{ margin: '16px 0 12px' }}>
+              <Space>
+                <NodeIndexOutlined style={{ color: '#fa8c16' }} />
+                <span style={{ color: '#fa8c16', fontWeight: 600 }}>中转可达</span>
+                {!transferDiscovered && (
+                  <Button
+                    size="small"
+                    loading={discoverTransferLoading}
+                    onClick={handleDiscoverTransfer}
+                    style={{ fontSize: 12, height: 24 }}
+                  >
+                    发现中转目的地
+                  </Button>
+                )}
+                {transferDiscovered && (
+                  <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>
+                    往返 {transferRoundTrip.length} 个 · 单程 {transferOneWay.length} 个
+                  </span>
+                )}
+              </Space>
+            </Divider>
+
+            {discoverTransferLoading && (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <Spin tip="正在搜索中转方案..." />
+              </div>
+            )}
+
+            {/* 中转往返气泡 */}
+            {transferDiscovered && transferRoundTrip.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, color: '#fa8c16', fontWeight: 600, marginBottom: 8 }}>
+                  <SwapOutlined style={{ marginRight: 4 }} />中转往返（{transferRoundTrip.length} 个）
+                </div>
+                <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
+                  {transferRoundTrip.map(item => (
+                    <Col key={item.city}>
+                      <TransferDestCard
+                        city={item.city}
+                        hasReturn={true}
+                        outboundRoute={item.bestOutbound}
+                        returnRoute={item.bestReturn}
+                        outboundCount={item.outboundCount}
+                        returnCount={item.returnCount}
+                        onShowRoutes={() => handleShowTransferRoutes(item.city)}
+                      />
+                    </Col>
+                  ))}
+                </Row>
+              </>
+            )}
+
+            {/* 中转单程气泡 */}
+            {transferDiscovered && transferOneWay.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 600, marginBottom: 8 }}>
+                  <ArrowRightOutlined style={{ marginRight: 4 }} />中转单程（{transferOneWay.length} 个）
+                </div>
+                <Row gutter={[10, 10]}>
+                  {transferOneWay.map(item => (
+                    <Col key={item.city}>
+                      <TransferDestCard
+                        city={item.city}
+                        hasReturn={false}
+                        outboundRoute={item.bestRoute}
+                        outboundCount={item.routeCount}
+                        onShowRoutes={() => handleShowTransferRoutes(item.city)}
+                      />
+                    </Col>
+                  ))}
+                </Row>
+              </>
+            )}
+
+            {transferDiscovered && transferRoundTrip.length === 0 && transferOneWay.length === 0 && (
+              <div style={{ color: '#bfbfbf', fontSize: 13, padding: '8px 0' }}>未发现中转可达目的地</div>
             )}
           </Card>
 

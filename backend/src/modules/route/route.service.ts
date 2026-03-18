@@ -351,4 +351,121 @@ export class RouteService {
   private calculateLayover(flight1: Flight, flight2: Flight): number {
     return this.calculateDuration(flight1.arrivalTime, flight2.departureTime);
   }
+
+  /**
+   * 发现所有通过中转可达但直飞不可达的目的地，区分中转往返和中转单程
+   * POST /api/routes/discover-transfer
+   */
+  async discoverTransferDestinations(params: {
+    origin: string;
+    departureDate: string;
+    endDate?: string;
+    maxTransfers?: number;
+    minLayoverHours?: number;
+    maxLayoverHours?: number;
+  }): Promise<{
+    roundTrip: Array<{ city: string; bestOutbound: RouteResultDto; bestReturn: RouteResultDto; outboundCount: number; returnCount: number }>;
+    oneWay: Array<{ city: string; bestRoute: RouteResultDto; routeCount: number }>;
+    total: number;
+  }> {
+    const endDate = params.endDate || params.departureDate;
+    const maxTransfers = params.maxTransfers ?? 1;
+    const minLayoverHours = params.minLayoverHours ?? 2;
+    const maxLayoverHours = params.maxLayoverHours ?? 24;
+
+    // 1. 查询起点直飞目的地（用于排除）
+    const directFlights = await this.flightService.queryFlights({
+      origin: params.origin,
+      startDate: params.departureDate,
+      endDate,
+    });
+    const directDestinations = new Set(directFlights.map(f => f.destination));
+
+    // 2. 建去程完整图（起点 + 中转城市）
+    const transitCities = new Set<string>();
+    for (const f of directFlights) {
+      if (f.destination !== params.origin) transitCities.add(f.destination);
+    }
+    const outboundFlights = [...directFlights];
+    for (const city of transitCities) {
+      const legs = await this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate });
+      outboundFlights.push(...legs);
+    }
+    const outboundGraph = this.buildGraph(outboundFlights);
+
+    // 3. 收集所有中转可达目的地（排除直飞和起点）
+    const reachableCities = new Set<string>();
+    for (const [, node] of outboundGraph) {
+      for (const f of node.flights) {
+        if (f.destination !== params.origin) reachableCities.add(f.destination);
+      }
+    }
+    const transferOnlyCities = Array.from(reachableCities).filter(
+      city => !directDestinations.has(city) && city !== params.origin,
+    );
+
+    this.logger.log(`中转可达 ${transferOnlyCities.length} 个目的地（直飞 ${directDestinations.size} 个）`);
+
+    // 4. 为每个中转目的地建返程图（city -> origin）
+    // 预先查各目的地出发的航班，合并后建图，DFS 找回 origin 的路径
+    const returnFlightsMap = new Map<string, Flight[]>();
+    for (const city of transferOnlyCities) {
+      const legs = await this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate });
+      returnFlightsMap.set(city, legs);
+    }
+    // 还需要查中转城市（目的地的邻居）出发的航班
+    const returnTransitCities = new Set<string>();
+    for (const legs of returnFlightsMap.values()) {
+      for (const f of legs) {
+        if (!returnFlightsMap.has(f.destination) && f.destination !== params.origin) {
+          returnTransitCities.add(f.destination);
+        }
+      }
+    }
+    const returnAllFlights: Flight[] = [];
+    for (const legs of returnFlightsMap.values()) returnAllFlights.push(...legs);
+    for (const city of returnTransitCities) {
+      const legs = await this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate });
+      returnAllFlights.push(...legs);
+    }
+    const returnGraph = this.buildGraph(returnAllFlights);
+
+    // 5. 对每个中转目的地分别搜索去程和返程路径
+    const roundTripResults: Array<{ city: string; bestOutbound: RouteResultDto; bestReturn: RouteResultDto; outboundCount: number; returnCount: number }> = [];
+    const oneWayResults: Array<{ city: string; bestRoute: RouteResultDto; routeCount: number }> = [];
+
+    for (const city of transferOnlyCities) {
+      // 去程：origin -> city（中转）
+      const outboundRoutes = this.findAllRoutes(outboundGraph, params.origin, city, maxTransfers, minLayoverHours, maxLayoverHours);
+      if (outboundRoutes.length === 0) continue;
+      const scoredOutbound = outboundRoutes.map(r => this.calculateScore(r)).sort((a, b) => b.score - a.score);
+
+      // 返程：city -> origin（中转）
+      const returnRoutes = this.findAllRoutes(returnGraph, city, params.origin, maxTransfers, minLayoverHours, maxLayoverHours);
+      const scoredReturn = returnRoutes.map(r => this.calculateScore(r)).sort((a, b) => b.score - a.score);
+
+      if (scoredReturn.length > 0) {
+        roundTripResults.push({
+          city,
+          bestOutbound: scoredOutbound[0],
+          bestReturn: scoredReturn[0],
+          outboundCount: scoredOutbound.length,
+          returnCount: scoredReturn.length,
+        });
+      } else {
+        oneWayResults.push({ city, bestRoute: scoredOutbound[0], routeCount: scoredOutbound.length });
+      }
+    }
+
+    roundTripResults.sort((a, b) => b.bestOutbound.score - a.bestOutbound.score);
+    oneWayResults.sort((a, b) => b.bestRoute.score - a.bestRoute.score);
+
+    this.logger.log(`中转往返 ${roundTripResults.length} 个，中转单程 ${oneWayResults.length} 个`);
+
+    return {
+      roundTrip: roundTripResults,
+      oneWay: oneWayResults,
+      total: roundTripResults.length + oneWayResults.length,
+    };
+  }
 }
