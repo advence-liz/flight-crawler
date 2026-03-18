@@ -537,14 +537,11 @@ export class RouteService implements OnApplicationBootstrap {
   }
 
   /**
-   * 应用启动后异步预热所有出发地的中转缓存
-   * 已有有效缓存的出发地跳过，只补全缺失或过期的
+   * 应用启动后不自动预热，避免占用事件循环导致 health check 超时
+   * 预热通过数据管理页面手动触发，或 db 中已有缓存数据时自动命中
    */
   async onApplicationBootstrap(): Promise<void> {
-    // 异步执行，不阻塞启动
-    this.warmupTransferCache().catch(err =>
-      this.logger.error(`中转缓存预热失败: ${err.message}`),
-    );
+    this.logger.log('RouteService 已就绪，中转缓存预热可通过数据管理页面手动触发');
   }
 
   /** 供 Controller 调用的公开预热入口（幂等：已在运行则跳过） */
