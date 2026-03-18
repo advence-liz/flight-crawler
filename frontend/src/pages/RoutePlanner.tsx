@@ -231,6 +231,7 @@ interface UrlParams {
   departureDate: string;
   returnDate: string;
   tab: string;
+  maxTransfers?: string;
 }
 
 interface ExploreTabProps {
@@ -474,12 +475,19 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
       form.setFieldValue('departureRange', [min, mid]);
     }
 
-    // 返程：URL 参数优先，否则默认后半段
+    // 返程：URL 参数有 returnDate 时设置；来自跳转且无 returnDate 时清空（单程）；否则默认后半段
     if (urlParams?.returnDate) {
       const ret = dayjs(urlParams.returnDate);
       form.setFieldValue('returnRange', [ret, ret.add(2, 'day')]);
+    } else if (urlParams?.destination) {
+      form.setFieldValue('returnRange', [null, null]);
     } else {
       form.setFieldValue('returnRange', [mid.add(1, 'day'), max]);
+    }
+
+    // maxTransfers URL 参数优先
+    if (urlParams?.maxTransfers !== undefined) {
+      form.setFieldValue('maxTransfers', parseInt(urlParams.maxTransfers, 10));
     }
 
     // 有目的地时（来自跳转）自动触发查询
@@ -670,6 +678,7 @@ function RoutePlanner() {
     departureDate: searchParams.get('departureDate') || '',
     returnDate: searchParams.get('returnDate') || '',
     tab: searchParams.get('tab') || 'explore',
+    maxTransfers: searchParams.get('maxTransfers') || undefined,
   };
 
   useEffect(() => {

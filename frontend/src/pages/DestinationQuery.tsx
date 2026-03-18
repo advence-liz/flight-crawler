@@ -129,9 +129,10 @@ interface DestCardProps {
   onClick: () => void;
   onPlan: () => void;
   onTransfer: () => void;
+  hasTransfer?: boolean;
 }
 
-function DestCard({ dest, onClick, onPlan, onTransfer }: DestCardProps) {
+function DestCard({ dest, onClick, onPlan, onTransfer, hasTransfer }: DestCardProps) {
   const canReturn = dest.hasReturn;
 
   return (
@@ -211,15 +212,17 @@ function DestCard({ dest, onClick, onPlan, onTransfer }: DestCardProps) {
             ))}
           </div>
           <Space size={2}>
-            <Button
-              type="link"
-              size="small"
-              icon={<NodeIndexOutlined />}
-              style={{ padding: '0 2px', fontSize: 11, height: 'auto', color: '#fa8c16' }}
-              onClick={e => { e.stopPropagation(); onTransfer(); }}
-            >
-              中转
-            </Button>
+            {hasTransfer && (
+              <Button
+                type="link"
+                size="small"
+                icon={<NodeIndexOutlined />}
+                style={{ padding: '0 2px', fontSize: 11, height: 'auto', color: '#fa8c16' }}
+                onClick={e => { e.stopPropagation(); onTransfer(); }}
+              >
+                中转
+              </Button>
+            )}
             <Button
               type="link"
               size="small"
@@ -263,12 +266,20 @@ function DestinationQuery() {
   const goToPlan = (destination: string) => {
     const values = form.getFieldsValue();
     const [startDate, endDate] = values.dateRange || [];
+    // 直飞目的地：可往返的传 returnDate，仅单程的不传（避免查往返查不到结果）
+    const directDest = destinations.find(d => d.destination === destination);
+    const isDirectFlight = !!directDest;
+    const canReturn = directDest?.hasReturn ?? false;
+    // 中转目的地：判断是否有往返中转方案
+    const hasTransferReturn = validTransferRoundTrip.some(i => i.city === destination);
+    const shouldIncludeReturn = canReturn || hasTransferReturn;
     const params = new URLSearchParams({
       tab: 'plan',
       origin: values.origin || '',
       destination,
       departureDate: startDate ? startDate.format('YYYY-MM-DD') : '',
-      returnDate: endDate ? endDate.format('YYYY-MM-DD') : '',
+      ...(shouldIncludeReturn && endDate ? { returnDate: endDate.format('YYYY-MM-DD') } : {}),
+      maxTransfers: isDirectFlight ? '0' : '1',
     });
     navigate(`/route-planner?${params.toString()}`);
   };
@@ -602,14 +613,14 @@ function DestinationQuery() {
                   valueStyle={{ fontSize: 28 }}
                 />
               </Col>
-              {(discoverTransferLoading || transferDiscovered) && (
+              {transferDiscovered && (validTransferRoundTrip.length + validTransferOneWay.length > 0) && (
                 <Col>
                   <Statistic
                     title="中转可达"
-                    value={discoverTransferLoading ? '搜索中' : validTransferRoundTrip.length + validTransferOneWay.length}
-                    suffix={discoverTransferLoading ? '...' : '个'}
+                    value={validTransferRoundTrip.length + validTransferOneWay.length}
+                    suffix="个"
                     valueStyle={{ color: '#fa8c16', fontSize: 28 }}
-                    prefix={discoverTransferLoading ? <Spin size="small" /> : <NodeIndexOutlined />}
+                    prefix={<NodeIndexOutlined />}
                   />
                 </Col>
               )}
@@ -637,7 +648,16 @@ function DestinationQuery() {
                 <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
                   {destinations.filter(d => d.hasReturn).map(dest => (
                     <Col key={dest.destination}>
-                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest.destination)} onTransfer={() => handleShowTransferRoutes(dest.destination)} />
+                      <DestCard
+                        dest={dest}
+                        onClick={() => handleShowDetail(dest)}
+                        onPlan={() => goToPlan(dest.destination)}
+                        onTransfer={() => handleShowTransferRoutes(dest.destination)}
+                        hasTransfer={transferDiscovered && (
+                          validTransferRoundTrip.some(i => i.city === dest.destination) ||
+                          validTransferOneWay.some(i => i.city === dest.destination)
+                        )}
+                      />
                     </Col>
                   ))}
                 </Row>
@@ -656,7 +676,16 @@ function DestinationQuery() {
                 <Row gutter={[10, 10]}>
                   {destinations.filter(d => !d.hasReturn).map(dest => (
                     <Col key={dest.destination}>
-                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest.destination)} onTransfer={() => handleShowTransferRoutes(dest.destination)} />
+                      <DestCard
+                        dest={dest}
+                        onClick={() => handleShowDetail(dest)}
+                        onPlan={() => goToPlan(dest.destination)}
+                        onTransfer={() => handleShowTransferRoutes(dest.destination)}
+                        hasTransfer={transferDiscovered && (
+                          validTransferRoundTrip.some(i => i.city === dest.destination) ||
+                          validTransferOneWay.some(i => i.city === dest.destination)
+                        )}
+                      />
                     </Col>
                   ))}
                 </Row>
