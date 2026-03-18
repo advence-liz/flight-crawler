@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Card,
   Form,
@@ -25,6 +25,8 @@ import {
   SwapOutlined,
   RightOutlined,
   ArrowRightOutlined,
+  CompassOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
@@ -234,9 +236,10 @@ interface UrlParams {
 interface ExploreTabProps {
   cities: string[];
   urlParams?: UrlParams;
+  dateRange: { minDate: string | null; maxDate: string | null };
 }
 
-function ExploreTab({ cities, urlParams }: ExploreTabProps) {
+function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ExploreDestination[]>([]);
@@ -247,24 +250,38 @@ function ExploreTab({ cities, urlParams }: ExploreTabProps) {
   const triggeredRef = useRef(false);
 
   useEffect(() => {
+    if (cities.length === 0 || !dateRange.minDate) return;
+
     // URL params 优先，否则用 cookie 默认值
     const origin = urlParams?.origin || getDefaultOrigin();
     form.setFieldValue('origin', origin);
 
-    // 如果有 URL 日期参数，填入表单
+    const min = dayjs(dateRange.minDate);
+    const max = dayjs(dateRange.maxDate!);
+    const mid = min.add(Math.floor(max.diff(min, 'day') / 2), 'day');
+
+    // 去程：URL 参数优先，否则默认前半段
     if (urlParams?.departureDate) {
-      form.setFieldValue('departureDate', dayjs(urlParams.departureDate));
-    }
-    if (urlParams?.returnDate) {
-      form.setFieldValue('returnDate', dayjs(urlParams.returnDate));
+      const dep = dayjs(urlParams.departureDate);
+      form.setFieldValue('departureRange', [dep, dep.add(2, 'day')]);
+    } else {
+      form.setFieldValue('departureRange', [min, mid]);
     }
 
-    // cities 加载完成后自动触发一次查询
-    if (cities.length > 0 && !triggeredRef.current) {
+    // 返程：URL 参数优先，否则默认后半段
+    if (urlParams?.returnDate) {
+      const ret = dayjs(urlParams.returnDate);
+      form.setFieldValue('returnRange', [ret, ret.add(2, 'day')]);
+    } else {
+      form.setFieldValue('returnRange', [mid.add(1, 'day'), max]);
+    }
+
+    // 自动触发一次查询
+    if (!triggeredRef.current) {
       triggeredRef.current = true;
       form.submit();
     }
-  }, [cities]);
+  }, [cities, dateRange.minDate]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);
@@ -328,10 +345,7 @@ function ExploreTab({ cities, urlParams }: ExploreTabProps) {
           form={form}
           layout="inline"
           onFinish={handleSearch}
-          initialValues={{
-            departureRange: [dayjs().add(3, 'day'), dayjs().add(5, 'day')],
-            returnRange: [dayjs().add(10, 'day'), dayjs().add(12, 'day')],
-          }}
+          initialValues={{}}
         >
           <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
             <Select
@@ -396,8 +410,8 @@ function ExploreTab({ cities, urlParams }: ExploreTabProps) {
               <span>{form.getFieldValue('origin')}</span>
               <SwapOutlined />
               <span>{drawerDest.city}</span>
-              <Tag color="blue">{form.getFieldValue('departureDate')?.format('MM-DD')} 去</Tag>
-              <Tag color="orange">{form.getFieldValue('returnDate')?.format('MM-DD')} 回</Tag>
+              <Tag color="blue">{form.getFieldValue('departureRange')?.[0]?.format('MM-DD')} 去</Tag>
+              <Tag color="orange">{form.getFieldValue('returnRange')?.[0]?.format('MM-DD')} 回</Tag>
             </Space>
           ) : '往返方案'
         }
@@ -429,35 +443,50 @@ function ExploreTab({ cities, urlParams }: ExploreTabProps) {
 interface PlanTabProps {
   cities: string[];
   urlParams?: UrlParams;
+  dateRange: { minDate: string | null; maxDate: string | null };
 }
 
-function PlanTab({ cities, urlParams }: PlanTabProps) {
+function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [oneWayRoutes, setOneWayRoutes] = useState<RouteResult[]>([]);
   const [roundTripRoutes, setRoundTripRoutes] = useState<RoundTripResult[]>([]);
 
   useEffect(() => {
+    if (cities.length === 0 || !dateRange.minDate) return;
+
     const origin = urlParams?.origin || getDefaultOrigin();
     form.setFieldValue('origin', origin);
 
     if (urlParams?.destination) {
       form.setFieldValue('destination', urlParams.destination);
     }
-    if (urlParams?.departureDate) {
-      form.setFieldValue('departureDate', dayjs(urlParams.departureDate));
-    }
-    if (urlParams?.returnDate) {
-      form.setFieldValue('returnDate', dayjs(urlParams.returnDate));
-    }
-  }, []);
 
-  // 有 destination 时（来自跳转），cities 加载后自动触发
-  useEffect(() => {
-    if (cities.length > 0 && urlParams?.destination && urlParams?.departureDate) {
+    const min = dayjs(dateRange.minDate);
+    const max = dayjs(dateRange.maxDate!);
+    const mid = min.add(Math.floor(max.diff(min, 'day') / 2), 'day');
+
+    // 去程：URL 参数优先，否则默认整个可用区间
+    if (urlParams?.departureDate) {
+      const dep = dayjs(urlParams.departureDate);
+      form.setFieldValue('departureRange', [dep, dep.add(2, 'day')]);
+    } else {
+      form.setFieldValue('departureRange', [min, mid]);
+    }
+
+    // 返程：URL 参数优先，否则默认后半段
+    if (urlParams?.returnDate) {
+      const ret = dayjs(urlParams.returnDate);
+      form.setFieldValue('returnRange', [ret, ret.add(2, 'day')]);
+    } else {
+      form.setFieldValue('returnRange', [mid.add(1, 'day'), max]);
+    }
+
+    // 有目的地时（来自跳转）自动触发查询
+    if (urlParams?.destination) {
       form.submit();
     }
-  }, [cities]);
+  }, [cities, dateRange.minDate]);
 
   const handleSearch = async (values: any) => {
     setLoading(true);
@@ -528,10 +557,7 @@ function PlanTab({ cities, urlParams }: PlanTabProps) {
           form={form}
           layout="inline"
           onFinish={handleSearch}
-          initialValues={{
-            departureRange: [dayjs().add(3, 'day'), dayjs().add(5, 'day')],
-            maxTransfers: 1,
-          }}
+          initialValues={{ maxTransfers: 1 }}
         >
           <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
             <Select
@@ -632,8 +658,10 @@ function PlanTab({ cities, urlParams }: PlanTabProps) {
 
 function RoutePlanner() {
   const [cities, setCities] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<{ minDate: string | null; maxDate: string | null }>({ minDate: null, maxDate: null });
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('explore');
+  const navigate = useNavigate();
 
   // 从 URL params 解析初始参数
   const urlParams = {
@@ -646,9 +674,10 @@ function RoutePlanner() {
 
   useEffect(() => {
     getAvailableCities()
-      .then(({ origins, destinations }) => {
+      .then(({ origins, destinations, minDate, maxDate }) => {
         const all = Array.from(new Set([...origins, ...destinations])).sort();
         setCities(all);
+        setDateRange({ minDate, maxDate });
       })
       .catch(() => {});
 
@@ -667,7 +696,7 @@ function RoutePlanner() {
           探索 · 找目的地
         </Space>
       ),
-      children: <ExploreTab cities={cities} urlParams={urlParams} />,
+      children: <ExploreTab cities={cities} urlParams={urlParams} dateRange={dateRange} />,
     },
     {
       key: 'plan',
@@ -677,9 +706,19 @@ function RoutePlanner() {
           规划 · 查路线
         </Space>
       ),
-      children: <PlanTab cities={cities} urlParams={urlParams} />,
+      children: <PlanTab cities={cities} urlParams={urlParams} dateRange={dateRange} />,
     },
   ];
+
+  // 反向跳转：带当前 origin/departureDate/returnDate 参数回到目的地查询或航线地图
+  const goBack = (target: 'destination' | 'flight-map') => {
+    const p = new URLSearchParams();
+    if (urlParams.origin) p.set('origin', urlParams.origin);
+    if (urlParams.departureDate) p.set('departureDate', urlParams.departureDate);
+    if (urlParams.returnDate) p.set('returnDate', urlParams.returnDate);
+    const query = p.toString();
+    navigate(target === 'destination' ? `/?${query}` : `/flight-map?${query}`);
+  };
 
   return (
     <div style={{ padding: '0 4px' }}>
@@ -688,6 +727,16 @@ function RoutePlanner() {
         onChange={setActiveTab}
         items={tabItems}
         size="large"
+        tabBarExtraContent={
+          <Space>
+            <Button size="small" icon={<EnvironmentOutlined />} onClick={() => goBack('destination')}>
+              目的地查询
+            </Button>
+            <Button size="small" icon={<CompassOutlined />} onClick={() => goBack('flight-map')}>
+              航线地图
+            </Button>
+          </Space>
+        }
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card,
   Form,
@@ -241,6 +241,7 @@ function DestCard({ dest, onClick, onPlan, onTransfer }: DestCardProps) {
 function DestinationQuery() {
   const [form] = Form.useForm();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [destinations, setDestinations] = useState<DestinationResult[]>([]);
   const [availableOrigins, setAvailableOrigins] = useState<string[]>([]);
@@ -259,13 +260,13 @@ function DestinationQuery() {
   const [transferDiscovered, setTransferDiscovered] = useState(false);
 
   // 跳转到行程规划
-  const goToPlan = (dest: DestinationResult) => {
+  const goToPlan = (destination: string) => {
     const values = form.getFieldsValue();
     const [startDate, endDate] = values.dateRange || [];
     const params = new URLSearchParams({
       tab: 'plan',
       origin: values.origin || '',
-      destination: dest.destination,
+      destination,
       departureDate: startDate ? startDate.format('YYYY-MM-DD') : '',
       returnDate: endDate ? endDate.format('YYYY-MM-DD') : '',
     });
@@ -285,11 +286,23 @@ function DestinationQuery() {
   };
 
   useEffect(() => {
-    // 读取 cookie 设置默认出发地
-    form.setFieldValue('origin', getDefaultOrigin());
+    // 优先读取 URL 参数（从行程规划页面返回时携带）
+    const urlOrigin = searchParams.get('origin');
+    const urlDepartureDate = searchParams.get('departureDate');
+    const urlReturnDate = searchParams.get('returnDate');
+
+    form.setFieldValue('origin', urlOrigin || getDefaultOrigin());
+    if (urlDepartureDate && urlReturnDate) {
+      form.setFieldValue('dateRange', [dayjs(urlDepartureDate), dayjs(urlReturnDate)]);
+    }
+
     getAvailableCities()
       .then(cities => {
         setAvailableOrigins(cities.origins);
+        // 如果没有 URL 参数提供日期，使用数据库日期范围作为默认值
+        if (!urlDepartureDate && !urlReturnDate && cities.minDate && cities.maxDate) {
+          form.setFieldValue('dateRange', [dayjs(cities.minDate), dayjs(cities.maxDate)]);
+        }
         // 城市列表加载完成后自动触发一次查询
         form.submit();
       })
@@ -370,6 +383,15 @@ function DestinationQuery() {
   const returnCount = destinations.filter(d => d.hasReturn).length;
   const oneWayCount = destinations.filter(d => !d.hasReturn).length;
 
+  // 过滤掉「过滤直飞后无中转路线」的 item
+  const validTransferRoundTrip = transferRoundTrip.filter(item =>
+    item.outboundRoutes.some(r => r.transferCount > 0) &&
+    item.returnRoutes.some(r => r.transferCount > 0),
+  );
+  const validTransferOneWay = transferOneWay.filter(item =>
+    item.routes.some(r => r.transferCount > 0),
+  );
+
   // 表格列
   const columns: ColumnsType<DestinationResult> = [
     {
@@ -445,7 +467,7 @@ function DestinationQuery() {
             type="link"
             size="small"
             icon={<AimOutlined />}
-            onClick={() => goToPlan(record)}
+            onClick={() => goToPlan(record.destination)}
           >
             去规划
           </Button>
@@ -568,7 +590,7 @@ function DestinationQuery() {
                 <Col>
                   <Statistic
                     title="中转可达"
-                    value={discoverTransferLoading ? '搜索中' : transferRoundTrip.length + transferOneWay.length}
+                    value={discoverTransferLoading ? '搜索中' : validTransferRoundTrip.length + validTransferOneWay.length}
                     suffix={discoverTransferLoading ? '...' : '个'}
                     valueStyle={{ color: '#fa8c16', fontSize: 28 }}
                     prefix={discoverTransferLoading ? <Spin size="small" /> : <NodeIndexOutlined />}
@@ -599,7 +621,7 @@ function DestinationQuery() {
                 <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
                   {destinations.filter(d => d.hasReturn).map(dest => (
                     <Col key={dest.destination}>
-                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest)} onTransfer={() => handleShowTransferRoutes(dest.destination)} />
+                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest.destination)} onTransfer={() => handleShowTransferRoutes(dest.destination)} />
                     </Col>
                   ))}
                 </Row>
@@ -618,83 +640,81 @@ function DestinationQuery() {
                 <Row gutter={[10, 10]}>
                   {destinations.filter(d => !d.hasReturn).map(dest => (
                     <Col key={dest.destination}>
-                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest)} onTransfer={() => handleShowTransferRoutes(dest.destination)} />
+                      <DestCard dest={dest} onClick={() => handleShowDetail(dest)} onPlan={() => goToPlan(dest.destination)} onTransfer={() => handleShowTransferRoutes(dest.destination)} />
                     </Col>
                   ))}
                 </Row>
               </>
             )}
 
-            {/* 中转目的地分区入口 */}
-            <Divider orientation="left" style={{ margin: '16px 0 12px' }}>
-              <Space>
-                <NodeIndexOutlined style={{ color: '#fa8c16' }} />
-                <span style={{ color: '#fa8c16', fontWeight: 600 }}>中转可达</span>
+            {/* 中转可达分区：loading 中或有数据时才显示 */}
+            {(discoverTransferLoading || validTransferRoundTrip.length > 0 || validTransferOneWay.length > 0) && (
+              <>
+                <Divider orientation="left" style={{ margin: '16px 0 12px' }}>
+                  <Space>
+                    <NodeIndexOutlined style={{ color: '#fa8c16' }} />
+                    <span style={{ color: '#fa8c16', fontWeight: 600 }}>中转可达</span>
+                    {discoverTransferLoading && (
+                      <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>搜索中...</span>
+                    )}
+                    {transferDiscovered && (
+                      <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>
+                        往返 {validTransferRoundTrip.length} 个 · 单程 {validTransferOneWay.length} 个
+                      </span>
+                    )}
+                  </Space>
+                </Divider>
+
                 {discoverTransferLoading && (
-                  <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>搜索中...</span>
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <Spin tip="正在搜索中转方案..." />
+                  </div>
                 )}
-                {transferDiscovered && (
-                  <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>
-                    往返 {transferRoundTrip.length} 个 · 单程 {transferOneWay.length} 个
-                  </span>
+
+                {validTransferRoundTrip.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, color: '#fa8c16', fontWeight: 600, marginBottom: 8 }}>
+                      <SwapOutlined style={{ marginRight: 4 }} />中转往返（{validTransferRoundTrip.length} 个）
+                    </div>
+                    <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
+                      {validTransferRoundTrip.map(item => (
+                        <Col key={item.city}>
+                          <TransferDestCard
+                            city={item.city}
+                            hasReturn={true}
+                            outboundRoute={item.outboundRoutes.find(r => r.transferCount > 0)!}
+                            returnRoute={item.returnRoutes.find(r => r.transferCount > 0)!}
+                            outboundCount={item.outboundRoutes.filter(r => r.transferCount > 0).length}
+                            returnCount={item.returnRoutes.filter(r => r.transferCount > 0).length}
+                            onShowRoutes={() => handleShowTransferRoutes(item.city)}
+                          />
+                        </Col>
+                      ))}
+                    </Row>
+                  </>
                 )}
-              </Space>
-            </Divider>
 
-            {discoverTransferLoading && (
-              <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                <Spin tip="正在搜索中转方案..." />
-              </div>
-            )}
-
-            {/* 中转往返气泡 */}
-            {transferDiscovered && transferRoundTrip.length > 0 && (
-              <>
-                <div style={{ fontSize: 12, color: '#fa8c16', fontWeight: 600, marginBottom: 8 }}>
-                  <SwapOutlined style={{ marginRight: 4 }} />中转往返（{transferRoundTrip.length} 个）
-                </div>
-                <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
-                  {transferRoundTrip.map(item => (
-                    <Col key={item.city}>
-                      <TransferDestCard
-                        city={item.city}
-                        hasReturn={true}
-                        outboundRoute={item.outboundRoutes[0]}
-                        returnRoute={item.returnRoutes[0]}
-                        outboundCount={item.outboundCount}
-                        returnCount={item.returnCount}
-                        onShowRoutes={() => handleShowTransferRoutes(item.city)}
-                      />
-                    </Col>
-                  ))}
-                </Row>
+                {validTransferOneWay.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 600, marginBottom: 8 }}>
+                      <ArrowRightOutlined style={{ marginRight: 4 }} />中转单程（{validTransferOneWay.length} 个）
+                    </div>
+                    <Row gutter={[10, 10]}>
+                      {validTransferOneWay.map(item => (
+                        <Col key={item.city}>
+                          <TransferDestCard
+                            city={item.city}
+                            hasReturn={false}
+                            outboundRoute={item.routes.find(r => r.transferCount > 0)!}
+                            outboundCount={item.routes.filter(r => r.transferCount > 0).length}
+                            onShowRoutes={() => handleShowTransferRoutes(item.city)}
+                          />
+                        </Col>
+                      ))}
+                    </Row>
+                  </>
+                )}
               </>
-            )}
-
-            {/* 中转单程气泡 */}
-            {transferDiscovered && transferOneWay.length > 0 && (
-              <>
-                <div style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 600, marginBottom: 8 }}>
-                  <ArrowRightOutlined style={{ marginRight: 4 }} />中转单程（{transferOneWay.length} 个）
-                </div>
-                <Row gutter={[10, 10]}>
-                  {transferOneWay.map(item => (
-                    <Col key={item.city}>
-                      <TransferDestCard
-                        city={item.city}
-                        hasReturn={false}
-                        outboundRoute={item.routes[0]}
-                        outboundCount={item.routeCount}
-                        onShowRoutes={() => handleShowTransferRoutes(item.city)}
-                      />
-                    </Col>
-                  ))}
-                </Row>
-              </>
-            )}
-
-            {transferDiscovered && transferRoundTrip.length === 0 && transferOneWay.length === 0 && (
-              <div style={{ color: '#bfbfbf', fontSize: 13, padding: '8px 0' }}>未发现中转可达目的地</div>
             )}
           </Card>
 
@@ -773,7 +793,15 @@ function DestinationQuery() {
             open={!!city}
             onCancel={() => setTransferModalCity(null)}
             width={780}
-            footer={null}
+            footer={
+              <Button
+                type="primary"
+                icon={<AimOutlined />}
+                onClick={() => { setTransferModalCity(null); goToPlan(city!); }}
+              >
+                去行程规划
+              </Button>
+            }
           >
             {roundTripItem ? (
               <Space direction="vertical" style={{ width: '100%' }} size={0}>

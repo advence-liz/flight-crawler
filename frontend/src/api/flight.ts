@@ -49,7 +49,7 @@ export const queryDestinations = (
 
 
 // 获取所有可用的城市列表
-export const getAvailableCities = (): Promise<{ origins: string[]; destinations: string[] }> => {
+export const getAvailableCities = (): Promise<{ origins: string[]; destinations: string[]; minDate: string | null; maxDate: string | null }> => {
   return api.get('/flights/cities');
 };
 

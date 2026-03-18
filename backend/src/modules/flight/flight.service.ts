@@ -377,30 +377,32 @@ export class FlightService {
    * 优先从 airports 表获取已发现的机场（更完整），如果为空则从 flights 表查询
    * 所有机场都可以作为出发地或目的地
    */
-  async getAvailableCities(): Promise<{ origins: string[]; destinations: string[] }> {
+  async getAvailableCities(): Promise<{ origins: string[]; destinations: string[]; minDate: string | null; maxDate: string | null }> {
+    // 查询数据库中航班的日期范围
+    const dateRange = await this.flightRepository
+      .createQueryBuilder('flight')
+      .select('MIN(DATE(flight.departureTime))', 'minDate')
+      .addSelect('MAX(DATE(flight.departureTime))', 'maxDate')
+      .getRawOne<{ minDate: string | null; maxDate: string | null }>();
+
     // 优先从 airports 表获取已发现的机场
     const airports = await this.airportRepository.find({
       where: { enableCrawl: true },
       order: { city: 'ASC', name: 'ASC' },
     });
 
+    const minDate = dateRange?.minDate ?? null;
+    const maxDate = dateRange?.maxDate ?? null;
+
     if (airports.length > 0) {
-      // 如果有已发现的机场，直接返回（所有机场都可作为出发地或目的地）
       const airportNames = airports.map(a => a.name);
-      return {
-        origins: airportNames,
-        destinations: airportNames,
-      };
+      return { origins: airportNames, destinations: airportNames, minDate, maxDate };
     }
 
     // 如果 airports 表为空，从 flights 表查询（兼容旧数据）
     const origins = await this.getAvailableOrigins();
     const destinations = await this.getAvailableDestinations();
-
-    return {
-      origins,
-      destinations,
-    };
+    return { origins, destinations, minDate, maxDate };
   }
 
   /**

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import {
   Card,
@@ -15,7 +15,7 @@ import {
   Statistic,
   Radio,
 } from 'antd';
-import { SearchOutlined, SwapOutlined, ArrowRightOutlined, NodeIndexOutlined } from '@ant-design/icons';
+import { SearchOutlined, SwapOutlined, ArrowRightOutlined, NodeIndexOutlined, EnvironmentOutlined, AimOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { queryDestinations, getAvailableCities, DestinationResult, discoverTransferDestinations, TransferRoundTripDest, TransferOneWayDest } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie } from '@/utils/cookie';
@@ -24,6 +24,7 @@ import { getDefaultOrigin, setOriginCookie } from '@/utils/cookie';
 function FlightMap() {
   const [form] = Form.useForm();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [destinations, setDestinations] = useState<DestinationResult[]>([]);
   const [availableOrigins, setAvailableOrigins] = useState<string[]>([]);
@@ -73,17 +74,32 @@ function FlightMap() {
   };
 
   useEffect(() => {
-    const defaultOrigin = getDefaultOrigin();
+    // 优先读取 URL 参数（从行程规划页面返回时携带）
+    const urlOrigin = searchParams.get('origin');
+    const urlDepartureDate = searchParams.get('departureDate');
+    const urlReturnDate = searchParams.get('returnDate');
+
+    const defaultOrigin = urlOrigin || getDefaultOrigin();
     form.setFieldValue('origin', defaultOrigin);
+    if (urlDepartureDate && urlReturnDate) {
+      form.setFieldValue('dateRange', [dayjs(urlDepartureDate), dayjs(urlReturnDate)]);
+    }
 
     // 加载城市列表，完成后自动触发初始查询
     getAvailableCities()
       .then(c => {
         setAvailableOrigins(c.origins);
+        // 如果没有 URL 参数提供日期，使用数据库日期范围作为默认值
+        if (!urlDepartureDate && !urlReturnDate && c.minDate && c.maxDate) {
+          form.setFieldValue('dateRange', [dayjs(c.minDate), dayjs(c.maxDate)]);
+        }
         // 自动触发初始查询
         const values = form.getFieldsValue();
-        const [start, end] = values.dateRange;
-        doSearch(defaultOrigin, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD'), values.flightType || '全部');
+        const dateRange = values.dateRange || [];
+        const [start, end] = dateRange;
+        if (start && end) {
+          doSearch(defaultOrigin, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD'), values.flightType || '全部');
+        }
       })
       .catch(console.error);
   }, []);
@@ -384,6 +400,40 @@ function FlightMap() {
             <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
               查询
             </Button>
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button
+                size="small"
+                icon={<EnvironmentOutlined />}
+                onClick={() => {
+                  const values = form.getFieldsValue();
+                  const [start, end] = values.dateRange || [];
+                  const p = new URLSearchParams();
+                  if (values.origin) p.set('origin', values.origin);
+                  if (start) p.set('departureDate', start.format('YYYY-MM-DD'));
+                  if (end) p.set('returnDate', end.format('YYYY-MM-DD'));
+                  navigate(`/?${p.toString()}`);
+                }}
+              >
+                目的地查询
+              </Button>
+              <Button
+                size="small"
+                icon={<AimOutlined />}
+                onClick={() => {
+                  const values = form.getFieldsValue();
+                  const [start, end] = values.dateRange || [];
+                  const p = new URLSearchParams({ tab: 'explore' });
+                  if (values.origin) p.set('origin', values.origin);
+                  if (start) p.set('departureDate', start.format('YYYY-MM-DD'));
+                  if (end) p.set('returnDate', end.format('YYYY-MM-DD'));
+                  navigate(`/route-planner?${p.toString()}`);
+                }}
+              >
+                行程规划
+              </Button>
+            </Space>
           </Form.Item>
         </Form>
       </Card>
