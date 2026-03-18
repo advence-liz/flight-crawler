@@ -42,7 +42,7 @@ export interface Flight {
 
 // 查询所有可达目的地
 export const queryDestinations = (
-  params: QueryFlightsParams
+  params: QueryFlightsParams & { includeReturn?: boolean }
 ): Promise<DestinationsResponse> => {
   return api.get('/flights/destinations', { params });
 };

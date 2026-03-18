@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Flight } from './entities/flight.entity';
 import { Airport } from './entities/airport.entity';
+import { QueryCache } from '../route/entities/query-cache.entity';
 import { QueryFlightsDto } from './dto/query-flights.dto';
 import {
   DestinationResultDto,
@@ -13,28 +14,46 @@ import { QueryFlightsWithPaginationDto } from './dto/query-flights-pagination.dt
 import { UpdateFlightDto } from './dto/update-flight.dto';
 import { BatchDeleteFlightsDto } from './dto/batch-delete-flights.dto';
 
+const DESTINATIONS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
+
 @Injectable()
 export class FlightService {
+  private readonly logger = new Logger(FlightService.name);
+
   constructor(
     @InjectRepository(Flight)
     private flightRepository: Repository<Flight>,
     @InjectRepository(Airport)
     private airportRepository: Repository<Airport>,
+    @InjectRepository(QueryCache)
+    private queryCacheRepository: Repository<QueryCache>,
   ) {}
 
   /**
    * 查询所有可达目的地（包含往返航班信息）
+   * - includeReturn=false: 仅查去程，立即返回（无缓存，用于首屏快速渲染）
+   * - includeReturn=true (默认): 包含返程，使用 DB 缓存（24h TTL）+ 批量查询消除 N+1
    */
   async queryDestinations(
     dto: QueryFlightsDto,
   ): Promise<DestinationsResponseDto> {
-    const { origin, startDate, endDate, flightType } = dto;
+    const { origin, startDate, endDate, flightType, includeReturn = true } = dto;
+    const flightTypeKey = flightType || '全部';
 
-    // 构建查询条件 - 只查询666和2666权益卡航班
-    // 修复日期范围：使用 QueryBuilder 以支持复杂的日期查询
+    // 仅在包含返程时使用缓存
+    if (includeReturn) {
+      const cacheKey = `destinations|${origin}|${startDate}|${endDate}|${flightTypeKey}`;
+      const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
+      if (cached && cached.expireAt > new Date()) {
+        this.logger.log(`目的地查询命中缓存: ${cacheKey}`);
+        return JSON.parse(cached.data);
+      }
+    }
+
+    // 构建查询条件
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
-    endDateTime.setHours(23, 59, 59, 999); // 设置为当天结束
+    endDateTime.setHours(23, 59, 59, 999);
 
     let query = this.flightRepository.createQueryBuilder('flight')
       .where('flight.origin = :origin', { origin })
@@ -42,12 +61,9 @@ export class FlightService {
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
 
-    // 权益卡类型过滤：使用 Like 匹配，支持组合类型（如"666权益卡航班,2666权益卡航班"）
     if (flightType && flightType !== '全部') {
-      // 查询包含指定权益卡类型的航班（支持组合类型）
       query = query.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
     }
-    // 如果是"全部"，不添加 cardType 过滤条件，查询所有航班
 
     // 查询所有符合条件的去程航班
     const outboundFlights = await query.getMany();
@@ -78,9 +94,7 @@ export class FlightService {
         destData.availableDates.push(dateStr);
       }
 
-      // 收集权益卡类型（去重）
       if (flight.cardType) {
-        // 处理组合类型（如 "666权益卡航班,2666权益卡航班"）
         const types = flight.cardType.split(',').map(t => t.trim());
         types.forEach(type => {
           if (type && !destData.cardTypes.includes(type)) {
@@ -90,47 +104,47 @@ export class FlightService {
       }
     });
 
-    // 查询返程航班信息
-    const destinations = Array.from(destinationMap.keys());
-    for (const dest of destinations) {
+    // 批量查询所有返程航班（消除 N+1，仅 includeReturn=true 时执行）
+    const destList = Array.from(destinationMap.keys());
+    if (includeReturn && destList.length > 0) {
       let returnQuery = this.flightRepository.createQueryBuilder('flight')
-        .where('flight.origin = :dest', { dest })
-        .andWhere('flight.destination = :origin', { origin })
+        .where('flight.destination = :origin', { origin })
+        .andWhere('flight.origin IN (:...destList)', { destList })
         .andWhere('flight.departureTime >= :startDateTime', { startDateTime })
-        .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
-        .orderBy('flight.departureTime', 'ASC');
+        .andWhere('flight.departureTime <= :endDateTime', { endDateTime });
 
-      // 应用相同的权益卡类型过滤
       if (flightType && flightType !== '全部') {
         returnQuery = returnQuery.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
       }
 
-      const returnFlights = await returnQuery.getMany();
+      const allReturnFlights = await returnQuery.getMany();
 
-      if (returnFlights.length > 0) {
-        const destData = destinationMap.get(dest)!;
-        destData.hasReturn = true;
-        destData.returnFlightCount = returnFlights.length;
-        destData.returnAvailableDates = [
-          ...new Set(
-            returnFlights.map((f) =>
-              f.departureTime.toISOString().split('T')[0],
-            ),
-          ),
-        ];
+      // 按出发地（= 去程目的地）分组
+      const returnMap = new Map<string, Flight[]>();
+      for (const f of allReturnFlights) {
+        if (!returnMap.has(f.origin)) returnMap.set(f.origin, []);
+        returnMap.get(f.origin)!.push(f);
+      }
+
+      for (const [dest, returnFlights] of returnMap) {
+        const destData = destinationMap.get(dest);
+        if (destData) {
+          destData.hasReturn = true;
+          destData.returnFlightCount = returnFlights.length;
+          destData.returnAvailableDates = [
+            ...new Set(returnFlights.map(f => f.departureTime.toISOString().split('T')[0])),
+          ];
+        }
       }
     }
 
     const sortedDestinations = Array.from(destinationMap.values()).sort((a, b) => {
-      // 1. 可往返优先
-      if (a.hasReturn !== b.hasReturn) return a.hasReturn ? -1 : 1;
-      // 2. 同类型按去程航班数量降序
+      if (includeReturn && a.hasReturn !== b.hasReturn) return a.hasReturn ? -1 : 1;
       if (a.flightCount !== b.flightCount) return b.flightCount - a.flightCount;
-      // 3. 最后按目的地名称升序
       return a.destination.localeCompare(b.destination);
     });
 
-    return {
+    const result: DestinationsResponseDto = {
       destinations: sortedDestinations,
       totalCount: sortedDestinations.length,
       dateRange: {
@@ -138,6 +152,21 @@ export class FlightService {
         end: endDate,
       },
     };
+
+    // 仅 includeReturn=true 时写入缓存
+    if (includeReturn) {
+      const cacheKey = `destinations|${origin}|${startDate}|${endDate}|${flightTypeKey}`;
+      const expireAt = new Date(Date.now() + DESTINATIONS_CACHE_TTL_MS);
+      await this.queryCacheRepository.save({
+        cacheKey,
+        data: JSON.stringify(result),
+        expireAt,
+        createdAt: new Date(),
+      });
+      this.logger.log(`目的地查询结果已写入缓存: ${cacheKey}`);
+    }
+
+    return result;
   }
 
   /**

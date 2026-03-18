@@ -310,31 +310,47 @@ function DestinationQuery() {
   }, []);
 
   const handleSearch = async (values: any) => {
-    setLoading(true);
-    // 重置中转分区
+    const [startDate, endDate] = values.dateRange;
+    const queryParams = {
+      origin: values.origin,
+      startDate: startDate.format('YYYY-MM-DD'),
+      endDate: endDate.format('YYYY-MM-DD'),
+      flightType: values.flightType,
+    };
+
+    // 重置状态
+    setDestinations([]);
     setTransferRoundTrip([]);
     setTransferOneWay([]);
     setTransferDiscovered(false);
+    setLoading(true);
+
+    // 第一步：仅查去程，立即渲染（无缓存，速度快）
     try {
-      const [startDate, endDate] = values.dateRange;
-      const result = await queryDestinations({
-        origin: values.origin,
-        startDate: startDate.format('YYYY-MM-DD'),
-        endDate: endDate.format('YYYY-MM-DD'),
-        flightType: values.flightType,
-      });
-      setDestinations(result.destinations);
+      const fastResult = await queryDestinations({ ...queryParams, includeReturn: false });
+      setDestinations(fastResult.destinations);
       setOriginCookie(values.origin);
-      message.success(`查询成功，共 ${result.totalCount} 个目的地`);
     } catch {
       message.error('查询失败，请稍后重试');
-      return;
-    } finally {
       setLoading(false);
+      return;
     }
 
-    // 主查询完成后，异步触发中转目的地发现（不阻塞主流程）
-    const [startDate, endDate] = values.dateRange;
+    // 第二步：补充返程信息（有缓存命中时很快，无缓存时稍慢但不阻塞首屏）
+    queryDestinations({ ...queryParams, includeReturn: true })
+      .then(fullResult => {
+        setDestinations(fullResult.destinations);
+        message.success(`查询成功，共 ${fullResult.totalCount} 个目的地`);
+      })
+      .catch(() => {
+        // 返程查询失败不影响已展示的去程数据
+        message.warning('返程信息加载失败，仅显示去程数据');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+
+    // 第三步：异步触发中转目的地发现（不阻塞前两步）
     setDiscoverTransferLoading(true);
     discoverTransferDestinations({
       origin: values.origin,
