@@ -8,7 +8,7 @@ set -e
 
 echo "▶ 安装后端依赖..."
 cd backend
-npm ci
+npm install
 
 echo "▶ 构建后端..."
 npm run build
