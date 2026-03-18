@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Delete, HttpCode, HttpStatus, Body, Query, Param, BadRequestException, Inject } from '@nestjs/common';
+import { Controller, Post, Get, Delete, HttpCode, HttpStatus, Body, Query, Param, BadRequestException, Inject, UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../../admin.guard';
 import { CrawlerService } from './crawler.service';
 import { CrawlerServiceStub } from './crawler.service.stub';
 import { InitializeDiscoverDto, InitializeRefreshFlightsDto } from './dto/initialize.dto';
@@ -18,6 +19,7 @@ export class CrawlerController {
    * 如果不提供 date，则爬取明天的数据
    */
   @Get('debug')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async debugPage(@Query('origin') origin?: string, @Query('date') date?: string) {
     const crawlOrigin = origin || '北京';
@@ -34,6 +36,7 @@ export class CrawlerController {
    * Body: { days?: number } // 可选，默认 1 天
    */
   @Post('initialize/discover')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async initializeDiscover(@Body() dto: InitializeDiscoverDto) {
     const result = await this.crawlerService.initializeDiscoverAirports(dto.days, dto.planOnly);
@@ -63,6 +66,7 @@ export class CrawlerController {
    * 2. 仅获取计划：{ "startDate": "2026-03-18", "endDate": "2026-03-25", "planOnly": true }
    */
   @Post('initialize/refresh')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async initializeRefresh(@Body() dto: InitializeRefreshFlightsDto) {
     // 验证日期有效性
@@ -114,6 +118,7 @@ export class CrawlerController {
    * POST /api/crawler/stop
    */
   @Post('stop')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async stopCrawler() {
     return this.crawlerService.forceStop();
@@ -174,6 +179,7 @@ export class CrawlerController {
    * Body: { days?: number } // 保留最近多少天的日志，默认 90 天
    */
   @Delete('logs/clean')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async cleanOldLogs(@Body() dto: CleanLogsDto) {
     const result = await this.crawlerService.cleanOldLogs(dto.days);
@@ -188,6 +194,7 @@ export class CrawlerController {
    * DELETE /api/crawler/logs/clean-all
    */
   @Delete('logs/clean-all')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async cleanAllLogs() {
     const result = await this.crawlerService.cleanAllLogs();
