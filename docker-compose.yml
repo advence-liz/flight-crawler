@@ -8,7 +8,7 @@ services:
     env_file:
       - ./backend/.env.production
     volumes:
-      - flight_data:/app/data       # SQLite 数据持久化
+      - ./backend/data:/app/data    # SQLite 数据持久化（首次使用镜像内初始 db）
       - flight_logs:/app/logs       # 日志持久化
     networks:
       - flight-net
@@ -34,7 +34,6 @@ services:
       - flight-net
 
 volumes:
-  flight_data:
   flight_logs:
 
 networks:
