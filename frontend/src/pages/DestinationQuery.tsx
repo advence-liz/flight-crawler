@@ -43,7 +43,7 @@ import {
   TransferRoundTripDest,
   TransferOneWayDest,
 } from '@/api/flight';
-import { getDefaultOrigin, setOriginCookie } from '@/utils/cookie';
+import { getDefaultOrigin, setOriginCookie, getDateRange, setDateRange, getDefaultDateRange } from '@/utils/cookie';
 
 const { RangePicker } = DatePicker;
 
@@ -323,15 +323,16 @@ function DestinationQuery() {
     form.setFieldValue('origin', urlOrigin || getDefaultOrigin());
     if (urlDepartureDate && urlReturnDate) {
       form.setFieldValue('dateRange', [dayjs(urlDepartureDate), dayjs(urlReturnDate)]);
+    } else {
+      // 优先 cookie 记录的上次选择，否则默认今天~一个月后
+      const saved = getDateRange();
+      const [defStart, defEnd] = saved || getDefaultDateRange();
+      form.setFieldValue('dateRange', [dayjs(defStart), dayjs(defEnd)]);
     }
 
     getAvailableCities()
       .then(cities => {
         setAvailableOrigins(cities.origins);
-        // 如果没有 URL 参数提供日期，使用数据库日期范围作为默认值
-        if (!urlDepartureDate && !urlReturnDate && cities.minDate && cities.maxDate) {
-          form.setFieldValue('dateRange', [dayjs(cities.minDate), dayjs(cities.maxDate)]);
-        }
         // 城市列表加载完成后自动触发一次查询
         form.submit();
       })
@@ -359,6 +360,7 @@ function DestinationQuery() {
       const fastResult = await queryDestinations({ ...queryParams, includeReturn: false });
       setDestinations(fastResult.destinations);
       setOriginCookie(values.origin);
+      setDateRange(startDate.format('YYYY-MM-DD'), endDate.format('YYYY-MM-DD'));
     } catch {
       message.error('查询失败，请稍后重试');
       setLoading(false);
