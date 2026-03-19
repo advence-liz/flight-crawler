@@ -694,8 +694,11 @@ function RoutePlanner() {
 
   useEffect(() => {
     getAvailableCities()
-      .then(({ origins, destinations, minDate, maxDate }) => {
-        const all = Array.from(new Set([...origins, ...destinations])).sort();
+      .then(({ cityList, origins, destinations, minDate, maxDate }) => {
+        // 优先使用城市维度列表（北京/上海各出现一次），兼容旧接口
+        const all = cityList?.length
+          ? cityList
+          : Array.from(new Set([...origins, ...destinations])).sort();
         setCities(all);
         setDateRange({ minDate, maxDate });
       })

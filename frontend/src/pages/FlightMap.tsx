@@ -88,7 +88,7 @@ function FlightMap() {
     // 加载城市列表，完成后自动触发初始查询
     getAvailableCities()
       .then(c => {
-        setAvailableOrigins(c.origins);
+        setAvailableOrigins(c.cityList?.length ? c.cityList : c.origins);
         // 如果没有 URL 参数提供日期，使用数据库日期范围作为默认值
         if (!urlDepartureDate && !urlReturnDate && c.minDate && c.maxDate) {
           form.setFieldValue('dateRange', [dayjs(c.minDate), dayjs(c.maxDate)]);

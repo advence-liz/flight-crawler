@@ -222,12 +222,53 @@ export class CrawlerController {
   }
 
   /**
-   * 查询缓存统计
+   * 查询缓存统计（含缓存开关状态）
    * GET /api/crawler/cache/stats
    */
   @Get('cache/stats')
   @HttpCode(HttpStatus.OK)
   async getQueryCacheStats() {
     return this.flightService.getQueryCacheStats();
+  }
+
+  /**
+   * 查询缓存列表（分页 + 类型筛选）
+   * GET /api/crawler/cache/list
+   */
+  @Get('cache/list')
+  @HttpCode(HttpStatus.OK)
+  async listQueryCache(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('type') type?: string,
+  ) {
+    return this.flightService.listQueryCache({
+      page: page ? parseInt(page) : 1,
+      pageSize: pageSize ? parseInt(pageSize) : 20,
+      type,
+    });
+  }
+
+  /**
+   * 批量删除缓存
+   * DELETE /api/crawler/cache/batch
+   */
+  @Delete('cache/batch')
+  @UseGuards(AdminGuard)
+  @HttpCode(HttpStatus.OK)
+  async deleteCacheByKeys(@Body('keys') keys: string[]) {
+    if (!keys?.length) throw new BadRequestException('keys 不能为空');
+    return this.flightService.deleteCacheByKeys(keys);
+  }
+
+  /**
+   * 切换缓存开关
+   * POST /api/crawler/cache/toggle
+   */
+  @Post('cache/toggle')
+  @UseGuards(AdminGuard)
+  @HttpCode(HttpStatus.OK)
+  async toggleCache(@Body('enable') enable: boolean) {
+    return this.flightService.toggleCache(enable);
   }
 }

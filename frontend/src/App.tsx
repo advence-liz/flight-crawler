@@ -6,6 +6,7 @@ import DataManagement from './pages/DataManagement';
 import FlightManagement from './pages/FlightManagement';
 import AirportManagement from './pages/AirportManagement';
 import FlightMap from './pages/FlightMap';
+import CacheManagement from './pages/CacheManagement';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="flight-management" element={<FlightManagement />} />
         <Route path="airport-management" element={<AirportManagement />} />
         <Route path="flight-map" element={<FlightMap />} />
+        <Route path="cache-management" element={<CacheManagement />} />
       </Route>
     </Routes>
   );

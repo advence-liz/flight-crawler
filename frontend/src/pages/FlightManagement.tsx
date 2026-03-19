@@ -308,9 +308,9 @@ function FlightManagement() {
     });
   };
 
-  // 删除一周前的历史航班
+  // 删除一天前的历史航班
   const handleDeleteOldFlights = () => {
-    const days = 7;
+    const days = 1;
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
     const cutoffStr = cutoffDate.toISOString().split('T')[0];
@@ -560,9 +560,8 @@ function FlightManagement() {
               danger
               icon={<DeleteOutlined />}
               onClick={handleDeleteOldFlights}
-              disabled
             >
-              删除一周前数据
+              删除一天前数据
             </Button>
             <Button icon={<ExportOutlined />} onClick={handleExport}>
               导出 Excel

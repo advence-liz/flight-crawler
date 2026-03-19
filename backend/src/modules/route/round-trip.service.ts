@@ -17,7 +17,7 @@ import {
 import { QueryCache } from './entities/query-cache.entity';
 
 // 探索查询缓存 TTL：6 小时
-const EXPLORE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const EXPLORE_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 6 * 60 * 60 * 1000;
 
 /**
  * 往返行程规划服务
@@ -249,17 +249,19 @@ export class RoundTripService {
       return JSON.parse(cached.data);
     }
 
-    // 1. 查询出发地所有去程航班（日期范围内）
+    // 1. 查询出发地所有去程航班（日期范围内，城市展开为机场）
+    const originAirports = await this.flightService.expandCityToAirports(dto.origin);
     const outboundFlights = await this.flightService.queryFlights({
-      origin: dto.origin,
+      origin: originAirports[0],
+      origins: originAirports,
       startDate: dto.departureDate,
       endDate: departureDateEnd,
     });
 
-    // 2. 提取所有可达目的地（直飞）
+    // 2. 提取所有可达目的地（直飞，排除出发城市的所有机场）
     const destinations = new Set<string>();
     outboundFlights.forEach((flight) => {
-      if (flight.destination && flight.destination !== dto.origin) {
+      if (flight.destination && !originAirports.includes(flight.destination)) {
         destinations.add(flight.destination);
       }
     });

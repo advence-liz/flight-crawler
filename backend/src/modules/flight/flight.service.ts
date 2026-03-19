@@ -14,7 +14,7 @@ import { QueryFlightsWithPaginationDto } from './dto/query-flights-pagination.dt
 import { UpdateFlightDto } from './dto/update-flight.dto';
 import { BatchDeleteFlightsDto } from './dto/batch-delete-flights.dto';
 
-const DESTINATIONS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
+const DESTINATIONS_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class FlightService {
@@ -50,13 +50,16 @@ export class FlightService {
       }
     }
 
+    // 展开城市为机场列表
+    const originAirports = await this.expandCityToAirports(origin);
+
     // 构建查询条件
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
     endDateTime.setHours(23, 59, 59, 999);
 
     let query = this.flightRepository.createQueryBuilder('flight')
-      .where('flight.origin = :origin', { origin })
+      .where('flight.origin IN (:...originAirports)', { originAirports })
       .andWhere('flight.departureTime >= :startDateTime', { startDateTime })
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
@@ -108,7 +111,7 @@ export class FlightService {
     const destList = Array.from(destinationMap.keys());
     if (includeReturn && destList.length > 0) {
       let returnQuery = this.flightRepository.createQueryBuilder('flight')
-        .where('flight.destination = :origin', { origin })
+        .where('flight.destination IN (:...originAirports)', { originAirports })
         .andWhere('flight.origin IN (:...destList)', { destList })
         .andWhere('flight.departureTime >= :startDateTime', { startDateTime })
         .andWhere('flight.departureTime <= :endDateTime', { endDateTime });
@@ -172,15 +175,18 @@ export class FlightService {
   /**
    * 查询指定航线的航班 - 只查询666和2666权益卡航班
    */
-  async queryFlights(dto: QueryFlightsDto): Promise<Flight[]> {
-    const { origin, destination, startDate, endDate, flightType } = dto;
+  async queryFlights(dto: QueryFlightsDto & { origins?: string[] }): Promise<Flight[]> {
+    const { origin, origins, destination, startDate, endDate, flightType } = dto;
 
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
     endDateTime.setHours(23, 59, 59, 999);
 
+    // 支持多出发地（origins 优先，兼容单出发地 origin）
+    const originList = origins && origins.length > 0 ? origins : [origin];
+
     let query = this.flightRepository.createQueryBuilder('flight')
-      .where('flight.origin = :origin', { origin })
+      .where('flight.origin IN (:...originList)', { originList })
       .andWhere('flight.departureTime >= :startDateTime', { startDateTime })
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
@@ -406,7 +412,7 @@ export class FlightService {
    * 优先从 airports 表获取已发现的机场（更完整），如果为空则从 flights 表查询
    * 所有机场都可以作为出发地或目的地
    */
-  async getAvailableCities(): Promise<{ origins: string[]; destinations: string[]; minDate: string | null; maxDate: string | null }> {
+  async getAvailableCities(): Promise<{ origins: string[]; destinations: string[]; cityList: string[]; minDate: string | null; maxDate: string | null }> {
     // 查询数据库中航班的日期范围
     const dateRange = await this.flightRepository
       .createQueryBuilder('flight')
@@ -425,13 +431,30 @@ export class FlightService {
 
     if (airports.length > 0) {
       const airportNames = airports.map(a => a.name);
-      return { origins: airportNames, destinations: airportNames, minDate, maxDate };
+      // 城市维度去重（北京/上海各只出现一次）
+      const cityList = [...new Set(airports.map(a => a.city))].sort();
+      return { origins: airportNames, destinations: airportNames, cityList, minDate, maxDate };
     }
 
     // 如果 airports 表为空，从 flights 表查询（兼容旧数据）
     const origins = await this.getAvailableOrigins();
     const destinations = await this.getAvailableDestinations();
-    return { origins, destinations, minDate, maxDate };
+    const cityList = [...new Set([...origins, ...destinations])].sort();
+    return { origins, destinations, cityList, minDate, maxDate };
+  }
+
+  /**
+   * 将城市名展开为该城市下所有机场名
+   * 例如："北京" -> ["北京首都", "北京大兴"]
+   * 兼容直接传机场名：如果找不到匹配城市，原样返回
+   */
+  async expandCityToAirports(cityOrAirport: string): Promise<string[]> {
+    const airports = await this.airportRepository.find({
+      where: { city: cityOrAirport, enableCrawl: true },
+      order: { name: 'ASC' },
+    });
+    if (airports.length > 0) return airports.map(a => a.name);
+    return [cityOrAirport];
   }
 
   /**
@@ -667,7 +690,7 @@ export class FlightService {
   }
 
   /**
-   * 清除所有查询缓存（destinations + explore）
+   * 清除所有查询缓存
    */
   async clearQueryCache(): Promise<{ deletedCount: number }> {
     const result = await this.queryCacheRepository.clear();
@@ -676,14 +699,68 @@ export class FlightService {
   }
 
   /**
+   * 批量删除缓存（按 cacheKey 列表）
+   */
+  async deleteCacheByKeys(keys: string[]): Promise<{ deletedCount: number }> {
+    const result = await this.queryCacheRepository
+      .createQueryBuilder()
+      .delete()
+      .where('cacheKey IN (:...keys)', { keys })
+      .execute();
+    return { deletedCount: result.affected ?? 0 };
+  }
+
+  /**
+   * 查询缓存列表（分页 + 按类型筛选）
+   */
+  async listQueryCache(params: {
+    page?: number;
+    pageSize?: number;
+    type?: string; // destinations / explore / transfer
+  }): Promise<{ list: { cacheKey: string; type: string; createdAt: Date; expireAt: Date; expired: boolean; dataSize: number }[]; total: number }> {
+    const { page = 1, pageSize = 20, type } = params;
+    const now = new Date();
+
+    let qb = this.queryCacheRepository.createQueryBuilder('c');
+    if (type) qb = qb.where('c.cacheKey LIKE :prefix', { prefix: `${type}|%` });
+
+    const total = await qb.getCount();
+    const items = await qb
+      .orderBy('c.createdAt', 'DESC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getMany();
+
+    const list = items.map(item => ({
+      cacheKey: item.cacheKey,
+      type: item.cacheKey.split('|')[0],
+      createdAt: item.createdAt,
+      expireAt: item.expireAt,
+      expired: item.expireAt <= now,
+      dataSize: item.data.length,
+    }));
+
+    return { list, total };
+  }
+
+  /**
    * 查询缓存统计
    */
-  async getQueryCacheStats(): Promise<{ total: number; expired: number; valid: number }> {
+  async getQueryCacheStats(): Promise<{ total: number; expired: number; valid: number; disabled: boolean }> {
     const total = await this.queryCacheRepository.count();
     const expired = await this.queryCacheRepository
       .createQueryBuilder('c')
       .where('c.expireAt <= :now', { now: new Date() })
       .getCount();
-    return { total, expired, valid: total - expired };
+    return { total, expired, valid: total - expired, disabled: process.env.DISABLE_CACHE === 'true' };
+  }
+
+  /**
+   * 切换缓存开关（运行时修改环境变量）
+   */
+  toggleCache(enable: boolean): { disabled: boolean } {
+    process.env.DISABLE_CACHE = enable ? 'false' : 'true';
+    this.logger.log(`查询缓存已${enable ? '开启' : '关闭'}`);
+    return { disabled: !enable };
   }
 }

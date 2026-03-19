@@ -332,7 +332,7 @@ function DestinationQuery() {
 
     getAvailableCities()
       .then(cities => {
-        setAvailableOrigins(cities.origins);
+        setAvailableOrigins(cities.cityList?.length ? cities.cityList : cities.origins);
         // 城市列表加载完成后自动触发一次查询
         form.submit();
       })
@@ -633,13 +633,24 @@ function DestinationQuery() {
                   valueStyle={{ fontSize: 28 }}
                 />
               </Col>
-              {transferDiscovered && (validTransferRoundTrip.length + validTransferOneWay.length > 0) && (
+              {transferDiscovered && validTransferRoundTrip.length > 0 && (
                 <Col>
                   <Statistic
-                    title="中转可达"
-                    value={validTransferRoundTrip.length + validTransferOneWay.length}
+                    title="中转往返"
+                    value={validTransferRoundTrip.length}
                     suffix="个"
                     valueStyle={{ color: '#fa8c16', fontSize: 28 }}
+                    prefix={<NodeIndexOutlined />}
+                  />
+                </Col>
+              )}
+              {transferDiscovered && validTransferOneWay.length > 0 && (
+                <Col>
+                  <Statistic
+                    title="中转单程"
+                    value={validTransferOneWay.length}
+                    suffix="个"
+                    valueStyle={{ color: '#d48806', fontSize: 28 }}
                     prefix={<NodeIndexOutlined />}
                   />
                 </Col>

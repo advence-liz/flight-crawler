@@ -49,7 +49,7 @@ export const queryDestinations = (
 
 
 // 获取所有可用的城市列表
-export const getAvailableCities = (): Promise<{ origins: string[]; destinations: string[]; minDate: string | null; maxDate: string | null }> => {
+export const getAvailableCities = (): Promise<{ origins: string[]; destinations: string[]; cityList: string[]; minDate: string | null; maxDate: string | null }> => {
   return api.get('/flights/cities');
 };
 
@@ -206,9 +206,34 @@ export const clearQueryCache = (): Promise<{ deletedCount: number; message: stri
   return api.delete('/crawler/cache/clear');
 };
 
-// 查询缓存统计
-export const getQueryCacheStats = (): Promise<{ total: number; expired: number; valid: number }> => {
+// 查询缓存统计（含缓存开关状态）
+export const getQueryCacheStats = (): Promise<{ total: number; expired: number; valid: number; disabled: boolean }> => {
   return api.get('/crawler/cache/stats');
+};
+
+// 缓存条目
+export interface CacheItem {
+  cacheKey: string;
+  type: string;
+  createdAt: string;
+  expireAt: string;
+  expired: boolean;
+  dataSize: number;
+}
+
+// 查询缓存列表
+export const listQueryCache = (params?: { page?: number; pageSize?: number; type?: string }): Promise<{ list: CacheItem[]; total: number }> => {
+  return api.get('/crawler/cache/list', { params });
+};
+
+// 批量删除缓存
+export const deleteCacheByKeys = (keys: string[]): Promise<{ deletedCount: number }> => {
+  return api.delete('/crawler/cache/batch', { data: { keys } });
+};
+
+// 切换缓存开关
+export const toggleCache = (enable: boolean): Promise<{ disabled: boolean }> => {
+  return api.post('/crawler/cache/toggle', { enable });
 };
 
 // 查询往返航班详情

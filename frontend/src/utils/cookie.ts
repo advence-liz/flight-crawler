@@ -14,9 +14,18 @@ export function setOriginCookie(value: string): void {
   document.cookie = `${ORIGIN_COOKIE_KEY}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
 }
 
-/** 读取出发地：优先 cookie，没有则返回默认值 */
-export function getDefaultOrigin(fallback = '北京首都'): string {
-  return getOriginCookie() || fallback;
+// 机场名 -> 城市名映射（兼容旧 cookie 中存的机场名）
+const AIRPORT_TO_CITY: Record<string, string> = {
+  '北京首都': '北京',
+  '北京大兴': '北京',
+  '上海浦东': '上海',
+  '上海虹桥': '上海',
+};
+
+/** 读取出发地：优先 cookie，没有则返回默认值；自动将旧机场名转换为城市名 */
+export function getDefaultOrigin(fallback = '北京'): string {
+  const raw = getOriginCookie() || fallback;
+  return AIRPORT_TO_CITY[raw] ?? raw;
 }
 
 // ─── 日期区间持久化 ───────────────────────────────────────────

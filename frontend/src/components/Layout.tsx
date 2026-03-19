@@ -1,6 +1,6 @@
 import { Layout as AntLayout, Menu } from 'antd';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined } from '@ant-design/icons';
+import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined } from '@ant-design/icons';
 
 const { Header, Content } = AntLayout;
 
@@ -38,6 +38,11 @@ function Layout() {
       key: '/data-management',
       icon: <DatabaseOutlined />,
       label: '数据管理',
+    },
+    {
+      key: '/cache-management',
+      icon: <HddOutlined />,
+      label: '缓存管理',
     },
   ];
 
