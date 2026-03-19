@@ -4,7 +4,7 @@ import { getAdminToken } from '@/utils/auth';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  timeout: 30000,
+  timeout: 120000, // 默认 2 分钟，应对 Render 免费机器冷启动和慢查询
 });
 
 // 请求拦截器：自动注入 Admin Token
