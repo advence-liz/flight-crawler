@@ -645,8 +645,8 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={12} sm={8} md={1}>
-              <Form.Item name="maxTransfers" label="最多中转">
+            <Col xs={8} sm={4} md={1}>
+              <Form.Item name="maxTransfers" label="中转">
                 <InputNumber min={0} max={2} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
