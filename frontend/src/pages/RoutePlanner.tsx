@@ -15,9 +15,9 @@ import {
   Tabs,
   Row,
   Col,
-  Drawer,
   Divider,
   Spin,
+  Drawer,
 } from 'antd';
 import {
   SearchOutlined,
@@ -104,49 +104,54 @@ function RouteTimeline({ route, color = 'blue' }: RouteTimelineProps) {
 interface RoundTripCardProps {
   result: RoundTripResult;
   index: number;
+  compact?: boolean;
 }
 
-function RoundTripCard({ result, index }: RoundTripCardProps) {
+function RoundTripCard({ result, index, compact }: RoundTripCardProps) {
   const isDirectBoth = result.outbound.transferCount === 0 && result.return.transferCount === 0;
 
-  return (
-    <Card
-      size="small"
-      style={{ marginBottom: 12 }}
-      title={
-        <Space>
-          <span style={{ color: '#666' }}>方案 {index}</span>
-          {isDirectBoth
-            ? <Tag color="green">双向直飞</Tag>
-            : <Tag color="blue">含中转</Tag>
-          }
-          <Tag icon={<ClockCircleOutlined />} color="default">
-            总计 {formatDuration(result.totalDuration)}
-          </Tag>
-        </Space>
-      }
-    >
-      {/* 去程 */}
+  const header = (
+    <Space size={4}>
+      <span style={{ color: '#666', fontSize: 12 }}>#{index}</span>
+      {isDirectBoth ? <Tag color="green" style={{ margin: 0 }}>双直飞</Tag> : <Tag color="blue" style={{ margin: 0 }}>含中转</Tag>}
+      <Tag icon={<ClockCircleOutlined />} color="default" style={{ margin: 0 }}>总 {formatDuration(result.totalDuration)}</Tag>
+    </Space>
+  );
+
+  const body = (
+    <>
       <div style={{ marginBottom: 4 }}>
-        <Tag color="blue" style={{ marginBottom: 6 }}>✈ 去程</Tag>
-        <span style={{ color: '#888', fontSize: 12 }}>
+        <Tag color="blue">✈ 去程</Tag>
+        <span style={{ color: '#888', fontSize: 12, marginLeft: 4 }}>
           {formatDuration(result.outbound.totalDuration)}
-          {result.outbound.transferCount > 0 && `  ·  ${result.outbound.transferCount} 次中转`}
+          {result.outbound.transferCount > 0 && ` · ${result.outbound.transferCount} 次中转`}
         </span>
       </div>
       <RouteTimeline route={result.outbound} color="blue" />
-
       <Divider style={{ margin: '8px 0' }} dashed />
-
-      {/* 返程 */}
       <div style={{ marginBottom: 4 }}>
-        <Tag color="orange" style={{ marginBottom: 6 }}>↩ 返程</Tag>
-        <span style={{ color: '#888', fontSize: 12 }}>
+        <Tag color="orange">↩ 返程</Tag>
+        <span style={{ color: '#888', fontSize: 12, marginLeft: 4 }}>
           {formatDuration(result.return.totalDuration)}
-          {result.return.transferCount > 0 && `  ·  ${result.return.transferCount} 次中转`}
+          {result.return.transferCount > 0 && ` · ${result.return.transferCount} 次中转`}
         </span>
       </div>
       <RouteTimeline route={result.return} color="orange" />
+    </>
+  );
+
+  if (compact) {
+    return (
+      <div style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 12, marginBottom: 12 }}>
+        <div style={{ marginBottom: 8 }}>{header}</div>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Card size="small" style={{ height: '100%' }} title={header}>
+      {body}
     </Card>
   );
 }
@@ -161,15 +166,10 @@ interface ExploreCardProps {
 function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
   const out = dest.bestOutbound;
   const ret = dest.bestReturn;
-  const outFirst = out.segments[0];
-  const outLast = out.segments[out.segments.length - 1];
-  const retFirst = ret.segments[0];
-  const retLast = ret.segments[ret.segments.length - 1];
   const isDirect = out.transferCount === 0 && ret.transferCount === 0;
 
   return (
     <Card
-      hoverable
       size="small"
       style={{ height: '100%' }}
       title={
@@ -183,40 +183,31 @@ function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
       }
       extra={
         <Button type="link" size="small" icon={<RightOutlined />} onClick={onViewAll}>
-          全部方案
+          更多组合
         </Button>
       }
     >
-      {/* 去程最优 */}
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ color: '#1677ff', fontSize: 12, fontWeight: 500, marginBottom: 4 }}>
-          ✈ 去程 · {formatDuration(out.totalDuration)}
-          {out.transferCount > 0 && <span style={{ color: '#aaa' }}>（{out.transferCount}中转）</span>}
-        </div>
-        <Space size={4} style={{ fontSize: 13 }}>
-          <Tag style={{ fontFamily: 'monospace', fontSize: 11 }}>{outFirst?.flightNo}</Tag>
-          <span>{formatDate(outFirst?.departureTime)}</span>
-          <span style={{ color: '#bbb' }}>→</span>
-          <span>{formatDate(outLast?.arrivalTime)}</span>
-        </Space>
+      <div style={{ marginBottom: 4 }}>
+        <Tag color="blue">✈ 去程</Tag>
+        <span style={{ color: '#888', fontSize: 12, marginLeft: 4 }}>
+          {formatDuration(out.totalDuration)}
+          {out.transferCount > 0 && ` · ${out.transferCount} 次中转`}
+        </span>
       </div>
+      <RouteTimeline route={out} color="blue" />
 
-      {/* 返程最优 */}
-      <div>
-        <div style={{ color: '#fa8c16', fontSize: 12, fontWeight: 500, marginBottom: 4 }}>
-          ↩ 返程 · {formatDuration(ret.totalDuration)}
-          {ret.transferCount > 0 && <span style={{ color: '#aaa' }}>（{ret.transferCount}中转）</span>}
-        </div>
-        <Space size={4} style={{ fontSize: 13 }}>
-          <Tag style={{ fontFamily: 'monospace', fontSize: 11 }}>{retFirst?.flightNo}</Tag>
-          <span>{formatDate(retFirst?.departureTime)}</span>
-          <span style={{ color: '#bbb' }}>→</span>
-          <span>{formatDate(retLast?.arrivalTime)}</span>
-        </Space>
+      <Divider dashed style={{ margin: '8px 0' }} />
+
+      <div style={{ marginBottom: 4 }}>
+        <Tag color="orange">↩ 返程</Tag>
+        <span style={{ color: '#888', fontSize: 12, marginLeft: 4 }}>
+          {formatDuration(ret.totalDuration)}
+          {ret.transferCount > 0 && ` · ${ret.transferCount} 次中转`}
+        </span>
       </div>
+      <RouteTimeline route={ret} color="orange" />
 
-      {/* 底部方案数 */}
-      <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #f0f0f0', color: '#aaa', fontSize: 11 }}>
+      <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid #f0f0f0', color: '#aaa', fontSize: 11 }}>
         去程 {dest.outboundCount} 个方案 · 返程 {dest.returnCount} 个方案
       </div>
     </Card>
@@ -321,7 +312,6 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
     setDrawerOpen(true);
     setRoundTripRoutes([]);
     setLoadingRoutes(true);
-
     try {
       const values = form.getFieldsValue();
       const [depStart, depEnd] = values.departureRange || [];
@@ -407,7 +397,6 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
         </Card>
       )}
 
-      {/* 目的地详情 Drawer */}
       <Drawer
         title={
           drawerDest ? (
@@ -415,14 +404,12 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
               <span>{form.getFieldValue('origin')}</span>
               <SwapOutlined />
               <span>{drawerDest.city}</span>
-              <Tag color="blue">{form.getFieldValue('departureRange')?.[0]?.format('MM-DD')} 去</Tag>
-              <Tag color="orange">{form.getFieldValue('returnRange')?.[0]?.format('MM-DD')} 回</Tag>
             </Space>
-          ) : '往返方案'
+          ) : '更多往返组合'
         }
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={520}
+        width={680}
       >
         {loadingRoutes ? (
           <div style={{ textAlign: 'center', padding: 40 }}>
@@ -430,9 +417,9 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
           </div>
         ) : roundTripRoutes.length > 0 ? (
           <>
-            <div style={{ marginBottom: 12, color: '#666' }}>共 {roundTripRoutes.length} 个往返方案</div>
+            <div style={{ marginBottom: 12, color: '#666' }}>共 {roundTripRoutes.length} 个往返组合</div>
             {roundTripRoutes.map((rt, idx) => (
-              <RoundTripCard key={idx} result={rt} index={idx + 1} />
+              <RoundTripCard key={idx} result={rt} index={idx + 1} compact />
             ))}
           </>
         ) : (
@@ -632,33 +619,37 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             共 {isRoundTrip ? roundTripRoutes.length : oneWayRoutes.length} 个方案
             {isRoundTrip ? '（往返）' : '（单程）'}
           </div>
-
-          {isRoundTrip
-            ? roundTripRoutes.map((rt, idx) => (
-                <RoundTripCard key={idx} result={rt} index={idx + 1} />
-              ))
-            : oneWayRoutes.map((route, idx) => (
-                <Card
-                  key={idx}
-                  size="small"
-                  style={{ marginBottom: 12 }}
-                  title={
-                    <Space>
-                      <span style={{ color: '#666' }}>方案 {idx + 1}</span>
-                      {route.transferCount === 0
-                        ? <Tag color="green">直飞</Tag>
-                        : <Tag color="blue">{route.transferCount} 次中转</Tag>
+          <Row gutter={[12, 12]}>
+            {isRoundTrip
+              ? roundTripRoutes.map((rt, idx) => (
+                  <Col key={idx} xs={24} sm={12} lg={8}>
+                    <RoundTripCard result={rt} index={idx + 1} />
+                  </Col>
+                ))
+              : oneWayRoutes.map((route, idx) => (
+                  <Col key={idx} xs={24} sm={12} lg={8}>
+                    <Card
+                      size="small"
+                      style={{ height: '100%' }}
+                      title={
+                        <Space>
+                          <span style={{ color: '#666', fontSize: 12 }}>#{idx + 1}</span>
+                          {route.transferCount === 0
+                            ? <Tag color="green" style={{ margin: 0 }}>直飞</Tag>
+                            : <Tag color="blue" style={{ margin: 0 }}>{route.transferCount} 次中转</Tag>
+                          }
+                          <Tag icon={<ClockCircleOutlined />} color="default" style={{ margin: 0 }}>
+                            {formatDuration(route.totalDuration)}
+                          </Tag>
+                        </Space>
                       }
-                      <Tag icon={<ClockCircleOutlined />} color="default">
-                        {formatDuration(route.totalDuration)}
-                      </Tag>
-                    </Space>
-                  }
-                >
-                  <RouteTimeline route={route} color="blue" />
-                </Card>
-              ))
-          }
+                    >
+                      <RouteTimeline route={route} color="blue" />
+                    </Card>
+                  </Col>
+                ))
+            }
+          </Row>
         </div>
       )}
 

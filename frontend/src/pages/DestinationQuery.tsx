@@ -14,18 +14,15 @@ import {
   Row,
   Col,
   Statistic,
-  Tooltip,
-  Divider,
   Spin,
+  Tabs,
+  Badge,
 } from 'antd';
 import {
   SearchOutlined,
   SwapOutlined,
   ArrowRightOutlined,
-  CheckCircleFilled,
-  MinusCircleOutlined,
   AimOutlined,
-  SendOutlined,
   NodeIndexOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons';
@@ -48,211 +45,6 @@ import { getDefaultOrigin, setOriginCookie, getDateRange, setDateRange, getDefau
 const { RangePicker } = DatePicker;
 
 // ─── 中转目的地气泡卡片 ──────────────────────────────────────
-
-interface TransferDestCardProps {
-  city: string;
-  hasReturn: boolean;
-  outboundRoute: RouteResult;
-  returnRoute?: RouteResult;
-  outboundCount: number;
-  returnCount?: number;
-  onShowRoutes: () => void;
-  onPlan: () => void;
-}
-
-function TransferDestCard({ city, hasReturn, outboundRoute, outboundCount, returnCount, onShowRoutes, onPlan }: TransferDestCardProps) {
-  const outSeg = outboundRoute.segments;
-  const via = outSeg.length > 1 ? outSeg.slice(0, -1).map(s => s.destination).join('、') : '';
-
-  return (
-    <div
-      style={{
-        border: `1.5px solid ${hasReturn ? '#ffd591' : '#e8e8e8'}`,
-        borderRadius: 8,
-        padding: '10px 14px',
-        background: hasReturn ? '#fffbe6' : '#fafafa',
-        transition: 'all 0.2s',
-        userSelect: 'none',
-        minWidth: 120,
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(250,140,22,0.25)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)';
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
-        (e.currentTarget as HTMLDivElement).style.transform = 'none';
-      }}
-    >
-      {/* 城市名 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-        <NodeIndexOutlined style={{ color: '#fa8c16', fontSize: 12 }} />
-        <span style={{ fontWeight: 600, fontSize: 14, color: hasReturn ? '#874d00' : '#595959', cursor: 'pointer' }} onClick={onShowRoutes}>
-          {city}
-        </span>
-      </div>
-
-      {/* 经由城市 */}
-      {via && (
-        <div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>
-          经 {via}
-        </div>
-      )}
-
-      {/* 去程/返程方案数 + 操作按钮 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-        <div style={{ display: 'flex', gap: 6, fontSize: 12 }}>
-          <span style={{ color: '#fa8c16' }}>去 {outboundCount} 条</span>
-          {hasReturn ? (
-            <>
-              <SwapOutlined style={{ color: '#fa8c16', fontSize: 10 }} />
-              <span style={{ color: '#fa8c16' }}>返 {returnCount} 条</span>
-            </>
-          ) : (
-            <span style={{ color: '#bfbfbf' }}>无返程</span>
-          )}
-        </div>
-        <Space size={2}>
-          <Button
-            type="link"
-            size="small"
-            icon={<NodeIndexOutlined />}
-            style={{ padding: '0 2px', fontSize: 11, height: 'auto', color: '#fa8c16' }}
-            onClick={e => { e.stopPropagation(); onShowRoutes(); }}
-          >
-            方案
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<SendOutlined />}
-            style={{ padding: '0 2px', fontSize: 11, height: 'auto', color: hasReturn ? '#52c41a' : '#1677ff' }}
-            onClick={e => { e.stopPropagation(); onPlan(); }}
-          >
-            规划
-          </Button>
-        </Space>
-      </div>
-    </div>
-  );
-}
-
-// ─── 目的地气泡卡片 ──────────────────────────────────────────
-
-interface DestCardProps {
-  dest: DestinationResult;
-  onClick: () => void;
-  onPlan: () => void;
-  onTransfer: () => void;
-  hasTransfer?: boolean;
-}
-
-function DestCard({ dest, onClick, onPlan, onTransfer, hasTransfer }: DestCardProps) {
-  const canReturn = dest.hasReturn;
-
-  return (
-    <Tooltip
-      title={
-        canReturn
-          ? `去程 ${dest.flightCount} 班 / ${dest.availableDates.length} 天  ·  返程 ${dest.returnFlightCount} 班 / ${dest.returnAvailableDates?.length} 天`
-          : `去程 ${dest.flightCount} 班 / ${dest.availableDates.length} 天  ·  无返程`
-      }
-    >
-      <div
-        style={{
-          cursor: 'pointer',
-          border: `1.5px solid ${canReturn ? '#52c41a' : '#d9d9d9'}`,
-          borderRadius: 8,
-          padding: '10px 14px',
-          background: canReturn ? '#f6ffed' : '#fafafa',
-          transition: 'all 0.2s',
-          userSelect: 'none',
-        }}
-        onMouseEnter={e => {
-          (e.currentTarget as HTMLDivElement).style.boxShadow = canReturn
-            ? '0 2px 8px rgba(82,196,26,0.35)'
-            : '0 2px 8px rgba(0,0,0,0.12)';
-          (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)';
-        }}
-        onMouseLeave={e => {
-          (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
-          (e.currentTarget as HTMLDivElement).style.transform = 'none';
-        }}
-      >
-        {/* 城市名 + 往返图标 */}
-        <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-          {canReturn
-            ? <CheckCircleFilled style={{ color: '#52c41a', fontSize: 13 }} />
-            : <MinusCircleOutlined style={{ color: '#bfbfbf', fontSize: 13 }} />
-          }
-          <span style={{
-            fontWeight: 600,
-            fontSize: 14,
-            color: canReturn ? '#135200' : '#595959',
-          }}>
-            {dest.destination}
-          </span>
-        </div>
-
-        {/* 去程 / 返程航班数 */}
-        <div onClick={onClick} style={{ display: 'flex', gap: 8, fontSize: 12 }}>
-          <span style={{ color: '#1677ff' }}>
-            ✈ {dest.flightCount} 班
-          </span>
-          {canReturn ? (
-            <>
-              <SwapOutlined style={{ color: '#52c41a', fontSize: 10 }} />
-              <span style={{ color: '#52c41a' }}>
-                {dest.returnFlightCount} 班
-              </span>
-            </>
-          ) : (
-            <span style={{ color: '#bfbfbf' }}>
-              <ArrowRightOutlined style={{ fontSize: 10 }} /> 无返程
-            </span>
-          )}
-        </div>
-
-        {/* 权益卡标签 + 去规划按钮 */}
-        <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-            {dest.cardTypes.map(type => (
-              <Tag
-                key={type}
-                color={type === '666权益卡航班' ? 'blue' : 'green'}
-                style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px', marginBottom: 0 }}
-              >
-                {type.replace('权益卡航班', '')}
-              </Tag>
-            ))}
-          </div>
-          <Space size={2}>
-            {hasTransfer && (
-              <Button
-                type="link"
-                size="small"
-                icon={<NodeIndexOutlined />}
-                style={{ padding: '0 2px', fontSize: 11, height: 'auto', color: '#fa8c16' }}
-                onClick={e => { e.stopPropagation(); onTransfer(); }}
-              >
-                中转
-              </Button>
-            )}
-            <Button
-              type="link"
-              size="small"
-              icon={<SendOutlined />}
-              style={{ padding: '0 2px', fontSize: 11, height: 'auto', color: canReturn ? '#52c41a' : '#1677ff' }}
-              onClick={e => { e.stopPropagation(); onPlan(); }}
-            >
-              规划
-            </Button>
-          </Space>
-        </div>
-      </div>
-    </Tooltip>
-  );
-}
 
 // ─── 主页面 ──────────────────────────────────────────────────
 
@@ -443,89 +235,6 @@ function DestinationQuery() {
     item.routes.some(r => r.transferCount > 0),
   );
 
-  // 表格列
-  const columns: ColumnsType<DestinationResult> = [
-    {
-      title: '目的地',
-      dataIndex: 'destination',
-      key: 'destination',
-      render: (text: string, record: DestinationResult) => (
-        <Space>
-          <strong>{text}</strong>
-          {record.hasReturn
-            ? <Tag color="success" icon={<SwapOutlined />}>可往返</Tag>
-            : <Tag color="default" icon={<ArrowRightOutlined />}>仅单程</Tag>
-          }
-        </Space>
-      ),
-    },
-    {
-      title: '权益标签',
-      dataIndex: 'cardTypes',
-      key: 'cardTypes',
-      render: (cardTypes: string[]) => (
-        <Space>
-          {cardTypes.map(type => (
-            <Tag key={type} color={type === '666权益卡航班' ? 'blue' : 'green'}>
-              {type.replace('权益卡航班', '')}
-            </Tag>
-          ))}
-        </Space>
-      ),
-    },
-    {
-      title: '去程',
-      dataIndex: 'flightCount',
-      key: 'flightCount',
-      render: (count: number, record: DestinationResult) => (
-        <div>
-          <span style={{ color: '#1677ff', fontWeight: 500 }}>{count} 班</span>
-          <div style={{ fontSize: 12, color: '#999' }}>{record.availableDates.length} 天可选</div>
-        </div>
-      ),
-    },
-    {
-      title: '返程',
-      key: 'returnFlights',
-      render: (_: any, record: DestinationResult) =>
-        record.hasReturn ? (
-          <div>
-            <span style={{ color: '#52c41a', fontWeight: 500 }}>{record.returnFlightCount} 班</span>
-            <div style={{ fontSize: 12, color: '#999' }}>{record.returnAvailableDates?.length} 天可选</div>
-          </div>
-        ) : (
-          <span style={{ color: '#bfbfbf' }}>—</span>
-        ),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      render: (_: any, record: DestinationResult) => (
-        <Space size={0}>
-          <Button type="link" size="small" onClick={() => handleShowDetail(record)}>
-            查看详情
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<NodeIndexOutlined />}
-            style={{ color: '#fa8c16' }}
-            onClick={() => handleShowTransferRoutes(record.destination)}
-          >
-            中转方案
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<AimOutlined />}
-            onClick={() => goToPlan(record.destination)}
-          >
-            去规划
-          </Button>
-        </Space>
-      ),
-    },
-  ];
 
   const flightDetailColumns: ColumnsType<Flight> = [
     { title: '航班号', dataIndex: 'flightNo', key: 'flightNo' },
@@ -557,10 +266,195 @@ function DestinationQuery() {
     },
   ];
 
+  // 合并直飞 + 中转为统一表格数据
+  type UnifiedRow =
+    | { kind: 'direct'; dest: DestinationResult }
+    | { kind: 'transfer-rt'; item: TransferRoundTripDest }
+    | { kind: 'transfer-ow'; item: TransferOneWayDest };
+
+  const allRows: UnifiedRow[] = [
+    ...destinations.map(d => ({ kind: 'direct' as const, dest: d })),
+    ...validTransferRoundTrip.map(i => ({ kind: 'transfer-rt' as const, item: i })),
+    ...validTransferOneWay.map(i => ({ kind: 'transfer-ow' as const, item: i })),
+  ];
+
+  const getCity = (r: UnifiedRow) =>
+    r.kind === 'direct' ? r.dest.destination : r.item.city;
+
+  const unifiedColumns: ColumnsType<UnifiedRow> = [
+    {
+      title: '目的地',
+      width: 120,
+      sorter: (a, b) => getCity(a).localeCompare(getCity(b)),
+      render: (_, r) => {
+        const city = getCity(r);
+        if (r.kind === 'direct') {
+          return (
+            <Space size={4}>
+              <strong>{city}</strong>
+              {r.dest.hasReturn
+                ? <Tag color="success" icon={<SwapOutlined />} style={{ margin: 0 }}>往返</Tag>
+                : <Tag icon={<ArrowRightOutlined />} style={{ margin: 0 }}>单程</Tag>
+              }
+            </Space>
+          );
+        }
+        return (
+          <Space size={4}>
+            <strong>{city}</strong>
+            <Tag color="orange" icon={<NodeIndexOutlined />} style={{ margin: 0 }}>
+              {r.kind === 'transfer-rt' ? '中转往返' : '中转单程'}
+            </Tag>
+          </Space>
+        );
+      },
+    },
+    {
+      title: '去程',
+      width: 140,
+      sorter: (a, b) => {
+        const ca = a.kind === 'direct' ? a.dest.flightCount : (a.kind === 'transfer-rt' ? a.item.outboundCount : a.item.routeCount);
+        const cb = b.kind === 'direct' ? b.dest.flightCount : (b.kind === 'transfer-rt' ? b.item.outboundCount : b.item.routeCount);
+        return ca - cb;
+      },
+      render: (_, r) => {
+        if (r.kind === 'direct') {
+          return (
+            <div>
+              <span style={{ color: '#1677ff', fontWeight: 500 }}>{r.dest.flightCount} 班</span>
+              <span style={{ color: '#999', fontSize: 12, marginLeft: 6 }}>{r.dest.availableDates.length} 天</span>
+              <div style={{ fontSize: 11, color: '#bbb' }}>
+                {r.dest.availableDates[0]} ~ {r.dest.availableDates[r.dest.availableDates.length - 1]}
+              </div>
+            </div>
+          );
+        }
+        const routes = r.kind === 'transfer-rt'
+          ? r.item.outboundRoutes.filter(x => x.transferCount > 0)
+          : r.item.routes.filter(x => x.transferCount > 0);
+        const best = routes[0];
+        const count = r.kind === 'transfer-rt' ? r.item.outboundCount : r.item.routeCount;
+        return best ? (
+          <div>
+            <span style={{ color: '#fa8c16', fontWeight: 500 }}>{count} 条方案</span>
+            <div style={{ fontSize: 11, color: '#999' }}>
+              经 {best.segments.slice(0, -1).map(s => s.destination).join('、')} · {Math.floor(best.totalDuration / 60)}h{best.totalDuration % 60}m
+            </div>
+          </div>
+        ) : <span style={{ color: '#bbb' }}>—</span>;
+      },
+    },
+    {
+      title: '返程',
+      width: 140,
+      sorter: (a, b) => {
+        const ca = a.kind === 'direct' ? (a.dest.returnFlightCount ?? 0) : (a.kind === 'transfer-rt' ? a.item.returnCount : 0);
+        const cb = b.kind === 'direct' ? (b.dest.returnFlightCount ?? 0) : (b.kind === 'transfer-rt' ? b.item.returnCount : 0);
+        return ca - cb;
+      },
+      render: (_, r) => {
+        if (r.kind === 'direct') {
+          return r.dest.hasReturn ? (
+            <div>
+              <span style={{ color: '#52c41a', fontWeight: 500 }}>{r.dest.returnFlightCount} 班</span>
+              <span style={{ color: '#999', fontSize: 12, marginLeft: 6 }}>{r.dest.returnAvailableDates?.length} 天</span>
+              <div style={{ fontSize: 11, color: '#bbb' }}>
+                {r.dest.returnAvailableDates?.[0]} ~ {r.dest.returnAvailableDates?.[r.dest.returnAvailableDates.length - 1]}
+              </div>
+            </div>
+          ) : <span style={{ color: '#bfbfbf' }}>—</span>;
+        }
+        if (r.kind === 'transfer-rt') {
+          const routes = r.item.returnRoutes.filter(x => x.transferCount > 0);
+          const best = routes[0];
+          return best ? (
+            <div>
+              <span style={{ color: '#fa8c16', fontWeight: 500 }}>{r.item.returnCount} 条方案</span>
+              <div style={{ fontSize: 11, color: '#999' }}>
+                经 {best.segments.slice(0, -1).map(s => s.destination).join('、')} · {Math.floor(best.totalDuration / 60)}h{best.totalDuration % 60}m
+              </div>
+            </div>
+          ) : <span style={{ color: '#bfbfbf' }}>—</span>;
+        }
+        return <span style={{ color: '#bfbfbf' }}>—</span>;
+      },
+    },
+    {
+      title: '权益卡',
+      width: 110,
+      render: (_, r) => {
+        if (r.kind !== 'direct') return <span style={{ color: '#bbb', fontSize: 12 }}>—</span>;
+        return (
+          <Space size={2}>
+            {r.dest.cardTypes.map(type => (
+              <Tag key={type} color={type === '666权益卡航班' ? 'blue' : 'green'} style={{ margin: 0, fontSize: 11 }}>
+                {type.replace('权益卡航班', '')}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '操作',
+      width: 160,
+      render: (_, r) => {
+        const city = getCity(r);
+        return (
+          <Space size={0}>
+            {r.kind === 'direct' && (
+              <Button type="link" size="small" onClick={() => handleShowDetail(r.dest)}>详情</Button>
+            )}
+            {(r.kind === 'transfer-rt' || r.kind === 'transfer-ow') && (
+              <Button type="link" size="small" style={{ color: '#fa8c16' }} icon={<NodeIndexOutlined />}
+                onClick={() => handleShowTransferRoutes(city)}>
+                方案
+              </Button>
+            )}
+            <Button type="link" size="small" icon={<AimOutlined />} onClick={() => goToPlan(city)}>规划</Button>
+          </Space>
+        );
+      },
+    },
+  ];
+
+  const tabItems = [
+    {
+      key: 'all',
+      label: <span>全部 <Badge count={allRows.length} color="#999" /></span>,
+      data: allRows,
+    },
+    {
+      key: 'return',
+      label: <span>直飞往返 <Badge count={returnCount} color="#52c41a" /></span>,
+      data: allRows.filter(r => r.kind === 'direct' && r.dest.hasReturn),
+    },
+    {
+      key: 'oneway',
+      label: <span>直飞单程 <Badge count={oneWayCount} color="#aaa" /></span>,
+      data: allRows.filter(r => r.kind === 'direct' && !r.dest.hasReturn),
+    },
+    {
+      key: 'transfer',
+      label: (
+        <span>
+          中转可达{' '}
+          {discoverTransferLoading
+            ? <Spin size="small" style={{ marginLeft: 4 }} />
+            : <Badge count={validTransferRoundTrip.length + validTransferOneWay.length} color="#fa8c16" />
+          }
+        </span>
+      ),
+      data: allRows.filter(r => r.kind !== 'direct'),
+    },
+  ];
+
+  const [activeTab, setActiveTab] = useState('all');
+
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       {/* 搜索表单 */}
-      <Card title="目的地查询">
+      <Card>
         <Form
           form={form}
           layout="inline"
@@ -606,211 +500,58 @@ function DestinationQuery() {
       </Card>
 
       {destinations.length > 0 && (
-        <>
-          {/* ── 可视化概览区 ── */}
-          <Card>
-            {/* 统计摘要 */}
-            <Row gutter={24} style={{ marginBottom: 20 }}>
+        <Card
+          bodyStyle={{ padding: 0 }}
+          title={
+            <Row gutter={24} align="middle">
               <Col>
-                <Statistic
-                  title="可往返目的地"
-                  value={returnCount}
-                  suffix="个"
-                  valueStyle={{ color: '#52c41a', fontSize: 28 }}
-                  prefix={<SwapOutlined />}
-                />
+                <Statistic title="直飞往返" value={returnCount} suffix="个"
+                  valueStyle={{ color: '#52c41a', fontSize: 22 }} prefix={<SwapOutlined />} />
               </Col>
               <Col>
-                <Statistic
-                  title="仅单程目的地"
-                  value={oneWayCount}
-                  suffix="个"
-                  valueStyle={{ color: '#8c8c8c', fontSize: 28 }}
-                  prefix={<ArrowRightOutlined />}
-                />
+                <Statistic title="直飞单程" value={oneWayCount} suffix="个"
+                  valueStyle={{ color: '#8c8c8c', fontSize: 22 }} prefix={<ArrowRightOutlined />} />
               </Col>
               <Col>
-                <Statistic
-                  title="目的地总数"
-                  value={destinations.length}
-                  suffix="个"
-                  valueStyle={{ fontSize: 28 }}
-                />
+                <Statistic title="直飞合计" value={destinations.length} suffix="个"
+                  valueStyle={{ fontSize: 22 }} />
               </Col>
-              {transferDiscovered && validTransferRoundTrip.length > 0 && (
-                <Col>
-                  <Statistic
-                    title="中转往返"
-                    value={validTransferRoundTrip.length}
-                    suffix="个"
-                    valueStyle={{ color: '#fa8c16', fontSize: 28 }}
-                    prefix={<NodeIndexOutlined />}
-                  />
-                </Col>
-              )}
-              {transferDiscovered && validTransferOneWay.length > 0 && (
-                <Col>
-                  <Statistic
-                    title="中转单程"
-                    value={validTransferOneWay.length}
-                    suffix="个"
-                    valueStyle={{ color: '#d48806', fontSize: 28 }}
-                    prefix={<NodeIndexOutlined />}
-                  />
-                </Col>
-              )}
+              <Col>
+                {discoverTransferLoading
+                  ? <Space><NodeIndexOutlined style={{ color: '#fa8c16' }} /><span style={{ color: '#fa8c16' }}>中转搜索中...</span><Spin size="small" /></Space>
+                  : transferDiscovered && (
+                    <Statistic title="中转可达" value={validTransferRoundTrip.length + validTransferOneWay.length} suffix="个"
+                      valueStyle={{ color: '#fa8c16', fontSize: 22 }} prefix={<NodeIndexOutlined />} />
+                  )
+                }
+              </Col>
+              <Col flex="auto" style={{ textAlign: 'right' }}>
+                <Button type="link" icon={<AimOutlined />} onClick={goToExplore}>行程规划</Button>
+              </Col>
             </Row>
-
-            {/* 可往返目的地气泡 */}
-            {returnCount > 0 && (
-              <>
-                <Divider orientation="left" style={{ margin: '0 0 12px' }}>
-                  <Space>
-                    <CheckCircleFilled style={{ color: '#52c41a' }} />
-                    <span style={{ color: '#52c41a', fontWeight: 600 }}>可往返（{returnCount} 个）</span>
-                    <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>点击查看航班详情</span>
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<AimOutlined />}
-                      style={{ padding: 0, fontSize: 12 }}
-                      onClick={goToExplore}
-                    >
-                      前往行程规划
-                    </Button>
-                  </Space>
-                </Divider>
-                <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
-                  {destinations.filter(d => d.hasReturn).map(dest => (
-                    <Col key={dest.destination}>
-                      <DestCard
-                        dest={dest}
-                        onClick={() => handleShowDetail(dest)}
-                        onPlan={() => goToPlan(dest.destination)}
-                        onTransfer={() => handleShowTransferRoutes(dest.destination)}
-                        hasTransfer={transferDiscovered && (
-                          validTransferRoundTrip.some(i => i.city === dest.destination) ||
-                          validTransferOneWay.some(i => i.city === dest.destination)
-                        )}
-                      />
-                    </Col>
-                  ))}
-                </Row>
-              </>
-            )}
-
-            {/* 仅单程目的地气泡 */}
-            {oneWayCount > 0 && (
-              <>
-                <Divider orientation="left" style={{ margin: '0 0 12px' }}>
-                  <Space>
-                    <MinusCircleOutlined style={{ color: '#bfbfbf' }} />
-                    <span style={{ color: '#8c8c8c', fontWeight: 600 }}>仅单程（{oneWayCount} 个）</span>
-                  </Space>
-                </Divider>
-                <Row gutter={[10, 10]}>
-                  {destinations.filter(d => !d.hasReturn).map(dest => (
-                    <Col key={dest.destination}>
-                      <DestCard
-                        dest={dest}
-                        onClick={() => handleShowDetail(dest)}
-                        onPlan={() => goToPlan(dest.destination)}
-                        onTransfer={() => handleShowTransferRoutes(dest.destination)}
-                        hasTransfer={transferDiscovered && (
-                          validTransferRoundTrip.some(i => i.city === dest.destination) ||
-                          validTransferOneWay.some(i => i.city === dest.destination)
-                        )}
-                      />
-                    </Col>
-                  ))}
-                </Row>
-              </>
-            )}
-
-            {/* 中转可达分区：loading 中或有数据时才显示 */}
-            {(discoverTransferLoading || validTransferRoundTrip.length > 0 || validTransferOneWay.length > 0) && (
-              <>
-                <Divider orientation="left" style={{ margin: '16px 0 12px' }}>
-                  <Space>
-                    <NodeIndexOutlined style={{ color: '#fa8c16' }} />
-                    <span style={{ color: '#fa8c16', fontWeight: 600 }}>中转可达</span>
-                    {discoverTransferLoading && (
-                      <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>搜索中...</span>
-                    )}
-                    {transferDiscovered && (
-                      <span style={{ color: '#999', fontSize: 12, fontWeight: 400 }}>
-                        往返 {validTransferRoundTrip.length} 个 · 单程 {validTransferOneWay.length} 个
-                      </span>
-                    )}
-                  </Space>
-                </Divider>
-
-                {discoverTransferLoading && (
-                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                    <Spin tip="正在搜索中转方案..." />
-                  </div>
-                )}
-
-                {validTransferRoundTrip.length > 0 && (
-                  <>
-                    <div style={{ fontSize: 12, color: '#fa8c16', fontWeight: 600, marginBottom: 8 }}>
-                      <SwapOutlined style={{ marginRight: 4 }} />中转往返（{validTransferRoundTrip.length} 个）
-                    </div>
-                    <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
-                      {validTransferRoundTrip.map(item => (
-                        <Col key={item.city}>
-                          <TransferDestCard
-                            city={item.city}
-                            hasReturn={true}
-                            outboundRoute={item.outboundRoutes.find(r => r.transferCount > 0)!}
-                            returnRoute={item.returnRoutes.find(r => r.transferCount > 0)!}
-                            outboundCount={item.outboundRoutes.filter(r => r.transferCount > 0).length}
-                            returnCount={item.returnRoutes.filter(r => r.transferCount > 0).length}
-                            onShowRoutes={() => handleShowTransferRoutes(item.city)}
-                            onPlan={() => goToPlan(item.city)}
-                          />
-                        </Col>
-                      ))}
-                    </Row>
-                  </>
-                )}
-
-                {validTransferOneWay.length > 0 && (
-                  <>
-                    <div style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 600, marginBottom: 8 }}>
-                      <ArrowRightOutlined style={{ marginRight: 4 }} />中转单程（{validTransferOneWay.length} 个）
-                    </div>
-                    <Row gutter={[10, 10]}>
-                      {validTransferOneWay.map(item => (
-                        <Col key={item.city}>
-                          <TransferDestCard
-                            city={item.city}
-                            hasReturn={false}
-                            outboundRoute={item.routes.find(r => r.transferCount > 0)!}
-                            outboundCount={item.routes.filter(r => r.transferCount > 0).length}
-                            onShowRoutes={() => handleShowTransferRoutes(item.city)}
-                            onPlan={() => goToPlan(item.city)}
-                          />
-                        </Col>
-                      ))}
-                    </Row>
-                  </>
-                )}
-              </>
-            )}
-          </Card>
-
-          {/* ── 详细表格 ── */}
-          <Card title={`全部目的地（${destinations.length} 个）`}>
-            <Table
-              columns={columns}
-              dataSource={destinations}
-              rowKey="destination"
-              rowClassName={record => record.hasReturn ? '' : 'row-one-way'}
-              pagination={{ pageSize: 15, showSizeChanger: true, showTotal: total => `共 ${total} 条` }}
-            />
-          </Card>
-        </>
+          }
+        >
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            size="small"
+            style={{ padding: '0 16px' }}
+            items={tabItems.map(t => ({
+              key: t.key,
+              label: t.label,
+              children: (
+                <Table<UnifiedRow>
+                  columns={unifiedColumns}
+                  dataSource={t.data}
+                  rowKey={r => getCity(r)}
+                  size="small"
+                  pagination={{ pageSize: 20, showSizeChanger: true, showTotal: total => `共 ${total} 个目的地` }}
+                  loading={loading}
+                />
+              ),
+            }))}
+          />
+        </Card>
       )}
 
       {/* 中转方案 Modal（直接使用已发现的数据，无需再请求） */}
