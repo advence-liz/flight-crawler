@@ -641,11 +641,11 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={12} sm={8} md={2}>
+            <Col xs={12} sm={8} md={3}>
               <Form.Item name="flightType" label="权益卡">
                 <Select style={{ width: '100%' }}>
-                  <Select.Option value="666权益卡航班">666</Select.Option>
-                  <Select.Option value="2666权益卡航班">2666</Select.Option>
+                  <Select.Option value="666权益卡航班">666权益卡</Select.Option>
+                  <Select.Option value="2666权益卡航班">2666权益卡</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
