@@ -19,7 +19,7 @@ import {
 import { SearchOutlined, SwapOutlined, ArrowRightOutlined, NodeIndexOutlined, EnvironmentOutlined, AimOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { queryDestinations, getAvailableCities, DestinationResult, discoverTransferDestinations, TransferRoundTripDest, TransferOneWayDest } from '@/api/flight';
-import { getDefaultOrigin, setOriginCookie } from '@/utils/cookie';
+import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
 
 const { useBreakpoint } = Grid;
 
@@ -94,9 +94,10 @@ function FlightMap() {
     getAvailableCities()
       .then(c => {
         setAvailableOrigins(c.cityList?.length ? c.cityList : c.origins);
-        // 如果没有 URL 参数提供日期，使用数据库日期范围作为默认值
-        if (!urlDepartureDate && !urlReturnDate && c.minDate && c.maxDate) {
-          form.setFieldValue('dateRange', [dayjs(c.minDate), dayjs(c.maxDate)]);
+        // 如果没有 URL 参数提供日期，使用今天~今天+30天（与目的地查询保持一致，命中缓存）
+        if (!urlDepartureDate && !urlReturnDate) {
+          const [defStart, defEnd] = getDefaultDateRange();
+          form.setFieldValue('dateRange', [dayjs(defStart), dayjs(defEnd)]);
         }
         // 自动触发初始查询
         const values = form.getFieldsValue();
