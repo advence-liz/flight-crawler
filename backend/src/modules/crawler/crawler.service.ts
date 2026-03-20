@@ -2804,55 +2804,61 @@ export class CrawlerService {
     timeZone: 'Asia/Shanghai',
   })
   async scheduledRefreshDestinationCache() {
-    this.logger.log('⏰ 定时缓存刷新：开始刷新种子机场目的地查询缓存');
+    this.logger.log('⏰ 定时缓存刷新：开始刷新所有城市目的地查询缓存');
 
-    const seedCities = ['北京', '上海', '深圳'];
-
-    // 获取当前数据库日期范围
-    const { minDate, maxDate } = await this.flightService.getAvailableCities();
-    if (!minDate || !maxDate) {
+    // 获取所有城市和日期范围
+    const { cityList, minDate, maxDate } = await this.flightService.getAvailableCities();
+    if (!minDate || !maxDate || cityList.length === 0) {
       this.logger.warn('⚠️ 无航班数据，跳过缓存刷新');
       return;
     }
 
+    this.logger.log(`📋 共 ${cityList.length} 个城市待刷新，并发度 3`);
+
     let successCount = 0;
     let failCount = 0;
 
-    for (const city of seedCities) {
-      try {
-        // 先删除旧缓存，强制重新计算
-        const destCacheList = await this.flightService.listQueryCache({ type: 'destinations' });
-        const keysToDelete = destCacheList.list
-          .filter(c => c.cacheKey.startsWith(`destinations|${city}|`))
-          .map(c => c.cacheKey);
-        if (keysToDelete.length > 0) {
-          await this.flightService.deleteCacheByKeys(keysToDelete);
+    // 并发度 3：每个城市需做 destinations + transfer 两次重计算，避免压垮数据库
+    const CONCURRENCY = 3;
+    let i = 0;
+    const run = async () => {
+      while (i < cityList.length) {
+        const city = cityList[i++];
+        try {
+          // 删除旧缓存
+          const destCacheList = await this.flightService.listQueryCache({ type: 'destinations' });
+          const keysToDelete = destCacheList.list
+            .filter(c => c.cacheKey.startsWith(`destinations|${city}|`))
+            .map(c => c.cacheKey);
+          if (keysToDelete.length > 0) {
+            await this.flightService.deleteCacheByKeys(keysToDelete);
+          }
+          await this.routeService.clearTransferCacheByOrigin(city);
+
+          // 重新查询（自动写入新缓存）
+          await this.flightService.queryDestinations({
+            origin: city,
+            startDate: minDate,
+            endDate: maxDate,
+            includeReturn: true,
+          });
+          await this.routeService.discoverTransferDestinations({
+            origin: city,
+            departureDate: minDate,
+            endDate: maxDate,
+            maxTransfers: 1,
+          });
+
+          this.logger.log(`✅ [${successCount + failCount + 1}/${cityList.length}] ${city} 缓存刷新完成`);
+          successCount++;
+        } catch (error) {
+          this.logger.warn(`⚠️ ${city} 缓存刷新失败: ${error.message}`);
+          failCount++;
         }
-        await this.routeService.clearTransferCacheByOrigin(city);
-
-        // 重新查询（自动写入新缓存）
-        await this.flightService.queryDestinations({
-          origin: city,
-          startDate: minDate,
-          endDate: maxDate,
-          includeReturn: true,
-        });
-
-        await this.routeService.discoverTransferDestinations({
-          origin: city,
-          departureDate: minDate,
-          endDate: maxDate,
-          maxTransfers: 1,
-        });
-
-        this.logger.log(`✅ ${city} 缓存刷新完成`);
-        successCount++;
-      } catch (error) {
-        this.logger.warn(`⚠️ ${city} 缓存刷新失败: ${error.message}`);
-        failCount++;
       }
-    }
+    };
 
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, cityList.length) }, run));
     this.logger.log(`⏰ 缓存刷新完成：${successCount} 成功 / ${failCount} 失败`);
   }
 
