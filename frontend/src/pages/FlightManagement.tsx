@@ -521,8 +521,8 @@ function FlightManagement() {
           <Form.Item name="cardType" label="权益卡类型">
             <Select placeholder="请选择" allowClear style={{ width: 180 }}>
               <Select.Option value="全部">全部</Select.Option>
-              <Select.Option value="666权益卡航班">666权益卡航班</Select.Option>
-              <Select.Option value="2666权益卡航班">2666权益卡航班</Select.Option>
+              <Select.Option value="666权益卡航班">666</Select.Option>
+              <Select.Option value="2666权益卡航班">2666</Select.Option>
             </Select>
           </Form.Item>
 
@@ -620,8 +620,8 @@ function FlightManagement() {
           <Form.Item name="cardType" label="权益卡类型" rules={[{ required: true, message: '请选择权益卡类型' }]}>
             <Select>
               <Select.Option value="全部">全部</Select.Option>
-              <Select.Option value="666权益卡航班">666权益卡航班</Select.Option>
-              <Select.Option value="2666权益卡航班">2666权益卡航班</Select.Option>
+              <Select.Option value="666权益卡航班">666</Select.Option>
+              <Select.Option value="2666权益卡航班">2666</Select.Option>
             </Select>
           </Form.Item>
 

@@ -14,7 +14,9 @@ import { QueryFlightsWithPaginationDto } from './dto/query-flights-pagination.dt
 import { UpdateFlightDto } from './dto/update-flight.dto';
 import { BatchDeleteFlightsDto } from './dto/batch-delete-flights.dto';
 
-const DESTINATIONS_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 24 * 60 * 60 * 1000;
+const DISABLED = process.env.DISABLE_CACHE === 'true';
+const DESTINATIONS_CACHE_TTL_MS = DISABLED ? 0 : 24 * 60 * 60 * 1000;
+const SHORT_CACHE_TTL_MS = DISABLED ? 0 : 30 * 60 * 1000; // 30 分钟，用于规划类接口
 
 @Injectable()
 export class FlightService {
