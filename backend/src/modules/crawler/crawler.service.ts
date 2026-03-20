@@ -2795,8 +2795,23 @@ export class CrawlerService {
   }
 
   /**
-   * 每小时刷新种子机场的目的地查询缓存
-   * 种子机场：北京首都、北京大兴、上海浦东、上海虹桥、深圳
+   * 每天凌晨 3 点清理过期缓存
+   */
+  @Cron('0 3 * * *', {
+    name: 'clean-expired-cache',
+    timeZone: 'Asia/Shanghai',
+  })
+  async scheduledCleanExpiredCache() {
+    this.logger.log('⏰ 定时任务：开始清理过期缓存');
+    try {
+      await this.routeService.cleanExpiredCache();
+    } catch (error) {
+      this.logger.error('❌ 清理过期缓存失败', error);
+    }
+  }
+
+  /**
+   * 每小时刷新所有城市的目的地查询缓存
    * 刷新内容：destinations 缓存 + transfer 缓存
    */
   @Cron('7 * * * *', {
