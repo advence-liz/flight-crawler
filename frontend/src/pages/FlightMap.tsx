@@ -399,7 +399,7 @@ function FlightMap() {
             dateRange: [dayjs(), dayjs().add(30, 'day')],
           }}
         >
-          <Row gutter={[16, 16]}>
+          <Row gutter={[16, 16]} align="bottom">
             <Col xs={24} sm={12} md={6}>
               <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
