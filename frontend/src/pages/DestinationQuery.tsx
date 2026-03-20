@@ -17,6 +17,7 @@ import {
   Spin,
   Tabs,
   Badge,
+  Grid,
 } from 'antd';
 import {
   SearchOutlined,
@@ -43,8 +44,179 @@ import {
 import { getDefaultOrigin, setOriginCookie, getDateRange, setDateRange, getDefaultDateRange } from '@/utils/cookie';
 
 const { RangePicker } = DatePicker;
+const { useBreakpoint } = Grid;
 
-// ─── 中转目的地气泡卡片 ──────────────────────────────────────
+// ─── 类型定义 ────────────────────────────────────────────────
+
+type UnifiedRow =
+  | { kind: 'direct'; dest: DestinationResult }
+  | { kind: 'transfer-rt'; item: TransferRoundTripDest }
+  | { kind: 'transfer-ow'; item: TransferOneWayDest };
+
+// ─── 移动端卡片视图组件 ──────────────────────────────────────
+
+interface DestinationCardProps {
+  row: UnifiedRow;
+  onShowDetail: (dest: DestinationResult) => void;
+  onShowTransferRoutes: (city: string) => void;
+  onPlan: (city: string) => void;
+}
+
+function DestinationCard({ row, onShowDetail, onShowTransferRoutes, onPlan }: DestinationCardProps) {
+  const city = row.kind === 'direct' ? row.dest.destination : row.item.city;
+  const isDirect = row.kind === 'direct';
+  const isTransferRT = row.kind === 'transfer-rt';
+  const isTransferOW = row.kind === 'transfer-ow';
+
+  return (
+    <Card
+      size="small"
+      style={{ marginBottom: 12 }}
+      bodyStyle={{ padding: '12px 16px' }}
+    >
+      {/* 标题行 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <Space size={4}>
+          <strong style={{ fontSize: 16 }}>{city}</strong>
+          {isDirect && row.dest.hasReturn && (
+            <Tag color="success" icon={<SwapOutlined />} style={{ margin: 0 }}>往返</Tag>
+          )}
+          {isDirect && !row.dest.hasReturn && (
+            <Tag icon={<ArrowRightOutlined />} style={{ margin: 0 }}>单程</Tag>
+          )}
+          {isTransferRT && (
+            <Tag color="orange" icon={<NodeIndexOutlined />} style={{ margin: 0 }}>中转往返</Tag>
+          )}
+          {isTransferOW && (
+            <Tag color="orange" icon={<NodeIndexOutlined />} style={{ margin: 0 }}>中转单程</Tag>
+          )}
+        </Space>
+      </div>
+
+      {/* 航班信息 */}
+      <div style={{ marginBottom: 8 }}>
+        {isDirect ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ color: '#666', fontSize: 13 }}>✈ 去程</span>
+              <span style={{ color: '#1677ff', fontWeight: 500 }}>
+                {row.dest.flightCount} 班 · {row.dest.availableDates.length} 天
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: '#bbb', marginBottom: 6 }}>
+              {row.dest.availableDates[0]} ~ {row.dest.availableDates[row.dest.availableDates.length - 1]}
+            </div>
+            {row.dest.hasReturn && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: '#666', fontSize: 13 }}>↩ 返程</span>
+                  <span style={{ color: '#52c41a', fontWeight: 500 }}>
+                    {row.dest.returnFlightCount} 班 · {row.dest.returnAvailableDates?.length} 天
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: '#bbb' }}>
+                  {row.dest.returnAvailableDates?.[0]} ~ {row.dest.returnAvailableDates?.[row.dest.returnAvailableDates.length - 1]}
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {isTransferRT && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: '#666', fontSize: 13 }}>✈ 去程</span>
+                  <span style={{ color: '#fa8c16', fontWeight: 500 }}>
+                    {row.item.outboundCount} 条方案
+                  </span>
+                </div>
+                {(() => {
+                  const routes = row.item.outboundRoutes.filter((x: any) => x.transferCount > 0);
+                  const best = routes[0];
+                  return best ? (
+                    <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>
+                      经 {best.segments.slice(0, -1).map((s: any) => s.destination).join('、')} · {Math.floor(best.totalDuration / 60)}h{best.totalDuration % 60}m
+                    </div>
+                  ) : null;
+                })()}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: '#666', fontSize: 13 }}>↩ 返程</span>
+                  <span style={{ color: '#fa8c16', fontWeight: 500 }}>
+                    {row.item.returnCount} 条方案
+                  </span>
+                </div>
+                {(() => {
+                  const routes = row.item.returnRoutes.filter((x: any) => x.transferCount > 0);
+                  const best = routes[0];
+                  return best ? (
+                    <div style={{ fontSize: 11, color: '#999' }}>
+                      经 {best.segments.slice(0, -1).map((s: any) => s.destination).join('、')} · {Math.floor(best.totalDuration / 60)}h{best.totalDuration % 60}m
+                    </div>
+                  ) : null;
+                })()}
+              </>
+            )}
+            {isTransferOW && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: '#666', fontSize: 13 }}>✈ 去程</span>
+                  <span style={{ color: '#fa8c16', fontWeight: 500 }}>
+                    {row.item.routeCount} 条方案
+                  </span>
+                </div>
+                {(() => {
+                  const routes = row.item.routes.filter((x: any) => x.transferCount > 0);
+                  const best = routes[0];
+                  return best ? (
+                    <div style={{ fontSize: 11, color: '#999' }}>
+                      经 {best.segments.slice(0, -1).map((s: any) => s.destination).join('、')} · {Math.floor(best.totalDuration / 60)}h{best.totalDuration % 60}m
+                    </div>
+                  ) : null;
+                })()}
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 权益卡标签 */}
+      {isDirect && (
+        <div style={{ marginBottom: 8 }}>
+          <Space size={2}>
+            {row.dest.cardTypes.map(type => (
+              <Tag key={type} color={type === '666权益卡航班' ? 'blue' : 'green'} style={{ margin: 0, fontSize: 11 }}>
+                {type.replace('权益卡航班', '')}
+              </Tag>
+            ))}
+          </Space>
+        </div>
+      )}
+
+      {/* 操作按钮 */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        {isDirect && (
+          <Button type="primary" size="small" style={{ flex: 1 }} onClick={() => onShowDetail(row.dest)}>
+            查看详情
+          </Button>
+        )}
+        {(isTransferRT || isTransferOW) && (
+          <Button
+            type="primary"
+            size="small"
+            style={{ flex: 1, background: '#fa8c16', borderColor: '#fa8c16' }}
+            icon={<NodeIndexOutlined />}
+            onClick={() => onShowTransferRoutes(city)}
+          >
+            中转方案
+          </Button>
+        )}
+        <Button size="small" style={{ flex: 1 }} icon={<AimOutlined />} onClick={() => onPlan(city)}>
+          行程规划
+        </Button>
+      </div>
+    </Card>
+  );
+}
 
 // ─── 主页面 ──────────────────────────────────────────────────
 
@@ -52,6 +224,8 @@ function DestinationQuery() {
   const [form] = Form.useForm();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md; // < 768px
   const [loading, setLoading] = useState(false);
   const [destinations, setDestinations] = useState<DestinationResult[]>([]);
   const [availableOrigins, setAvailableOrigins] = useState<string[]>([]);
@@ -266,12 +440,7 @@ function DestinationQuery() {
     },
   ];
 
-  // 合并直飞 + 中转为统一表格数据
-  type UnifiedRow =
-    | { kind: 'direct'; dest: DestinationResult }
-    | { kind: 'transfer-rt'; item: TransferRoundTripDest }
-    | { kind: 'transfer-ow'; item: TransferOneWayDest };
-
+  // 合并直飞 + 中转为统一数据
   const allRows: UnifiedRow[] = [
     ...destinations.map(d => ({ kind: 'direct' as const, dest: d })),
     ...validTransferRoundTrip.map(i => ({ kind: 'transfer-rt' as const, item: i })),
@@ -421,22 +590,42 @@ function DestinationQuery() {
   const tabItems = [
     {
       key: 'all',
-      label: <span>全部 <Badge count={allRows.length} color="#999" /></span>,
+      label: isMobile ? (
+        <span>全部 <Badge count={allRows.length} color="#999" showZero /></span>
+      ) : (
+        <span>全部 <Badge count={allRows.length} color="#999" /></span>
+      ),
       data: allRows,
     },
     {
       key: 'return',
-      label: <span>直飞往返 <Badge count={returnCount} color="#52c41a" /></span>,
+      label: isMobile ? (
+        <span>往返 <Badge count={returnCount} color="#52c41a" showZero /></span>
+      ) : (
+        <span>直飞往返 <Badge count={returnCount} color="#52c41a" /></span>
+      ),
       data: allRows.filter(r => r.kind === 'direct' && r.dest.hasReturn),
     },
     {
       key: 'oneway',
-      label: <span>直飞单程 <Badge count={oneWayCount} color="#aaa" /></span>,
+      label: isMobile ? (
+        <span>单程 <Badge count={oneWayCount} color="#aaa" showZero /></span>
+      ) : (
+        <span>直飞单程 <Badge count={oneWayCount} color="#aaa" /></span>
+      ),
       data: allRows.filter(r => r.kind === 'direct' && !r.dest.hasReturn),
     },
     {
       key: 'transfer',
-      label: (
+      label: isMobile ? (
+        <span>
+          中转{' '}
+          {discoverTransferLoading
+            ? <Spin size="small" style={{ marginLeft: 2 }} />
+            : <Badge count={validTransferRoundTrip.length + validTransferOneWay.length} color="#fa8c16" showZero />
+          }
+        </span>
+      ) : (
         <span>
           中转可达{' '}
           {discoverTransferLoading
@@ -454,80 +643,103 @@ function DestinationQuery() {
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       {/* 搜索表单 */}
-      <Card>
+      <Card bodyStyle={isMobile ? { padding: '12px' } : undefined}>
         <Form
           form={form}
-          layout="inline"
+          layout={isMobile ? "vertical" : "inline"}
           onFinish={handleSearch}
           initialValues={{
             flightType: '全部',
             dateRange: [dayjs(), dayjs().add(30, 'day')],
           }}
         >
-          <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
-            <Select
-              placeholder="请选择出发地"
-              style={{ width: 180 }}
-              showSearch
-              filterOption={(input, option) =>
-                (option?.label?.toString() || '').toLowerCase().includes(input.toLowerCase())
-              }
-            >
-              {availableOrigins.map(city => (
-                <Select.Option key={city} value={city}>{city}</Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
+          <Row gutter={isMobile ? [8, 8] : [16, 16]}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
+                <Select
+                  placeholder="请选择出发地"
+                  style={{ width: '100%' }}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.label?.toString() || '').toLowerCase().includes(input.toLowerCase())
+                  }
+                >
+                  {availableOrigins.map(city => (
+                    <Select.Option key={city} value={city}>{city}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
 
-          <Form.Item name="dateRange" label="日期范围" rules={[{ required: true, message: '请选择日期范围' }]}>
-            <RangePicker />
-          </Form.Item>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="dateRange" label="日期范围" rules={[{ required: true, message: '请选择日期范围' }]}>
+                <RangePicker
+                  style={{ width: '100%' }}
+                  getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
+                  placement={isMobile ? 'bottomLeft' : undefined}
+                />
+              </Form.Item>
+            </Col>
 
-          <Form.Item name="flightType" label="权益卡类型">
-            <Select style={{ width: 160 }}>
-              <Select.Option value="全部">全部权益卡</Select.Option>
-              <Select.Option value="666权益卡航班">666权益卡航班</Select.Option>
-              <Select.Option value="2666权益卡航班">2666权益卡航班</Select.Option>
-            </Select>
-          </Form.Item>
+            <Col xs={24} sm={12} md={5}>
+              <Form.Item name="flightType" label="权益卡类型">
+                <Select style={{ width: '100%' }}>
+                  <Select.Option value="全部">全部权益卡</Select.Option>
+                  <Select.Option value="666权益卡航班">666权益卡航班</Select.Option>
+                  <Select.Option value="2666权益卡航班">2666权益卡航班</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
-              查询
-            </Button>
-          </Form.Item>
+            <Col xs={24} sm={12} md={3}>
+              <Form.Item label={isMobile ? " " : undefined}>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  icon={<SearchOutlined />}
+                  loading={loading}
+                  block={isMobile}
+                >
+                  查询
+                </Button>
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Card>
 
       {destinations.length > 0 && (
         <Card
           bodyStyle={{ padding: 0 }}
+          headStyle={isMobile ? { padding: '12px 16px' } : undefined}
           title={
-            <Row gutter={24} align="middle">
-              <Col>
+            <Row gutter={isMobile ? [8, 8] : [16, 16]} align="middle">
+              <Col xs={12} sm={8} md={6}>
                 <Statistic title="直飞往返" value={returnCount} suffix="个"
-                  valueStyle={{ color: '#52c41a', fontSize: 22 }} prefix={<SwapOutlined />} />
+                  valueStyle={{ color: '#52c41a', fontSize: isMobile ? 16 : 22 }} prefix={<SwapOutlined />} />
               </Col>
-              <Col>
+              <Col xs={12} sm={8} md={6}>
                 <Statistic title="直飞单程" value={oneWayCount} suffix="个"
-                  valueStyle={{ color: '#8c8c8c', fontSize: 22 }} prefix={<ArrowRightOutlined />} />
+                  valueStyle={{ color: '#8c8c8c', fontSize: isMobile ? 16 : 22 }} prefix={<ArrowRightOutlined />} />
               </Col>
-              <Col>
+              <Col xs={12} sm={8} md={6}>
                 <Statistic title="直飞合计" value={destinations.length} suffix="个"
-                  valueStyle={{ fontSize: 22 }} />
+                  valueStyle={{ fontSize: isMobile ? 16 : 22 }} />
               </Col>
-              <Col>
+              <Col xs={12} sm={8} md={6}>
                 {discoverTransferLoading
-                  ? <Space><NodeIndexOutlined style={{ color: '#fa8c16' }} /><span style={{ color: '#fa8c16' }}>中转搜索中...</span><Spin size="small" /></Space>
+                  ? <Space><NodeIndexOutlined style={{ color: '#fa8c16' }} /><span style={{ color: '#fa8c16', fontSize: isMobile ? 12 : 14 }}>中转搜索中...</span><Spin size="small" /></Space>
                   : transferDiscovered && (
                     <Statistic title="中转可达" value={validTransferRoundTrip.length + validTransferOneWay.length} suffix="个"
-                      valueStyle={{ color: '#fa8c16', fontSize: 22 }} prefix={<NodeIndexOutlined />} />
+                      valueStyle={{ color: '#fa8c16', fontSize: isMobile ? 16 : 22 }} prefix={<NodeIndexOutlined />} />
                   )
                 }
               </Col>
-              <Col flex="auto" style={{ textAlign: 'right' }}>
-                <Button type="link" icon={<AimOutlined />} onClick={goToExplore}>行程规划</Button>
-              </Col>
+              {!isMobile && (
+                <Col xs={24} sm={24} md={24} style={{ textAlign: 'right' }}>
+                  <Button type="link" icon={<AimOutlined />} onClick={goToExplore}>行程规划</Button>
+                </Col>
+              )}
             </Row>
           }
         >
@@ -535,11 +747,31 @@ function DestinationQuery() {
             activeKey={activeTab}
             onChange={setActiveTab}
             size="small"
-            style={{ padding: '0 16px' }}
+            style={{ padding: isMobile ? '0 8px' : '0 16px' }}
             items={tabItems.map(t => ({
               key: t.key,
               label: t.label,
-              children: (
+              children: isMobile ? (
+                // 移动端：卡片视图
+                <div style={{ padding: '12px 0' }}>
+                  {t.data.length > 0 ? (
+                    t.data.map(row => (
+                      <DestinationCard
+                        key={getCity(row)}
+                        row={row}
+                        onShowDetail={handleShowDetail}
+                        onShowTransferRoutes={handleShowTransferRoutes}
+                        onPlan={goToPlan}
+                      />
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
+                      暂无数据
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // 桌面端：表格视图
                 <Table<UnifiedRow>
                   columns={unifiedColumns}
                   dataSource={t.data}
@@ -547,6 +779,7 @@ function DestinationQuery() {
                   size="small"
                   pagination={{ pageSize: 20, showSizeChanger: true, showTotal: total => `共 ${total} 个目的地` }}
                   loading={loading}
+                  scroll={{ x: 1000 }}
                 />
               ),
             }))}
@@ -615,7 +848,8 @@ function DestinationQuery() {
             }
             open={!!city}
             onCancel={() => setTransferModalCity(null)}
-            width={780}
+            width={screens.md ? 780 : '95%'}
+            style={{ top: screens.md ? undefined : 20 }}
             footer={
               <Button
                 type="primary"
@@ -667,7 +901,8 @@ function DestinationQuery() {
         }
         open={isModalVisible}
         onCancel={() => setIsModalVisible(false)}
-        width={1100}
+        width={screens.md ? 1100 : '95%'}
+        style={{ top: screens.md ? undefined : 20 }}
         footer={null}
       >
         <Space direction="vertical" size="large" style={{ width: '100%' }}>

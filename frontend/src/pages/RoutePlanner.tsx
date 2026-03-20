@@ -18,6 +18,7 @@ import {
   Divider,
   Spin,
   Drawer,
+  Grid,
 } from 'antd';
 import {
   SearchOutlined,
@@ -39,6 +40,8 @@ import {
 } from '@/api/route';
 import { getAvailableCities } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDepartRange, setDepartRange, getReturnRange, setReturnRange, getDefaultDateRange } from '@/utils/cookie';
+
+const { useBreakpoint } = Grid;
 
 // ─── 工具函数 ───────────────────────────────────────────────
 
@@ -242,6 +245,8 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
   const [roundTripRoutes, setRoundTripRoutes] = useState<RoundTripResult[]>([]);
   const [loadingRoutes, setLoadingRoutes] = useState(false);
   const triggeredRef = useRef(false);
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   useEffect(() => {
     if (cities.length === 0 || !dateRange.minDate) return;
@@ -338,35 +343,55 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
       <Card style={{ marginBottom: 16 }}>
         <Form
           form={form}
-          layout="inline"
+          layout={isMobile ? "vertical" : "inline"}
           onFinish={handleSearch}
           initialValues={{}}
         >
-          <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
-            <Select
-              placeholder="出发地"
-              style={{ width: 160 }}
-              showSearch
-              filterOption={(input, option) =>
-                (option?.value?.toString() || '').includes(input)
-              }
-              options={cities.map(c => ({ value: c, label: c }))}
-            />
-          </Form.Item>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
+                <Select
+                  placeholder="出发地"
+                  style={{ width: '100%' }}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.value?.toString() || '').includes(input)
+                  }
+                  options={cities.map(c => ({ value: c, label: c }))}
+                />
+              </Form.Item>
+            </Col>
 
-          <Form.Item name="departureRange" label="去程日期" rules={[{ required: true, message: '请选择去程日期范围' }]}>
-            <DatePicker.RangePicker placeholder={['去程最早', '去程最晚']} style={{ width: 240 }} />
-          </Form.Item>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="departureRange" label="去程日期" rules={[{ required: true, message: '请选择去程日期范围' }]}>
+                <DatePicker.RangePicker
+                  placeholder={['去程最早', '去程最晚']}
+                  style={{ width: '100%' }}
+                  getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
+                  placement={isMobile ? 'bottomLeft' : undefined}
+                />
+              </Form.Item>
+            </Col>
 
-          <Form.Item name="returnRange" label="返程日期" rules={[{ required: true, message: '请选择返程日期范围' }]}>
-            <DatePicker.RangePicker placeholder={['返程最早', '返程最晚']} style={{ width: 240 }} />
-          </Form.Item>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="returnRange" label="返程日期" rules={[{ required: true, message: '请选择返程日期范围' }]}>
+                <DatePicker.RangePicker
+                  placeholder={['返程最早', '返程最晚']}
+                  style={{ width: '100%' }}
+                  getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
+                  placement={isMobile ? 'bottomLeft' : undefined}
+                />
+              </Form.Item>
+            </Col>
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
-              探索目的地
-            </Button>
-          </Form.Item>
+            <Col xs={24} sm={12} md={2}>
+              <Form.Item>
+                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block={isMobile}>
+                  探索目的地
+                </Button>
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Card>
 
@@ -443,6 +468,8 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
   const [loading, setLoading] = useState(false);
   const [oneWayRoutes, setOneWayRoutes] = useState<RouteResult[]>([]);
   const [roundTripRoutes, setRoundTripRoutes] = useState<RoundTripResult[]>([]);
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   useEffect(() => {
     if (cities.length === 0 || !dateRange.minDate) return;
@@ -559,51 +586,76 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
       <Card style={{ marginBottom: 16 }}>
         <Form
           form={form}
-          layout="inline"
+          layout={isMobile ? "vertical" : "inline"}
           onFinish={handleSearch}
           initialValues={{ maxTransfers: 1 }}
         >
-          <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
-            <Select
-              placeholder="出发地"
-              style={{ width: 150 }}
-              showSearch
-              filterOption={(input, option) =>
-                (option?.value?.toString() || '').includes(input)
-              }
-              options={cities.map(c => ({ value: c, label: c }))}
-            />
-          </Form.Item>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={12} md={5}>
+              <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
+                <Select
+                  placeholder="出发地"
+                  style={{ width: '100%' }}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.value?.toString() || '').includes(input)
+                  }
+                  options={cities.map(c => ({ value: c, label: c }))}
+                />
+              </Form.Item>
+            </Col>
 
-          <Form.Item name="destination" rules={[{ required: true, message: '请选择目的地' }]}>
-            <Select
-              placeholder="目的地"
-              style={{ width: 150 }}
-              showSearch
-              filterOption={(input, option) =>
-                (option?.value?.toString() || '').includes(input)
-              }
-              options={cities.map(c => ({ value: c, label: c }))}
-            />
-          </Form.Item>
+            <Col xs={24} sm={12} md={5}>
+              <Form.Item name="destination" rules={[{ required: true, message: '请选择目的地' }]}>
+                <Select
+                  placeholder="目的地"
+                  style={{ width: '100%' }}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.value?.toString() || '').includes(input)
+                  }
+                  options={cities.map(c => ({ value: c, label: c }))}
+                />
+              </Form.Item>
+            </Col>
 
-          <Form.Item name="departureRange" label="去程日期" rules={[{ required: true, message: '请选择去程日期' }]}>
-            <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: 220 }} />
-          </Form.Item>
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item name="departureRange" label="去程日期" rules={[{ required: true, message: '请选择去程日期' }]}>
+                <DatePicker.RangePicker
+                  placeholder={['最早', '最晚']}
+                  style={{ width: '100%' }}
+                  getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
+                  placement={isMobile ? 'bottomLeft' : undefined}
+                />
+              </Form.Item>
+            </Col>
 
-          <Form.Item name="returnRange" label="返程日期（可选）">
-            <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: 220 }} allowEmpty={[true, true]} />
-          </Form.Item>
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item name="returnRange" label="返程日期（可选）">
+                <DatePicker.RangePicker
+                  placeholder={['最早', '最晚']}
+                  style={{ width: '100%' }}
+                  allowEmpty={[true, true]}
+                  getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
+                  placement={isMobile ? 'bottomLeft' : undefined}
+                />
+              </Form.Item>
+            </Col>
 
-          <Form.Item name="maxTransfers" label="最多中转">
-            <InputNumber min={0} max={2} style={{ width: 70 }} />
-          </Form.Item>
+            <Col xs={12} sm={8} md={1}>
+              <Form.Item name="maxTransfers" label="最多中转">
+                <InputNumber min={0} max={2} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
-              查询路线
-            </Button>
-          </Form.Item>
+            <Col xs={12} sm={16} md={1}>
+              <Form.Item>
+                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block={isMobile}>
+                  查询路线
+                </Button>
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Card>
 

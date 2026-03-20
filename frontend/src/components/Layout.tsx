@@ -1,12 +1,17 @@
-import { Layout as AntLayout, Menu } from 'antd';
+import { useState } from 'react';
+import { Layout as AntLayout, Menu, Drawer, Button, Grid } from 'antd';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined } from '@ant-design/icons';
+import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined } from '@ant-design/icons';
 
 const { Header, Content } = AntLayout;
+const { useBreakpoint } = Grid;
 
 function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const screens = useBreakpoint();
+  const isMobile = !screens.md; // < 768px
 
   const menuItems = [
     {
@@ -50,20 +55,60 @@ function Layout() {
 
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', alignItems: 'center' }}>
-        <div style={{ color: 'white', fontSize: '20px', marginRight: '50px' }}>
+      <Header style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: isMobile ? '0 16px' : '0 50px'
+      }}>
+        <div style={{
+          color: 'white',
+          fontSize: isMobile ? '16px' : '20px',
+          marginRight: isMobile ? '16px' : '50px',
+          whiteSpace: 'nowrap'
+        }}>
           ✈️ 随心飞分析工具
         </div>
-        <Menu
-          theme="dark"
-          mode="horizontal"
-          selectedKeys={[currentPath]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-          style={{ flex: 1, minWidth: 0 }}
-        />
+
+        {isMobile ? (
+          <>
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={() => setDrawerVisible(true)}
+              style={{ color: 'white', marginLeft: 'auto' }}
+            />
+            <Drawer
+              title="导航菜单"
+              placement="right"
+              onClose={() => setDrawerVisible(false)}
+              open={drawerVisible}
+            >
+              <Menu
+                mode="inline"
+                selectedKeys={[currentPath]}
+                items={menuItems}
+                onClick={({ key }) => {
+                  navigate(key);
+                  setDrawerVisible(false);
+                }}
+              />
+            </Drawer>
+          </>
+        ) : (
+          <Menu
+            theme="dark"
+            mode="horizontal"
+            selectedKeys={[currentPath]}
+            items={menuItems}
+            onClick={({ key }) => navigate(key)}
+            style={{ flex: 1, minWidth: 0 }}
+          />
+        )}
       </Header>
-      <Content style={{ padding: '24px', background: '#f0f2f5' }}>
+      <Content style={{
+        padding: isMobile ? '16px' : '24px',
+        background: '#f0f2f5'
+      }}>
         <Outlet />
       </Content>
     </AntLayout>
