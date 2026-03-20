@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import DestinationQuery from './pages/DestinationQuery';
 import RoutePlanner from './pages/RoutePlanner';
@@ -8,6 +8,12 @@ import AirportManagement from './pages/AirportManagement';
 import FlightMap from './pages/FlightMap';
 import CacheManagement from './pages/CacheManagement';
 import CronManagement from './pages/CronManagement';
+import { getAdminToken } from './utils/auth';
+
+// 管理员路由保护：无 token 时重定向到首页
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  return getAdminToken() ? <>{children}</> : <Navigate to="/destination" replace />;
+}
 
 function App() {
   return (
@@ -16,12 +22,12 @@ function App() {
         <Route index element={<DestinationQuery />} />
         <Route path="destination" element={<DestinationQuery />} />
         <Route path="route-planner" element={<RoutePlanner />} />
-        <Route path="data-management" element={<DataManagement />} />
-        <Route path="flight-management" element={<FlightManagement />} />
-        <Route path="airport-management" element={<AirportManagement />} />
         <Route path="flight-map" element={<FlightMap />} />
-        <Route path="cache-management" element={<CacheManagement />} />
-        <Route path="cron-management" element={<CronManagement />} />
+        <Route path="data-management" element={<AdminRoute><DataManagement /></AdminRoute>} />
+        <Route path="flight-management" element={<AdminRoute><FlightManagement /></AdminRoute>} />
+        <Route path="airport-management" element={<AdminRoute><AirportManagement /></AdminRoute>} />
+        <Route path="cache-management" element={<AdminRoute><CacheManagement /></AdminRoute>} />
+        <Route path="cron-management" element={<AdminRoute><CronManagement /></AdminRoute>} />
       </Route>
     </Routes>
   );
