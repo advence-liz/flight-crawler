@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Cron } from '@nestjs/schedule';
+import { Cron, SchedulerRegistry } from '@nestjs/schedule';
 // puppeteer 为可选依赖，仅本地爬虫环境需要，生产环境动态加载
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const puppeteer = (() => { try { return require('puppeteer'); } catch { return null; } })();
@@ -17,7 +17,7 @@ import {
 } from './entities/crawler-log.entity';
 
 @Injectable()
-export class CrawlerService {
+export class CrawlerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CrawlerService.name);
   private browser: any | null = null;
   private readonly screenshotDir = path.join(process.cwd(), 'debug-screenshots');
@@ -38,11 +38,26 @@ export class CrawlerService {
   constructor(
     private readonly flightService: FlightService,
     private readonly routeService: RouteService,
+    private readonly schedulerRegistry: SchedulerRegistry,
     @InjectRepository(CrawlerLog)
     private readonly crawlerLogRepository: Repository<CrawlerLog>,
   ) {
     // 确保截图目录存在
     this.ensureScreenshotDir();
+  }
+
+  /**
+   * 应用启动后，根据环境变量决定是否停止自动爬取任务
+   * CRAWLER_AUTO_CRAWL=false 时停止（线上默认关闭，本地默认开启）
+   */
+  onApplicationBootstrap() {
+    const enabled = process.env.CRAWLER_AUTO_CRAWL !== 'false';
+    if (!enabled) {
+      try {
+        this.schedulerRegistry.getCronJob('auto-crawl-flights').stop();
+        this.logger.log('⚙️ auto-crawl-flights 定时任务已禁用（CRAWLER_AUTO_CRAWL=false）');
+      } catch { /* 任务不存在时忽略 */ }
+    }
   }
 
   /**
