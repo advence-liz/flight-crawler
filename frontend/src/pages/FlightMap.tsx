@@ -127,7 +127,7 @@ function FlightMap() {
     const hasTransferDests = showTransfer && (transferRoundTrip.length > 0 || transferOneWay.length > 0);
     if (!origin || (!hasDirectDests && !hasTransferDests)) return null;
 
-    // 节点：出发地固定在画布中心
+    // 节点：出发地固定在画布中心（fixed:true 必须配合 x/y，使用 50%/50% 对应画布中心）
     const nodes: any[] = [
       {
         id: origin,
@@ -137,8 +137,8 @@ function FlightMap() {
         label: { show: true, color: '#1a1a1a', fontWeight: 700, fontSize: 13 },
         category: 0,
         fixed: true,
-        x: 0,
-        y: 0,
+        x: 400,
+        y: 330,
       },
     ];
 
@@ -309,6 +309,18 @@ function FlightMap() {
           return '';
         },
       },
+      toolbox: {
+        feature: {
+          saveAsImage: {
+            title: '保存为图片',
+            backgroundColor: '#0f172a',
+            pixelRatio: 2,
+          },
+        },
+        iconStyle: { borderColor: '#94a3b8' },
+        top: 12,
+        left: 12,
+      },
       legend: {
         data: [
           { name: '出发地', icon: 'circle', itemStyle: { color: '#facc15' } },
@@ -340,7 +352,7 @@ function FlightMap() {
           zoom: 0.6,
           force: {
             repulsion: 500,
-            gravity: 0.12,
+            gravity: 0.3,
             edgeLength: [180, 320],
             layoutAnimation: true,
             friction: 0.6,
@@ -507,12 +519,17 @@ function FlightMap() {
                   if (params.dataType === 'node' && params.data?.id !== origin) {
                     const values = form.getFieldsValue();
                     const [startDate, endDate] = values.dateRange || [];
+                    const start = startDate ? startDate.format('YYYY-MM-DD') : '';
+                    const end = endDate ? endDate.format('YYYY-MM-DD') : '';
                     const p = new URLSearchParams({
                       tab: 'plan',
                       origin,
                       destination: params.data.id,
-                      departureDate: startDate ? startDate.format('YYYY-MM-DD') : '',
-                      returnDate: endDate ? endDate.format('YYYY-MM-DD') : '',
+                      // 去程和返程都用航线图的完整日期区间，确保能查到数据
+                      departureDate: start,
+                      departureDateEnd: end,
+                      returnDate: start,
+                      returnDateEnd: end,
                     });
                     navigate(`/route-planner?${p.toString()}`);
                   }

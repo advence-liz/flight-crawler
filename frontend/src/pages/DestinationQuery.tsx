@@ -305,11 +305,15 @@ function DestinationQuery() {
   const goToExplore = () => {
     const values = form.getFieldsValue();
     const [startDate, endDate] = values.dateRange || [];
+    const start = startDate ? startDate.format('YYYY-MM-DD') : '';
+    const end = endDate ? endDate.format('YYYY-MM-DD') : '';
     const params = new URLSearchParams({
       tab: 'explore',
       origin: values.origin || '',
-      departureDate: startDate ? startDate.format('YYYY-MM-DD') : '',
-      returnDate: endDate ? endDate.format('YYYY-MM-DD') : '',
+      departureDate: start,
+      departureDateEnd: end,
+      returnDate: start,
+      returnDateEnd: end,
     });
     navigate(`/route-planner?${params.toString()}`);
   };
