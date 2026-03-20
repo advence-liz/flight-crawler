@@ -634,6 +634,20 @@ export class RouteService implements OnApplicationBootstrap {
   }
 
   /**
+   * 按出发地清除 transfer 缓存（定时刷新时使用）
+   */
+  async clearTransferCacheByOrigin(origin: string): Promise<void> {
+    const items = await this.queryCacheRepository
+      .createQueryBuilder('c')
+      .where('c.cacheKey LIKE :pattern', { pattern: `transfer|${origin}|%` })
+      .getMany();
+    if (items.length > 0) {
+      await this.queryCacheRepository.remove(items);
+      this.logger.log(`已清除 ${items.length} 条 ${origin} 的 transfer 缓存`);
+    }
+  }
+
+  /**
    * 应用启动后不自动预热，避免占用事件循环导致 health check 超时
    * 预热通过数据管理页面手动触发，或 db 中已有缓存数据时自动命中
    */

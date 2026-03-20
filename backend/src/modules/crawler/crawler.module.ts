@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CrawlerController } from './crawler.controller';
 import { FlightModule } from '../flight/flight.module';
+import { RouteModule } from '../route/route.module';
 import { CrawlerLog } from './entities/crawler-log.entity';
 import { CrawlerServiceStub } from './crawler.service.stub';
 
@@ -15,6 +16,7 @@ const CrawlerServiceImpl = crawlerEnabled ? require('./crawler.service').Crawler
   imports: [
     TypeOrmModule.forFeature([CrawlerLog]),
     FlightModule,
+    RouteModule,
   ],
   controllers: [CrawlerController],
   providers: [

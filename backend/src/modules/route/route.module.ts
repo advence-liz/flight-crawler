@@ -10,5 +10,6 @@ import { QueryCache } from './entities/query-cache.entity';
   imports: [FlightModule, TypeOrmModule.forFeature([QueryCache])],
   controllers: [RouteController],
   providers: [RouteService, RoundTripService],
+  exports: [RouteService],
 })
 export class RouteModule {}

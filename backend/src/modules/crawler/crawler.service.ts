@@ -8,6 +8,7 @@ const puppeteer = (() => { try { return require('puppeteer'); } catch { return n
 import * as fs from 'fs';
 import * as path from 'path';
 import { FlightService } from '../flight/flight.service';
+import { RouteService } from '../route/route.service';
 import { Flight } from '../flight/entities/flight.entity';
 import {
   CrawlerLog,
@@ -36,6 +37,7 @@ export class CrawlerService {
 
   constructor(
     private readonly flightService: FlightService,
+    private readonly routeService: RouteService,
     @InjectRepository(CrawlerLog)
     private readonly crawlerLogRepository: Repository<CrawlerLog>,
   ) {
@@ -2790,6 +2792,68 @@ export class CrawlerService {
     } catch (error) {
       this.logger.error('❌ 定时任务失败', error);
     }
+  }
+
+  /**
+   * 每小时刷新种子机场的目的地查询缓存
+   * 种子机场：北京首都、北京大兴、上海浦东、上海虹桥、深圳
+   * 刷新内容：destinations 缓存 + transfer 缓存
+   */
+  @Cron('7 * * * *', {
+    name: 'refresh-destination-cache',
+    timeZone: 'Asia/Shanghai',
+  })
+  async scheduledRefreshDestinationCache() {
+    this.logger.log('⏰ 定时缓存刷新：开始刷新种子机场目的地查询缓存');
+
+    const seedCities = ['北京', '上海', '深圳'];
+
+    // 获取当前数据库日期范围
+    const { minDate, maxDate } = await this.flightService.getAvailableCities();
+    if (!minDate || !maxDate) {
+      this.logger.warn('⚠️ 无航班数据，跳过缓存刷新');
+      return;
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const city of seedCities) {
+      try {
+        // 先删除旧缓存，强制重新计算
+        const destCacheList = await this.flightService.listQueryCache({ type: 'destinations' });
+        const keysToDelete = destCacheList.list
+          .filter(c => c.cacheKey.startsWith(`destinations|${city}|`))
+          .map(c => c.cacheKey);
+        if (keysToDelete.length > 0) {
+          await this.flightService.deleteCacheByKeys(keysToDelete);
+        }
+        await this.routeService.clearTransferCacheByOrigin(city);
+
+        // 重新查询（自动写入新缓存）
+        await this.flightService.queryDestinations({
+          origin: city,
+          startDate: minDate,
+          endDate: maxDate,
+          includeReturn: true,
+        });
+
+        await this.routeService.discoverTransferDestinations({
+          origin: city,
+          departureDate: minDate,
+          endDate: maxDate,
+          maxTransfers: 1,
+        });
+
+        this.logger.log(`✅ ${city} 缓存刷新完成`);
+        successCount++;
+      } catch (error) {
+        this.logger.warn(`⚠️ ${city} 缓存刷新失败: ${error.message}`);
+        failCount++;
+      }
+    }
+
+    this.logger.log(`⏰ 缓存刷新完成：${successCount} 成功 / ${failCount} 失败`);
   }
 
   /**
