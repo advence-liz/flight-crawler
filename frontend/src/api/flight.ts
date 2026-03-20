@@ -5,7 +5,7 @@ export interface QueryFlightsParams {
   destination?: string;
   startDate: string;
   endDate: string;
-  flightType?: '全部' | '666权益卡' | '2666权益卡';
+  flightType?: '666权益卡航班' | '2666权益卡航班';
 }
 
 export interface DestinationResult {

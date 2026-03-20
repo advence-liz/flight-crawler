@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card,
   Form,
@@ -26,8 +26,6 @@ import {
   SwapOutlined,
   RightOutlined,
   ArrowRightOutlined,
-  CompassOutlined,
-  EnvironmentOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
@@ -712,7 +710,6 @@ function RoutePlanner() {
   const [dateRange, setDateRange] = useState<{ minDate: string | null; maxDate: string | null }>({ minDate: null, maxDate: null });
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('explore');
-  const navigate = useNavigate();
 
   // 从 URL params 解析初始参数
   const urlParams = {
@@ -767,16 +764,6 @@ function RoutePlanner() {
     },
   ];
 
-  // 反向跳转：带当前 origin/departureDate/returnDate 参数回到目的地查询或航线地图
-  const goBack = (target: 'destination' | 'flight-map') => {
-    const p = new URLSearchParams();
-    if (urlParams.origin) p.set('origin', urlParams.origin);
-    if (urlParams.departureDate) p.set('departureDate', urlParams.departureDate);
-    if (urlParams.returnDate) p.set('returnDate', urlParams.returnDate);
-    const query = p.toString();
-    navigate(target === 'destination' ? `/?${query}` : `/flight-map?${query}`);
-  };
-
   return (
     <div style={{ padding: '0 4px' }}>
       <Tabs
@@ -784,16 +771,6 @@ function RoutePlanner() {
         onChange={setActiveTab}
         items={tabItems}
         size="large"
-        tabBarExtraContent={
-          <Space>
-            <Button size="small" icon={<EnvironmentOutlined />} onClick={() => goBack('destination')}>
-              目的地查询
-            </Button>
-            <Button size="small" icon={<CompassOutlined />} onClick={() => goBack('flight-map')}>
-              航线地图
-            </Button>
-          </Space>
-        }
       />
     </div>
   );

@@ -646,7 +646,7 @@ function DestinationQuery() {
           layout={isMobile ? "vertical" : "inline"}
           onFinish={handleSearch}
           initialValues={{
-            flightType: '全部',
+            flightType: '2666权益卡航班',
             dateRange: [dayjs(), dayjs().add(30, 'day')],
           }}
         >
@@ -682,9 +682,8 @@ function DestinationQuery() {
               <Col xs={24}>
                 <Form.Item name="flightType" label="权益卡类型">
                   <Select style={{ width: '100%' }}>
-                    <Select.Option value="全部">全部权益卡</Select.Option>
-                    <Select.Option value="666权益卡航班">666权益卡航班</Select.Option>
-                    <Select.Option value="2666权益卡航班">2666权益卡航班</Select.Option>
+                    <Select.Option value="666权益卡航班">666权益卡</Select.Option>
+                    <Select.Option value="2666权益卡航班">2666权益卡（含全部）</Select.Option>
                   </Select>
                 </Form.Item>
               </Col>
@@ -726,9 +725,8 @@ function DestinationQuery() {
 
               <Form.Item name="flightType" label="权益卡类型">
                 <Select style={{ width: 160 }}>
-                  <Select.Option value="全部">全部权益卡</Select.Option>
-                  <Select.Option value="666权益卡航班">666权益卡航班</Select.Option>
-                  <Select.Option value="2666权益卡航班">2666权益卡航班</Select.Option>
+                  <Select.Option value="666权益卡航班">666权益卡</Select.Option>
+                  <Select.Option value="2666权益卡航班">2666权益卡（含全部）</Select.Option>
                 </Select>
               </Form.Item>
 

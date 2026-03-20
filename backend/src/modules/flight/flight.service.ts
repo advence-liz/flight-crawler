@@ -38,7 +38,8 @@ export class FlightService {
     dto: QueryFlightsDto,
   ): Promise<DestinationsResponseDto> {
     const { origin, startDate, endDate, flightType, includeReturn = true } = dto;
-    const flightTypeKey = flightType || '全部';
+    // 默认 2666（显示全部），选 666 时只显示 666 可用航班
+    const flightTypeKey = flightType || '2666权益卡航班';
 
     // 仅在包含返程时使用缓存
     if (includeReturn) {
@@ -64,7 +65,8 @@ export class FlightService {
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
 
-    if (flightType && flightType !== '全部') {
+    // 选 666 时只显示 666 可用航班；选 2666 或不传时显示全部（2666 全部可用）
+    if (flightType === '666权益卡航班') {
       query = query.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
     }
 
@@ -116,7 +118,7 @@ export class FlightService {
         .andWhere('flight.departureTime >= :startDateTime', { startDateTime })
         .andWhere('flight.departureTime <= :endDateTime', { endDateTime });
 
-      if (flightType && flightType !== '全部') {
+      if (flightType === '666权益卡航班') {
         returnQuery = returnQuery.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
       }
 

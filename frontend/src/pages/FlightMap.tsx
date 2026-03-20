@@ -48,7 +48,7 @@ function FlightMap() {
         origin: originVal,
         startDate,
         endDate,
-        flightType: (flightType || '全部') as '全部' | '666权益卡' | '2666权益卡',
+        flightType: (flightType || '2666权益卡航班') as '666权益卡航班' | '2666权益卡航班',
       });
       setDestinations(result.destinations);
       setOrigin(originVal);
@@ -104,7 +104,7 @@ function FlightMap() {
         const dateRange = values.dateRange || [];
         const [start, end] = dateRange;
         if (start && end) {
-          doSearch(defaultOrigin, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD'), values.flightType || '全部');
+          doSearch(defaultOrigin, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD'), values.flightType || '2666权益卡航班');
         }
       })
       .catch(console.error);
@@ -395,7 +395,7 @@ function FlightMap() {
           layout="horizontal"
           onFinish={handleSearch}
           initialValues={{
-            flightType: '全部',
+            flightType: '2666权益卡航班',
             dateRange: [dayjs(), dayjs().add(30, 'day')],
           }}
         >
@@ -427,9 +427,8 @@ function FlightMap() {
             <Col xs={24} sm={12} md={5}>
               <Form.Item name="flightType" label="权益卡">
                 <Select style={{ width: '100%' }}>
-                  <Select.Option value="全部">全部权益卡</Select.Option>
                   <Select.Option value="666权益卡航班">666权益卡</Select.Option>
-                  <Select.Option value="2666权益卡航班">2666权益卡</Select.Option>
+                  <Select.Option value="2666权益卡航班">2666权益卡（含全部）</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
