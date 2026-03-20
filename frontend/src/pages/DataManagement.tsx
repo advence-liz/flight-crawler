@@ -872,10 +872,10 @@ function DataManagement() {
                     {executionPlan.totalAirports} 个
                   </Descriptions.Item>
                   <Descriptions.Item label="并发度">
-                    10 个任务/批
+                    {(executionPlan as any).dateConcurrency ?? 10} 个日期/批，每日 {(executionPlan as any).airportConcurrency ?? 3} 个机场并发
                   </Descriptions.Item>
                   <Descriptions.Item label="预计耗时">
-                    {executionPlan.estimatedTime}
+                    {executionPlan.estimatedTime}（仅供参考，实际取决于航班数量）
                   </Descriptions.Item>
                   <Descriptions.Item label="日期范围">
                     {executionPlan.dateRange[0]} ~ {executionPlan.dateRange[executionPlan.dateRange.length - 1]}

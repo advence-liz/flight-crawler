@@ -173,6 +173,20 @@ export class FlightService {
   }
 
   /**
+   * 全量加载日期范围内所有航班（用于中转搜索，1次SQL替代N+1）
+   */
+  async queryAllFlightsInRange(startDate: string, endDate: string): Promise<Flight[]> {
+    const startDateTime = new Date(startDate);
+    const endDateTime = new Date(endDate);
+    endDateTime.setHours(23, 59, 59, 999);
+    return this.flightRepository.createQueryBuilder('flight')
+      .where('flight.departureTime >= :startDateTime', { startDateTime })
+      .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
+      .orderBy('flight.departureTime', 'ASC')
+      .getMany();
+  }
+
+  /**
    * 查询指定航线的航班 - 只查询666和2666权益卡航班
    */
   async queryFlights(dto: QueryFlightsDto & { origins?: string[] }): Promise<Flight[]> {

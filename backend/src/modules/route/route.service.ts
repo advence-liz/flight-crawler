@@ -306,6 +306,56 @@ export class RouteService implements OnApplicationBootstrap {
   }
 
   /**
+   * 一次 DFS 收集所有目的地的路径，按目的地分组返回（避免对每个目的地单独跑 DFS）
+   */
+  private findAllRoutesGroupedByDest(
+    graph: Map<string, GraphNode>,
+    origins: string[],
+    excludeOrigins: Set<string>,
+    maxTransfers: number,
+    minLayoverHours: number,
+    maxLayoverHours: number,
+  ): Map<string, RouteResultDto[]> {
+    const result = new Map<string, RouteResultDto[]>();
+    const visited = new Set<string>();
+    const path: Flight[] = [];
+    const minLayoverMs = minLayoverHours * 60 * 60 * 1000;
+    const maxLayoverMs = maxLayoverHours * 60 * 60 * 1000;
+
+    const dfs = (current: string) => {
+      if (path.length > 0 && !excludeOrigins.has(current)) {
+        // 到达一个非起点城市，记录路径
+        if (!result.has(current)) result.set(current, []);
+        result.get(current)!.push(this.buildRouteResult([...path]));
+      }
+      if (path.length >= maxTransfers + 1) return; // 已达最大段数
+      if (visited.has(current)) return;
+
+      visited.add(current);
+      const node = graph.get(current);
+      if (node) {
+        for (const flight of node.flights) {
+          if (path.length > 0) {
+            const lastArrival = path[path.length - 1].arrivalTime.getTime();
+            const layoverMs = flight.departureTime.getTime() - lastArrival;
+            if (layoverMs < minLayoverMs || layoverMs > maxLayoverMs) continue;
+          }
+          path.push(flight);
+          dfs(flight.destination);
+          path.pop();
+        }
+      }
+      visited.delete(current);
+    };
+
+    for (const origin of origins) {
+      visited.clear();
+      dfs(origin);
+    }
+    return result;
+  }
+
+  /**
    * 多起点 × 多终点 DFS（支持城市下多机场）
    */
   private findAllRoutesMulti(
@@ -452,24 +502,19 @@ export class RouteService implements OnApplicationBootstrap {
       return JSON.parse(cached.data);
     }
 
-    // 1. 建去程完整图：A 出发的直飞 + 所有一跳中转城市出发的航班
+    // 1. 一次性加载日期范围内所有航班，内存建图（消除 N+1）
     const originAirports = await this.flightService.expandCityToAirports(params.origin);
-    const firstLegFlights = await this.flightService.queryFlights({
-      origin: originAirports[0],
-      origins: originAirports,
-      startDate: params.departureDate,
-      endDate,
-    });
-    const firstHopCities = new Set<string>();
-    for (const f of firstLegFlights) {
-      if (!originAirports.includes(f.destination)) firstHopCities.add(f.destination);
+    const allFlights = await this.flightService.queryAllFlightsInRange(params.departureDate, endDate);
+    this.logger.log(`全量加载航班 ${allFlights.length} 条，开始内存建图`);
+
+    // 去程图：只保留从出发城市机场出发，以及它们一跳可达的城市出发的航班
+    const firstHopDestinations = new Set<string>();
+    for (const f of allFlights) {
+      if (originAirports.includes(f.origin)) firstHopDestinations.add(f.destination);
     }
-    const outboundTransitLegsArray = await pLimit(
-      Array.from(firstHopCities).map(city =>
-        () => this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate }),
-      ), 10);
-    const outboundFlights = [...firstLegFlights];
-    outboundTransitLegsArray.forEach(legs => outboundFlights.push(...legs));
+    const outboundFlights = allFlights.filter(f =>
+      originAirports.includes(f.origin) || firstHopDestinations.has(f.origin),
+    );
     const outboundGraph = this.buildGraph(outboundFlights);
 
     // 2. 收集去程可达的所有目的地（排除出发城市的所有机场）
@@ -480,49 +525,53 @@ export class RouteService implements OnApplicationBootstrap {
       }
     }
     const candidateCities = Array.from(outboundReachable);
-
     this.logger.log(`去程可达 ${candidateCities.length} 个目的地`);
 
-    // 3. 建返程完整图：所有候选目的地出发的航班 + 它们的一跳邻居
-    const returnFirstLegsArray = await pLimit(
-      candidateCities.map(city =>
-        () => this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate })
-          .then(legs => ({ city, legs })),
-      ), 10);
-    const returnFlightsMap = new Map<string, Flight[]>();
-    returnFirstLegsArray.forEach(({ city, legs }) => returnFlightsMap.set(city, legs));
+    // 3. 返程图：候选目的地出发，以及它们一跳可达的城市出发的航班（全量数据已在内存，直接过滤）
+    const returnFirstHopDestinations = new Set<string>(candidateCities);
+    for (const f of allFlights) {
+      if (candidateCities.includes(f.origin)) returnFirstHopDestinations.add(f.destination);
+    }
+    const returnFlights = allFlights.filter(f =>
+      candidateCities.includes(f.origin) || (returnFirstHopDestinations.has(f.origin) && !originAirports.includes(f.origin)),
+    );
+    const returnGraph = this.buildGraph(returnFlights);
 
-    // 收集返程的中转城市（候选目的地的邻居，且不是起点）
-    const returnTransitCities = new Set<string>();
-    for (const legs of returnFlightsMap.values()) {
-      for (const f of legs) {
-        if (!returnFlightsMap.has(f.destination) && f.destination !== params.origin) {
-          returnTransitCities.add(f.destination);
+    // 4. 一次 DFS 收集所有目的地路径，按目的地分组
+    const originSet = new Set(originAirports);
+
+    // 去程：从出发机场出发，一次 DFS 得到所有目的地的路径
+    const outboundByDest = this.findAllRoutesGroupedByDest(
+      outboundGraph, originAirports, originSet, maxTransfers, minLayoverHours, maxLayoverHours,
+    );
+
+    // 返程：从各候选城市出发，一次 DFS 得到能回到出发城市的路径
+    const returnByDest = this.findAllRoutesGroupedByDest(
+      returnGraph, candidateCities, new Set(candidateCities), maxTransfers, minLayoverHours, maxLayoverHours,
+    );
+    // returnByDest 的 key 是返程的终点，只保留终点是出发机场的路径
+    const returnBySrc = new Map<string, RouteResultDto[]>();
+    for (const [dest, routes] of returnByDest) {
+      if (originAirports.includes(dest)) {
+        // dest 是出发机场，routes 的出发地是候选城市
+        for (const route of routes) {
+          const src = route.segments[0].origin;
+          if (!returnBySrc.has(src)) returnBySrc.set(src, []);
+          returnBySrc.get(src)!.push(route);
         }
       }
     }
-    const returnAllFlights: Flight[] = [];
-    for (const legs of returnFlightsMap.values()) returnAllFlights.push(...legs);
-    const returnTransitLegsArray = await pLimit(
-      Array.from(returnTransitCities).map(city =>
-        () => this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate }),
-      ), 10);
-    returnTransitLegsArray.forEach(legs => returnAllFlights.push(...legs));
-    const returnGraph = this.buildGraph(returnAllFlights);
 
-    // 4. 对每个候选目的地分别搜索去程和返程路径
     const roundTripResults: Array<{ city: string; outboundRoutes: RouteResultDto[]; returnRoutes: RouteResultDto[]; outboundCount: number; returnCount: number }> = [];
     const oneWayResults: Array<{ city: string; routes: RouteResultDto[]; routeCount: number }> = [];
 
     for (const city of candidateCities) {
-      // 去程：origin（多机场）-> city（允许中转）
-      const outboundRoutes = this.findAllRoutesMulti(outboundGraph, originAirports, [city], maxTransfers, minLayoverHours, maxLayoverHours);
-      if (outboundRoutes.length === 0) continue;
+      const outboundRoutes = outboundByDest.get(city);
+      if (!outboundRoutes?.length) continue;
       const scoredOutbound = outboundRoutes.map(r => this.calculateScore(r)).sort((a, b) => b.score - a.score);
 
-      // 返程：city -> origin（多机场，允许中转）
-      const returnRoutes = this.findAllRoutesMulti(returnGraph, [city], originAirports, maxTransfers, minLayoverHours, maxLayoverHours);
-      const scoredReturn = returnRoutes.map(r => this.calculateScore(r)).sort((a, b) => b.score - a.score);
+      const returnRoutes = returnBySrc.get(city);
+      const scoredReturn = returnRoutes ? returnRoutes.map(r => this.calculateScore(r)).sort((a, b) => b.score - a.score) : [];
 
       if (scoredReturn.length > 0) {
         roundTripResults.push({

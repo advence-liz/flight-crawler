@@ -36,7 +36,7 @@ import {
   getAvailableCities,
   type Flight,
 } from '@/api/flight';
-import { getDefaultOrigin, setOriginCookie } from '@/utils/cookie';
+import { getOriginCookie, setOriginCookie } from '@/utils/cookie';
 
 const { Title, Paragraph } = Typography;
 const { RangePicker } = DatePicker;
@@ -124,7 +124,7 @@ function FlightManagement() {
 
   // 初始化：设置表单默认值，加载城市和航班
   useEffect(() => {
-    const savedOrigin = getDefaultOrigin('');
+    const savedOrigin = getOriginCookie(); // 航班管理用机场名精确查询，直接读原始 cookie
     filterForm.setFieldsValue({
       origin: savedOrigin || undefined,
       dateRange: defaultDateRange,
