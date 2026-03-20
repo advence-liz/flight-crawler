@@ -653,12 +653,65 @@ function DestinationQuery() {
             dateRange: [dayjs(), dayjs().add(30, 'day')],
           }}
         >
-          <Row gutter={isMobile ? [8, 8] : [16, 16]}>
-            <Col xs={24} sm={12} md={8}>
+          {isMobile ? (
+            <Row gutter={[8, 8]}>
+              <Col xs={24}>
+                <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
+                  <Select
+                    placeholder="请选择出发地"
+                    style={{ width: '100%' }}
+                    showSearch
+                    filterOption={(input, option) =>
+                      (option?.label?.toString() || '').toLowerCase().includes(input.toLowerCase())
+                    }
+                  >
+                    {availableOrigins.map(city => (
+                      <Select.Option key={city} value={city}>{city}</Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24}>
+                <Form.Item name="dateRange" label="日期范围" rules={[{ required: true, message: '请选择日期范围' }]}>
+                  <RangePicker
+                    style={{ width: '100%' }}
+                    getPopupContainer={(trigger) => trigger.parentElement || document.body}
+                    placement="bottomLeft"
+                  />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24}>
+                <Form.Item name="flightType" label="权益卡类型">
+                  <Select style={{ width: '100%' }}>
+                    <Select.Option value="全部">全部权益卡</Select.Option>
+                    <Select.Option value="666权益卡航班">666权益卡航班</Select.Option>
+                    <Select.Option value="2666权益卡航班">2666权益卡航班</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col xs={24}>
+                <Form.Item label=" ">
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    icon={<SearchOutlined />}
+                    loading={loading}
+                    block
+                  >
+                    查询
+                  </Button>
+                </Form.Item>
+              </Col>
+            </Row>
+          ) : (
+            <>
               <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
                   placeholder="请选择出发地"
-                  style={{ width: '100%' }}
+                  style={{ width: 180 }}
                   showSearch
                   filterOption={(input, option) =>
                     (option?.label?.toString() || '').toLowerCase().includes(input.toLowerCase())
@@ -669,42 +722,31 @@ function DestinationQuery() {
                   ))}
                 </Select>
               </Form.Item>
-            </Col>
 
-            <Col xs={24} sm={12} md={8}>
               <Form.Item name="dateRange" label="日期范围" rules={[{ required: true, message: '请选择日期范围' }]}>
-                <RangePicker
-                  style={{ width: '100%' }}
-                  getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
-                  placement={isMobile ? 'bottomLeft' : undefined}
-                />
+                <RangePicker />
               </Form.Item>
-            </Col>
 
-            <Col xs={24} sm={12} md={5}>
               <Form.Item name="flightType" label="权益卡类型">
-                <Select style={{ width: '100%' }}>
+                <Select style={{ width: 160 }}>
                   <Select.Option value="全部">全部权益卡</Select.Option>
                   <Select.Option value="666权益卡航班">666权益卡航班</Select.Option>
                   <Select.Option value="2666权益卡航班">2666权益卡航班</Select.Option>
                 </Select>
               </Form.Item>
-            </Col>
 
-            <Col xs={24} sm={12} md={3}>
-              <Form.Item label={isMobile ? " " : undefined}>
+              <Form.Item>
                 <Button
                   type="primary"
                   htmlType="submit"
                   icon={<SearchOutlined />}
                   loading={loading}
-                  block={isMobile}
                 >
                   查询
                 </Button>
               </Form.Item>
-            </Col>
-          </Row>
+            </>
+          )}
         </Form>
       </Card>
 
