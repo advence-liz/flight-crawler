@@ -243,6 +243,13 @@ export class RouteService implements OnApplicationBootstrap {
     return { flights: allFlights, originAirports, destAirports };
   }
 
+  /** 供 RoundTripService 调用的 public 代理 */
+  buildGraphPublic(flights: Flight[]) { return this.buildGraph(flights); }
+  findAllRoutesGroupedByDestPublic(...args: Parameters<typeof RouteService.prototype['findAllRoutesGroupedByDest']>) {
+    return this.findAllRoutesGroupedByDest(...args);
+  }
+  calculateScorePublic(route: RouteResultDto) { return this.calculateScore(route); }
+
   /**
    * 构建航班图
    */

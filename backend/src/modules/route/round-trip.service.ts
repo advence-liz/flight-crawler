@@ -19,6 +19,19 @@ import { QueryCache } from './entities/query-cache.entity';
 // 探索查询缓存 TTL：6 小时
 const EXPLORE_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 6 * 60 * 60 * 1000;
 
+async function pLimit<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
+  const results: T[] = [];
+  let i = 0;
+  const run = async (): Promise<void> => {
+    while (i < tasks.length) {
+      const idx = i++;
+      results[idx] = await tasks[idx]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, run));
+  return results;
+}
+
 /**
  * 往返行程规划服务
  * 独立于单程路径规划，避免逻辑耦合
@@ -132,18 +145,15 @@ export class RoundTripService {
 
     this.logger.log(`发现 ${destinations.size} 个可达目的地`);
 
-    // 3. 并行规划所有目的地的往返方案（性能优化）
-    const allPromises = Array.from(destinations).map((destination) =>
-      this.planSpecificRoundTrip({
-        ...dto,
-        destination,
-      }).catch((error) => {
-        this.logger.warn(`${dto.origin} ⇄ ${destination} 规划失败`, error);
-        return null;
-      }),
-    );
-
-    const results = await Promise.all(allPromises);
+    // 3. 并行规划所有目的地的往返方案（pLimit 限制并发，避免数据库连接耗尽）
+    const destList = Array.from(destinations);
+    const results = await pLimit(
+      destList.map(destination => () =>
+        this.planSpecificRoundTrip({ ...dto, destination }).catch((error) => {
+          this.logger.warn(`${dto.origin} ⇄ ${destination} 规划失败`, error);
+          return null;
+        }),
+      ), 10);
 
     // 4. 汇总所有往返方案
     const allRoundTripRoutes: RoundTripResultDto[] = [];
@@ -249,86 +259,83 @@ export class RoundTripService {
       return JSON.parse(cached.data);
     }
 
-    // 1. 查询出发地所有去程航班（日期范围内，城市展开为机场）
+    // 1. 全量加载去程/返程日期范围内所有航班（1次SQL替代N+1）
     const originAirports = await this.flightService.expandCityToAirports(dto.origin);
-    const outboundFlights = await this.flightService.queryFlights({
-      origin: originAirports[0],
-      origins: originAirports,
-      startDate: dto.departureDate,
-      endDate: departureDateEnd,
-    });
+    const originSet = new Set(originAirports);
 
-    // 2. 提取所有可达目的地（直飞，排除出发城市的所有机场）
-    const destinations = new Set<string>();
-    outboundFlights.forEach((flight) => {
-      if (flight.destination && !originAirports.includes(flight.destination)) {
-        destinations.add(flight.destination);
-      }
-    });
+    const [outboundAllFlights, returnAllFlights] = await Promise.all([
+      this.flightService.queryAllFlightsInRange(dto.departureDate, departureDateEnd),
+      this.flightService.queryAllFlightsInRange(dto.returnDate, returnDateEnd),
+    ]);
 
-    this.logger.log(`发现 ${destinations.size} 个可达目的地，开始并行规划往返`);
+    // 2. 内存建去程图（出发机场 + 一跳可达城市）
+    const outboundFirstHop = new Set<string>();
+    for (const f of outboundAllFlights) {
+      if (originAirports.includes(f.origin)) outboundFirstHop.add(f.destination);
+    }
+    const outboundFiltered = outboundAllFlights.filter(f =>
+      originAirports.includes(f.origin) || outboundFirstHop.has(f.origin),
+    );
+    const outboundGraph = this.routeService.buildGraphPublic(outboundFiltered);
 
-    // 3. 并行规划每个目的地的去程和返程（均使用日期范围）
-    const allPromises = Array.from(destinations).map(async (city) => {
-      try {
-        const outboundRoutes = await this.routeService.planOneWay({
-          origin: dto.origin,
-          destination: city,
-          departureDate: dto.departureDate,
-          departureDateEnd,
-          maxTransfers,
-          minLayoverHours: 2,
-          maxLayoverHours: 24,
-        });
+    // 3. 一次DFS得到所有目的地的去程路径
+    const outboundByDest = this.routeService.findAllRoutesGroupedByDestPublic(
+      outboundGraph, originAirports, originSet, maxTransfers, 2, 24,
+    );
 
-        const returnRoutes = await this.routeService.planOneWay({
-          origin: city,
-          destination: dto.origin,
-          departureDate: dto.returnDate,
-          departureDateEnd: returnDateEnd,
-          maxTransfers,
-          minLayoverHours: 2,
-          maxLayoverHours: 24,
-        });
+    const candidateCities = Array.from(outboundByDest.keys());
+    this.logger.log(`发现 ${candidateCities.length} 个可达目的地，开始返程搜索`);
 
-        // 必须去程和返程都有方案才算可往返
-        if (outboundRoutes.length === 0 || returnRoutes.length === 0) {
-          return null;
+    // 4. 内存建返程图（候选目的地 + 一跳可达城市）
+    const returnFirstHop = new Set<string>(candidateCities);
+    for (const f of returnAllFlights) {
+      if (candidateCities.includes(f.origin)) returnFirstHop.add(f.destination);
+    }
+    const returnFiltered = returnAllFlights.filter(f =>
+      candidateCities.includes(f.origin) || (returnFirstHop.has(f.origin) && !originAirports.includes(f.origin)),
+    );
+    const returnGraph = this.routeService.buildGraphPublic(returnFiltered);
+
+    // 5. 一次DFS得到所有能回到出发城市的返程路径，按出发城市分组
+    const returnByDest = this.routeService.findAllRoutesGroupedByDestPublic(
+      returnGraph, candidateCities, new Set(candidateCities), maxTransfers, 2, 24,
+    );
+    const returnBySrc = new Map<string, RouteResultDto[]>();
+    for (const [dest, routes] of returnByDest) {
+      if (originAirports.includes(dest)) {
+        for (const route of routes) {
+          const src = route.segments[0].origin;
+          if (!returnBySrc.has(src)) returnBySrc.set(src, []);
+          returnBySrc.get(src)!.push(route);
         }
-
-        const bestOutbound = outboundRoutes[0];
-        const bestReturn = returnRoutes[0];
-        const totalDuration = bestOutbound.totalDuration + bestReturn.totalDuration;
-        const totalTransfers = bestOutbound.transferCount + bestReturn.transferCount;
-        const score = this.calculateRoundTripScore(totalDuration, totalTransfers);
-
-        const result: ExploreDestinationDto = {
-          city,
-          bestOutbound,
-          bestReturn,
-          outboundCount: outboundRoutes.length,
-          returnCount: returnRoutes.length,
-          score,
-        };
-        return result;
-      } catch (error) {
-        this.logger.warn(`探索 ${dto.origin} ⇄ ${city} 失败`, error);
-        return null;
       }
-    });
+    }
 
-    const results = await Promise.all(allPromises);
+    // 6. 按目的地汇总，计算评分
+    const destinations_result: ExploreDestinationDto[] = [];
+    for (const city of candidateCities) {
+      const outboundRoutes = outboundByDest.get(city) ?? [];
+      const returnRoutes = returnBySrc.get(city) ?? [];
+      if (outboundRoutes.length === 0 || returnRoutes.length === 0) continue;
 
-    // 4. 过滤掉失败的，按综合评分排序，最多返回 30 个
-    const destinations_result = results
-      .filter((r): r is ExploreDestinationDto => r !== null)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 30);
+      const scoredOut = outboundRoutes.map(r => this.routeService.calculateScorePublic(r)).sort((a, b) => b.score - a.score);
+      const scoredRet = returnRoutes.map(r => this.routeService.calculateScorePublic(r)).sort((a, b) => b.score - a.score);
+      const bestOutbound = scoredOut[0];
+      const bestReturn = scoredRet[0];
+      const score = this.calculateRoundTripScore(
+        bestOutbound.totalDuration + bestReturn.totalDuration,
+        bestOutbound.transferCount + bestReturn.transferCount,
+      );
+      destinations_result.push({ city, bestOutbound, bestReturn, outboundCount: scoredOut.length, returnCount: scoredRet.length, score });
+    }
 
-    this.logger.log(`✅ 探索完成，找到 ${destinations_result.length} 个可往返目的地`);
+    destinations_result.sort((a, b) => b.score - a.score);
+    const top30 = destinations_result.slice(0, 30);
+
+    this.logger.log(`✅ 探索完成，找到 ${top30.length} 个可往返目的地`);
 
     const result: ExplorePlanResponseDto = {
-      destinations: destinations_result,
+      destinations: top30,
       searchParams: {
         origin: dto.origin,
         departureDate: dto.departureDate,

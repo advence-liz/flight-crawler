@@ -493,24 +493,27 @@ export class FlightService {
    * 所有发现的机场都可以作为出发地或目的地
    */
   async discoverAirportsFromFlights(flights: Partial<Flight>[]): Promise<void> {
-    const airportSet = new Set<{ name: string; city: string }>();
-
+    // 收集所有唯一机场名
+    const airportMap = new Map<string, string>(); // name -> city
     for (const flight of flights) {
-      // 从出发地发现机场
-      if (flight.origin) {
-        const originCity = this.extractCityName(flight.origin);
-        airportSet.add({ name: flight.origin, city: originCity });
-      }
-      // 从目的地发现机场
-      if (flight.destination) {
-        const destCity = this.extractCityName(flight.destination);
-        airportSet.add({ name: flight.destination, city: destCity });
-      }
+      if (flight.origin) airportMap.set(flight.origin, this.extractCityName(flight.origin));
+      if (flight.destination) airportMap.set(flight.destination, this.extractCityName(flight.destination));
     }
+    if (airportMap.size === 0) return;
 
-    // 批量保存（所有机场都可以作为出发地或目的地）
-    for (const airport of airportSet) {
-      await this.saveAirport(airport.name, airport.city);
+    // 一次查出已存在的机场，避免 N+1
+    const names = Array.from(airportMap.keys());
+    const existing = await this.airportRepository.find({ where: names.map(name => ({ name })) });
+    const existingNames = new Set(existing.map(a => a.name));
+
+    // 只插入不存在的
+    const toInsert = names
+      .filter(name => !existingNames.has(name))
+      .map(name => this.airportRepository.create({ name, city: airportMap.get(name)! }));
+
+    if (toInsert.length > 0) {
+      await this.airportRepository.save(toInsert);
+      this.logger.log(`批量新增 ${toInsert.length} 个机场`);
     }
   }
 
@@ -619,7 +622,7 @@ export class FlightService {
     // 执行查询
     const [flights, total] = await queryBuilder.getManyAndCount();
 
-    // 基于相同筛选条件统计各权益卡数量（全量，不受分页影响）
+    // 用 SQL COUNT + GROUP BY 统计各权益卡数量（一次查询替代全量加载后内存遍历）
     const statsBuilder = this.flightRepository.createQueryBuilder('flight');
     if (origin) statsBuilder.andWhere('flight.origin = :origin', { origin });
     if (destination) statsBuilder.andWhere('flight.destination = :destination', { destination });
@@ -634,17 +637,21 @@ export class FlightService {
     }
     if (flightNo) statsBuilder.andWhere('flight.flightNo LIKE :flightNo', { flightNo: `%${flightNo}%` });
 
-    const allForStats = await statsBuilder.select('flight.cardType', 'cardType').getRawMany();
+    const cardTypeStats = await statsBuilder
+      .select('flight.cardType', 'cardType')
+      .addSelect('COUNT(*)', 'cnt')
+      .groupBy('flight.cardType')
+      .getRawMany<{ cardType: string; cnt: string }>();
+
     let cardType666Count = 0;
     let cardType2666Count = 0;
-    allForStats.forEach(({ cardType: ct }) => {
+    cardTypeStats.forEach(({ cardType: ct, cnt }) => {
       if (!ct) return;
-      // 精确匹配：避免 "2666权益卡航班" 被 "666权益卡航班" 误匹配
-      // 666 可用：cardType 等于 "666权益卡航班" 或包含 "666权益卡航班,"（组合开头）或包含 ",666权益卡航班"（组合末尾）
+      const count = parseInt(cnt, 10);
       const has666 = ct === '666权益卡航班' || ct.startsWith('666权益卡航班,') || ct.includes(',666权益卡航班');
       const has2666 = ct.includes('2666权益卡航班');
-      if (has666) cardType666Count++;
-      if (has2666) cardType2666Count++;
+      if (has666) cardType666Count += count;
+      if (has2666) cardType2666Count += count;
     });
 
     return {
