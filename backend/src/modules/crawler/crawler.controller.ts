@@ -289,17 +289,19 @@ export class CrawlerController {
   @HttpCode(HttpStatus.OK)
   getCronJobs() {
     return CRON_JOB_META.map(meta => {
+      let active = false;
       let running = false;
       let nextDate: string | null = null;
       try {
         const job = this.schedulerRegistry.getCronJob(meta.name);
-        running = !job.running === false; // running 属性：true 表示未暂停
+        active = true;
+        running = job.running; // true=运行中，false=已停止
         const next = job.nextDate();
         nextDate = next ? next.toISO() : null;
       } catch {
         // 任务不存在（如生产环境禁用了爬虫）
       }
-      return { ...meta, running, nextDate };
+      return { ...meta, active, running, nextDate };
     });
   }
 
@@ -315,6 +317,27 @@ export class CrawlerController {
       const job = this.schedulerRegistry.getCronJob(name);
       job.fireOnTick();
       return { success: true, message: `已触发任务: ${name}` };
+    } catch {
+      return { success: false, message: `任务不存在: ${name}` };
+    }
+  }
+
+  /**
+   * 启动/停止指定定时任务
+   * POST /api/crawler/cron/toggle
+   */
+  @Post('cron/toggle')
+  @UseGuards(AdminGuard)
+  @HttpCode(HttpStatus.OK)
+  toggleCronJob(@Body('name') name: string, @Body('enable') enable: boolean) {
+    try {
+      const job = this.schedulerRegistry.getCronJob(name);
+      if (enable) {
+        job.start();
+      } else {
+        job.stop();
+      }
+      return { success: true, running: job.running, message: `任务 ${name} 已${enable ? '启动' : '停止'}` };
     } catch {
       return { success: false, message: `任务不存在: ${name}` };
     }

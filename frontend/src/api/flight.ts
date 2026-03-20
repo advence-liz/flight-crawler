@@ -206,6 +206,7 @@ export interface CronJob {
   name: string;
   cron: string;
   desc: string;
+  active: boolean;
   running: boolean;
   nextDate: string | null;
 }
@@ -216,6 +217,10 @@ export const getCronJobs = (): Promise<CronJob[]> => {
 
 export const triggerCronJob = (name: string): Promise<{ success: boolean; message: string }> => {
   return api.post('/crawler/cron/trigger', { name });
+};
+
+export const toggleCronJob = (name: string, enable: boolean): Promise<{ success: boolean; running: boolean; message: string }> => {
+  return api.post('/crawler/cron/toggle', { name, enable });
 };
 
 // 清除所有查询缓存

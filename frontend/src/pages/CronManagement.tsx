@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Card, Table, Button, Tag, Space, message, Tooltip, Badge } from 'antd';
+import { Card, Table, Button, Tag, Space, message, Tooltip, Badge, Switch } from 'antd';
 import { ReloadOutlined, ThunderboltOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { getCronJobs, triggerCronJob, type CronJob } from '@/api/flight';
+import { getCronJobs, triggerCronJob, toggleCronJob, type CronJob } from '@/api/flight';
 
 // cron 表达式转人读描述
 function parseCron(cron: string): string {
@@ -19,6 +19,7 @@ export default function CronManagement() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
 
   const loadJobs = () => {
     setLoading(true);
@@ -43,6 +44,24 @@ export default function CronManagement() {
       message.error('触发失败');
     } finally {
       setTriggering(null);
+    }
+  };
+
+  const handleToggle = async (name: string, enable: boolean) => {
+    setToggling(name);
+    try {
+      const res = await toggleCronJob(name, enable);
+      if (res.success) {
+        message.success(res.message);
+        // 更新本地状态
+        setJobs(prev => prev.map(j => j.name === name ? { ...j, running: res.running } : j));
+      } else {
+        message.warning(res.message);
+      }
+    } catch {
+      message.error('操作失败');
+    } finally {
+      setToggling(null);
     }
   };
 
@@ -73,10 +92,12 @@ export default function CronManagement() {
       title: '状态',
       dataIndex: 'running',
       width: 90,
-      render: (running: boolean) =>
-        running
-          ? <Badge status="processing" text="运行中" />
-          : <Badge status="default" text="空闲" />,
+      render: (running: boolean, record: CronJob) =>
+        !record.active
+          ? <Badge status="default" text="未注册" />
+          : running
+            ? <Badge status="success" text="运行中" />
+            : <Badge status="error" text="已停止" />,
     },
     {
       title: '下次执行',
@@ -91,16 +112,28 @@ export default function CronManagement() {
     },
     {
       title: '操作',
-      width: 100,
+      width: 180,
       render: (_, record) => (
-        <Button
-          size="small"
-          icon={<ThunderboltOutlined />}
-          loading={triggering === record.name}
-          onClick={() => handleTrigger(record.name)}
-        >
-          立即触发
-        </Button>
+        <Space>
+          <Switch
+            size="small"
+            checked={record.running}
+            loading={toggling === record.name}
+            disabled={!record.active}
+            onChange={checked => handleToggle(record.name, checked)}
+            checkedChildren="开启"
+            unCheckedChildren="停止"
+          />
+          <Button
+            size="small"
+            icon={<ThunderboltOutlined />}
+            loading={triggering === record.name}
+            disabled={!record.active || !record.running}
+            onClick={() => handleTrigger(record.name)}
+          >
+            立即触发
+          </Button>
+        </Space>
       ),
     },
   ];
