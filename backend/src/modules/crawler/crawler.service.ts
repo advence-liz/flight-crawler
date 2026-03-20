@@ -48,14 +48,14 @@ export class CrawlerService implements OnApplicationBootstrap {
 
   /**
    * 应用启动后，根据环境变量决定是否停止自动爬取任务
-   * CRAWLER_AUTO_CRAWL=false 时停止（线上默认关闭，本地默认开启）
+   * 默认关闭，CRAWLER_AUTO_CRAWL=true 时才开启
    */
   onApplicationBootstrap() {
-    const enabled = process.env.CRAWLER_AUTO_CRAWL !== 'false';
+    const enabled = process.env.CRAWLER_AUTO_CRAWL === 'true';
     if (!enabled) {
       try {
         this.schedulerRegistry.getCronJob('auto-crawl-flights').stop();
-        this.logger.log('⚙️ auto-crawl-flights 定时任务已禁用（CRAWLER_AUTO_CRAWL=false）');
+        this.logger.log('⚙️ auto-crawl-flights 定时任务已禁用（需设置 CRAWLER_AUTO_CRAWL=true 开启）');
       } catch { /* 任务不存在时忽略 */ }
     }
   }
