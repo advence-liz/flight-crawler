@@ -89,6 +89,7 @@ export interface ExploreParams {
   returnDate: string;
   returnDateEnd?: string;
   maxTransfers?: number;
+  flightType?: '666权益卡航班' | '2666权益卡航班';
 }
 
 export interface ExploreDestination {

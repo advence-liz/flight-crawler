@@ -291,6 +291,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
         returnDate: retStart.format('YYYY-MM-DD'),
         returnDateEnd: retEnd.format('YYYY-MM-DD'),
         maxTransfers: 1,
+        flightType: values.flightType === '666权益卡航班' ? '666权益卡航班' : undefined,
       });
       setResults(resp.destinations);
       setOriginCookie(values.origin);
@@ -339,7 +340,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
           form={form}
           layout="horizontal"
           onFinish={handleSearch}
-          initialValues={{}}
+          initialValues={{ flightType: '2666权益卡航班' }}
         >
           <Row gutter={[16, 16]}>
             <Col xs={24} sm={12} md={6}>
@@ -378,10 +379,19 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={24} sm={12} md={2}>
+            <Col xs={12} sm={8} md={3}>
+              <Form.Item name="flightType" label="权益卡">
+                <Select style={{ width: '100%' }}>
+                  <Select.Option value="666权益卡航班">666权益卡</Select.Option>
+                  <Select.Option value="2666权益卡航班">2666权益卡</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+
+            <Col xs={12} sm={4} md={1}>
               <Form.Item>
                 <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block={isMobile}>
-                  探索目的地
+                  探索
                 </Button>
               </Form.Item>
             </Col>

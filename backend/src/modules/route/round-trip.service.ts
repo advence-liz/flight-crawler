@@ -264,8 +264,8 @@ export class RoundTripService {
     const originSet = new Set(originAirports);
 
     const [outboundAllFlights, returnAllFlights] = await Promise.all([
-      this.flightService.queryAllFlightsInRange(dto.departureDate, departureDateEnd),
-      this.flightService.queryAllFlightsInRange(dto.returnDate, returnDateEnd),
+      this.flightService.queryAllFlightsInRange(dto.departureDate, departureDateEnd, dto.flightType),
+      this.flightService.queryAllFlightsInRange(dto.returnDate, returnDateEnd, dto.flightType),
     ]);
 
     // 2. 内存建去程图（出发机场 + 一跳可达城市）
