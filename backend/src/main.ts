@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
+import { CacheControlInterceptor } from './cache-control.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -17,6 +18,9 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+
+  // 全局 Cache-Control 拦截器（GET 接口 30 分钟浏览器缓存）
+  app.useGlobalInterceptors(new CacheControlInterceptor());
 
   // 启用 CORS（未配置时允许所有来源，适配线上前后端不同域场景）
   const corsOrigin = process.env.CORS_ORIGIN || '*';
