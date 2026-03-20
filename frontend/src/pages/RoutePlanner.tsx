@@ -39,7 +39,7 @@ import {
   ExploreDestination,
 } from '@/api/route';
 import { getAvailableCities } from '@/api/flight';
-import { getDefaultOrigin, setOriginCookie, getDepartRange, setDepartRange, getReturnRange, setReturnRange, getDefaultDateRange } from '@/utils/cookie';
+import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
 
 const { useBreakpoint } = Grid;
 
@@ -255,23 +255,21 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
     const origin = urlParams?.origin || getDefaultOrigin();
     form.setFieldValue('origin', origin);
 
-    // 去程：URL 参数 > cookie > 默认今天~一个月后
+    // 去程：URL 参数 > 默认今天~一个月后
     if (urlParams?.departureDate) {
       const dep = dayjs(urlParams.departureDate);
       form.setFieldValue('departureRange', [dep, dep.add(2, 'day')]);
     } else {
-      const saved = getDepartRange();
-      const [defStart, defEnd] = saved || getDefaultDateRange();
+      const [defStart, defEnd] = getDefaultDateRange();
       form.setFieldValue('departureRange', [dayjs(defStart), dayjs(defEnd)]);
     }
 
-    // 返程：URL 参数 > cookie > 默认今天~一个月后
+    // 返程：URL 参数 > 默认今天~一个月后
     if (urlParams?.returnDate) {
       const ret = dayjs(urlParams.returnDate);
       form.setFieldValue('returnRange', [ret, ret.add(2, 'day')]);
     } else {
-      const saved = getReturnRange();
-      const [defStart, defEnd] = saved || getDefaultDateRange();
+      const [defStart, defEnd] = getDefaultDateRange();
       form.setFieldValue('returnRange', [dayjs(defStart), dayjs(defEnd)]);
     }
 
@@ -298,8 +296,6 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
       });
       setResults(resp.destinations);
       setOriginCookie(values.origin);
-      setDepartRange(depStart.format('YYYY-MM-DD'), depEnd.format('YYYY-MM-DD'));
-      setReturnRange(retStart.format('YYYY-MM-DD'), retEnd.format('YYYY-MM-DD'));
       if (resp.destinations.length === 0) {
         message.warning('未找到可往返的目的地，请换个日期试试');
       } else {
@@ -343,7 +339,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
       <Card style={{ marginBottom: 16 }}>
         <Form
           form={form}
-          layout={isMobile ? "vertical" : "inline"}
+          layout="horizontal"
           onFinish={handleSearch}
           initialValues={{}}
         >
@@ -481,18 +477,17 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
       form.setFieldValue('destination', urlParams.destination);
     }
 
-    // 去程：URL 参数 > cookie > 默认今天~一个月后
+    // 去程：URL 参数 > 默认今天~一个月后
     if (urlParams?.departureDate) {
       const dep = dayjs(urlParams.departureDate);
       const depEnd = urlParams.departureDateEnd ? dayjs(urlParams.departureDateEnd) : dep.add(2, 'day');
       form.setFieldValue('departureRange', [dep, depEnd]);
     } else {
-      const saved = getDepartRange();
-      const [defStart, defEnd] = saved || getDefaultDateRange();
+      const [defStart, defEnd] = getDefaultDateRange();
       form.setFieldValue('departureRange', [dayjs(defStart), dayjs(defEnd)]);
     }
 
-    // 返程：URL 参数有 returnDate 时设置；来自跳转且无 returnDate 时清空（单程）；否则 cookie > 默认
+    // 返程：URL 参数有 returnDate 时设置；来自跳转且无 returnDate 时清空（单程）；否则默认
     if (urlParams?.returnDate) {
       const ret = dayjs(urlParams.returnDate);
       const retEnd = urlParams.returnDateEnd ? dayjs(urlParams.returnDateEnd) : ret.add(2, 'day');
@@ -500,8 +495,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
     } else if (urlParams?.destination) {
       form.setFieldValue('returnRange', [null, null]);
     } else {
-      const saved = getReturnRange();
-      const [defStart, defEnd] = saved || getDefaultDateRange();
+      const [defStart, defEnd] = getDefaultDateRange();
       form.setFieldValue('returnRange', [dayjs(defStart), dayjs(defEnd)]);
     }
 
@@ -544,8 +538,6 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
         });
         setRoundTripRoutes(resp.routes);
         setOriginCookie(values.origin);
-        setDepartRange(departureDate, departureDateEnd);
-        setReturnRange(returnDate, returnDateEnd ?? returnDate);
         if (resp.routes.length === 0) {
           message.warning('未找到合适的往返方案');
         } else {
@@ -564,7 +556,6 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
         });
         setOneWayRoutes(resp.routes);
         setOriginCookie(values.origin);
-        setDepartRange(departureDate, departureDateEnd);
         if (resp.routes.length === 0) {
           message.warning('未找到合适的单程方案');
         } else {
@@ -586,7 +577,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
       <Card style={{ marginBottom: 16 }}>
         <Form
           form={form}
-          layout={isMobile ? "vertical" : "inline"}
+          layout="horizontal"
           onFinish={handleSearch}
           initialValues={{ maxTransfers: 1 }}
         >

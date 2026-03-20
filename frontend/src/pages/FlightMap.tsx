@@ -391,7 +391,7 @@ function FlightMap() {
       <Card>
         <Form
           form={form}
-          layout={isMobile ? "vertical" : "inline"}
+          layout="horizontal"
           onFinish={handleSearch}
           initialValues={{
             flightType: '全部',

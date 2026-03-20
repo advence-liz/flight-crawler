@@ -41,7 +41,7 @@ import {
   TransferRoundTripDest,
   TransferOneWayDest,
 } from '@/api/flight';
-import { getDefaultOrigin, setOriginCookie, getDateRange, setDateRange, getDefaultDateRange } from '@/utils/cookie';
+import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
 
 const { RangePicker } = DatePicker;
 const { useBreakpoint } = Grid;
@@ -294,9 +294,7 @@ function DestinationQuery() {
     if (urlDepartureDate && urlReturnDate) {
       form.setFieldValue('dateRange', [dayjs(urlDepartureDate), dayjs(urlReturnDate)]);
     } else {
-      // 优先 cookie 记录的上次选择，否则默认今天~一个月后
-      const saved = getDateRange();
-      const [defStart, defEnd] = saved || getDefaultDateRange();
+      const [defStart, defEnd] = getDefaultDateRange();
       form.setFieldValue('dateRange', [dayjs(defStart), dayjs(defEnd)]);
     }
 
@@ -330,7 +328,6 @@ function DestinationQuery() {
       const fastResult = await queryDestinations({ ...queryParams, includeReturn: false });
       setDestinations(fastResult.destinations);
       setOriginCookie(values.origin);
-      setDateRange(startDate.format('YYYY-MM-DD'), endDate.format('YYYY-MM-DD'));
     } catch {
       message.error('查询失败，请稍后重试');
       setLoading(false);
