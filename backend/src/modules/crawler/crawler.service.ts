@@ -2806,14 +2806,22 @@ export class CrawlerService {
   async scheduledRefreshDestinationCache() {
     this.logger.log('⏰ 定时缓存刷新：开始刷新所有城市目的地查询缓存');
 
-    // 获取所有城市和日期范围
-    const { cityList, minDate, maxDate } = await this.flightService.getAvailableCities();
-    if (!minDate || !maxDate || cityList.length === 0) {
-      this.logger.warn('⚠️ 无航班数据，跳过缓存刷新');
+    // 获取所有城市
+    const { cityList } = await this.flightService.getAvailableCities();
+    if (cityList.length === 0) {
+      this.logger.warn('⚠️ 无城市数据，跳过缓存刷新');
       return;
     }
 
-    this.logger.log(`📋 共 ${cityList.length} 个城市待刷新，并发度 3`);
+    // 与前端 getDefaultDateRange() 保持一致：今天 ~ 今天+1个月
+    const today = new Date();
+    const nextMonth = new Date(today);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const startDate = fmt(today);
+    const endDate = fmt(nextMonth);
+
+    this.logger.log(`📋 共 ${cityList.length} 个城市待刷新，日期范围 ${startDate} ~ ${endDate}，并发度 3`);
 
     let successCount = 0;
     let failCount = 0;
@@ -2835,17 +2843,17 @@ export class CrawlerService {
           }
           await this.routeService.clearTransferCacheByOrigin(city);
 
-          // 重新查询（自动写入新缓存）
+          // 重新查询（自动写入新缓存，key 与前端默认日期一致，首次加载直接命中）
           await this.flightService.queryDestinations({
             origin: city,
-            startDate: minDate,
-            endDate: maxDate,
+            startDate,
+            endDate,
             includeReturn: true,
           });
           await this.routeService.discoverTransferDestinations({
             origin: city,
-            departureDate: minDate,
-            endDate: maxDate,
+            departureDate: startDate,
+            endDate,
             maxTransfers: 1,
           });
 
