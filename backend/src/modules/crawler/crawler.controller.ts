@@ -1,4 +1,5 @@
 import { Controller, Post, Get, Delete, HttpCode, HttpStatus, Body, Query, Param, BadRequestException, Inject, UseGuards } from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import { AdminGuard } from '../../admin.guard';
 import { CrawlerService } from './crawler.service';
 import { CrawlerServiceStub } from './crawler.service.stub';
@@ -7,12 +8,20 @@ import { InitializeDiscoverDto, InitializeRefreshFlightsDto } from './dto/initia
 import { QueryLogsDto } from './dto/query-logs.dto';
 import { CleanLogsDto } from './dto/clean-logs.dto';
 
+// 定时任务元数据（固定配置，与 crawler.service.ts 中的 @Cron 保持一致）
+const CRON_JOB_META = [
+  { name: 'auto-crawl-flights',          cron: '0 2 * * *',  desc: '每日凌晨 2 点自动爬取航班数据' },
+  { name: 'clean-expired-cache',         cron: '0 3 * * *',  desc: '每日凌晨 3 点清理过期缓存' },
+  { name: 'refresh-destination-cache',   cron: '7 * * * *',  desc: '每小时刷新所有城市目的地查询缓存' },
+];
+
 @Controller('crawler')
 export class CrawlerController {
   constructor(
     @Inject('CrawlerService')
     private readonly crawlerService: CrawlerService | CrawlerServiceStub,
     private readonly flightService: FlightService,
+    private readonly schedulerRegistry: SchedulerRegistry,
   ) {}
 
   /**
@@ -270,5 +279,44 @@ export class CrawlerController {
   @HttpCode(HttpStatus.OK)
   async toggleCache(@Body('enable') enable: boolean) {
     return this.flightService.toggleCache(enable);
+  }
+
+  /**
+   * 查询所有定时任务状态
+   * GET /api/crawler/cron/list
+   */
+  @Get('cron/list')
+  @HttpCode(HttpStatus.OK)
+  getCronJobs() {
+    return CRON_JOB_META.map(meta => {
+      let running = false;
+      let nextDate: string | null = null;
+      try {
+        const job = this.schedulerRegistry.getCronJob(meta.name);
+        running = !job.running === false; // running 属性：true 表示未暂停
+        const next = job.nextDate();
+        nextDate = next ? next.toISO() : null;
+      } catch {
+        // 任务不存在（如生产环境禁用了爬虫）
+      }
+      return { ...meta, running, nextDate };
+    });
+  }
+
+  /**
+   * 立即触发指定定时任务
+   * POST /api/crawler/cron/trigger
+   */
+  @Post('cron/trigger')
+  @UseGuards(AdminGuard)
+  @HttpCode(HttpStatus.OK)
+  async triggerCronJob(@Body('name') name: string) {
+    try {
+      const job = this.schedulerRegistry.getCronJob(name);
+      job.fireOnTick();
+      return { success: true, message: `已触发任务: ${name}` };
+    } catch {
+      return { success: false, message: `任务不存在: ${name}` };
+    }
   }
 }

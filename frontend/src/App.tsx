@@ -7,6 +7,7 @@ import FlightManagement from './pages/FlightManagement';
 import AirportManagement from './pages/AirportManagement';
 import FlightMap from './pages/FlightMap';
 import CacheManagement from './pages/CacheManagement';
+import CronManagement from './pages/CronManagement';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="airport-management" element={<AirportManagement />} />
         <Route path="flight-map" element={<FlightMap />} />
         <Route path="cache-management" element={<CacheManagement />} />
+        <Route path="cron-management" element={<CronManagement />} />
       </Route>
     </Routes>
   );

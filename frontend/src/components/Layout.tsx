@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Layout as AntLayout, Menu, Drawer, Button, Grid } from 'antd';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined } from '@ant-design/icons';
+import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined } from '@ant-design/icons';
 
 const { Header, Content } = AntLayout;
 const { useBreakpoint } = Grid;
@@ -51,6 +51,12 @@ function Layout() {
       key: '/cache-management',
       icon: <HddOutlined />,
       label: '缓存管理',
+      adminOnly: true,
+    },
+    {
+      key: '/cron-management',
+      icon: <FieldTimeOutlined />,
+      label: '定时任务',
       adminOnly: true,
     },
   ];

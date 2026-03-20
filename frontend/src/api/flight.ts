@@ -201,6 +201,23 @@ export const cleanAllLogs = (): Promise<{ deletedCount: number; message: string 
   return api.delete('/crawler/logs/clean-all');
 };
 
+// 定时任务相关
+export interface CronJob {
+  name: string;
+  cron: string;
+  desc: string;
+  running: boolean;
+  nextDate: string | null;
+}
+
+export const getCronJobs = (): Promise<CronJob[]> => {
+  return api.get('/crawler/cron/list');
+};
+
+export const triggerCronJob = (name: string): Promise<{ success: boolean; message: string }> => {
+  return api.post('/crawler/cron/trigger', { name });
+};
+
 // 清除所有查询缓存
 export const clearQueryCache = (): Promise<{ deletedCount: number; message: string }> => {
   return api.delete('/crawler/cache/clear');
