@@ -13,7 +13,7 @@ function Layout() {
   const screens = useBreakpoint();
   const isMobile = !screens.md; // < 768px
 
-  const menuItems = [
+  const allMenuItems = [
     {
       key: '/destination',
       icon: <CompassOutlined />,
@@ -33,23 +33,32 @@ function Layout() {
       key: '/flight-management',
       icon: <UnorderedListOutlined />,
       label: '航班管理',
+      adminOnly: true, // 标记为管理功能
     },
     {
       key: '/airport-management',
       icon: <EnvironmentOutlined />,
       label: '机场管理',
+      adminOnly: true,
     },
     {
       key: '/data-management',
       icon: <DatabaseOutlined />,
       label: '数据管理',
+      adminOnly: true,
     },
     {
       key: '/cache-management',
       icon: <HddOutlined />,
       label: '缓存管理',
+      adminOnly: true,
     },
   ];
+
+  // 移动端过滤掉管理功能
+  const menuItems = isMobile
+    ? allMenuItems.filter(item => !item.adminOnly)
+    : allMenuItems;
 
   const currentPath = location.pathname === '/' ? '/destination' : location.pathname;
 
