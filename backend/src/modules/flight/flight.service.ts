@@ -229,18 +229,22 @@ export class FlightService {
     const endDateTime = new Date(endDate);
     endDateTime.setHours(23, 59, 59, 999);
 
+    // 展开城市为机场列表（支持"北京"→["北京首都","北京大兴"]）
+    const originAirports = await this.expandCityToAirports(origin);
+    const destAirports = await this.expandCityToAirports(destination ?? '');
+
     // 构建去程航班查询
     let outboundQuery = this.flightRepository.createQueryBuilder('flight')
-      .where('flight.origin = :origin', { origin })
-      .andWhere('flight.destination = :destination', { destination })
+      .where('flight.origin IN (:...originAirports)', { originAirports })
+      .andWhere('flight.destination IN (:...destAirports)', { destAirports })
       .andWhere('flight.departureTime >= :startDateTime', { startDateTime })
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
 
     // 构建返程航班查询
     let returnQuery = this.flightRepository.createQueryBuilder('flight')
-      .where('flight.origin = :dest', { dest: destination })
-      .andWhere('flight.destination = :orig', { orig: origin })
+      .where('flight.origin IN (:...destAirports)', { destAirports })
+      .andWhere('flight.destination IN (:...originAirports)', { originAirports })
       .andWhere('flight.departureTime >= :startDateTime', { startDateTime })
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
