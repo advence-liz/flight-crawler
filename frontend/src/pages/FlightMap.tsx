@@ -424,7 +424,7 @@ function FlightMap() {
               </Form.Item>
             </Col>
 
-            <Col xs={24} sm={12} md={5}>
+            <Col xs={12} sm={6} md={3}>
               <Form.Item name="flightType" label="权益卡">
                 <Select style={{ width: '100%' }}>
                   <Select.Option value="666权益卡航班">666</Select.Option>

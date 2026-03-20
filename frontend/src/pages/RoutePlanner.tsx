@@ -379,7 +379,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={12} sm={8} md={3}>
+            <Col xs={8} sm={4} md={2}>
               <Form.Item name="flightType" label="权益卡">
                 <Select style={{ width: '100%' }}>
                   <Select.Option value="666权益卡航班">666</Select.Option>
@@ -651,7 +651,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={12} sm={8} md={3}>
+            <Col xs={8} sm={4} md={2}>
               <Form.Item name="flightType" label="权益卡">
                 <Select style={{ width: '100%' }}>
                   <Select.Option value="666权益卡航班">666</Select.Option>

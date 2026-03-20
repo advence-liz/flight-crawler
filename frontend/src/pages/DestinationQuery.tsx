@@ -724,7 +724,7 @@ function DestinationQuery() {
               </Form.Item>
 
               <Form.Item name="flightType" label="权益卡类型">
-                <Select style={{ width: 160 }}>
+                <Select style={{ width: 80 }}>
                   <Select.Option value="666权益卡航班">666</Select.Option>
                   <Select.Option value="2666权益卡航班">2666</Select.Option>
                 </Select>
