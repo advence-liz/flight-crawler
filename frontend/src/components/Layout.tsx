@@ -70,12 +70,16 @@ function Layout() {
         padding: isMobile ? '0 16px' : '0 50px'
       }}>
         <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
           color: 'white',
           fontSize: isMobile ? '16px' : '20px',
           marginRight: isMobile ? '16px' : '50px',
-          whiteSpace: 'nowrap'
+          whiteSpace: 'nowrap',
         }}>
-          ✈️ 随心飞分析工具
+          <img src="/logo.svg" alt="logo" style={{ width: isMobile ? 28 : 36, height: isMobile ? 28 : 36 }} />
+          随心飞分析工具
         </div>
 
         {isMobile ? (
