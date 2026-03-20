@@ -9,6 +9,7 @@ export interface PlanRouteParams {
   maxTransfers?: number;
   minLayoverHours?: number;
   maxLayoverHours?: number;
+  flightType?: '666权益卡航班' | '2666权益卡航班';
 }
 
 // 往返行程参数
@@ -23,6 +24,7 @@ export interface PlanRoundTripParams {
   minLayoverHours?: number;
   maxLayoverHours?: number;
   autoDiscover?: boolean;
+  flightType?: '666权益卡航班' | '2666权益卡航班';
 }
 
 export interface FlightSegment {

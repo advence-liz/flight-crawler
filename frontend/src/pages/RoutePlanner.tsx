@@ -521,6 +521,8 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
       const returnDate = retStart?.format('YYYY-MM-DD');
       const returnDateEnd = retEnd ? retEnd.format('YYYY-MM-DD') : returnDate;
 
+      const flightType = values.flightType === '666权益卡航班' ? '666权益卡航班' : undefined;
+
       if (returnDate) {
         // 有返程日期范围：查往返
         const resp = await planRoundTrip({
@@ -533,6 +535,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
           maxTransfers: values.maxTransfers ?? 0,
           minLayoverHours: 2,
           maxLayoverHours: 24,
+          flightType,
         });
         setRoundTripRoutes(resp.routes);
         setOriginCookie(values.origin);
@@ -551,6 +554,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
           maxTransfers: values.maxTransfers ?? 2,
           minLayoverHours: 2,
           maxLayoverHours: 24,
+          flightType,
         });
         setOneWayRoutes(resp.routes);
         setOriginCookie(values.origin);
@@ -577,7 +581,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
           form={form}
           layout="horizontal"
           onFinish={handleSearch}
-          initialValues={{ maxTransfers: 1 }}
+          initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
         >
           <Row gutter={[16, 16]}>
             <Col xs={24} sm={12} md={5}>
@@ -634,6 +638,15 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             <Col xs={12} sm={8} md={1}>
               <Form.Item name="maxTransfers" label="最多中转">
                 <InputNumber min={0} max={2} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+
+            <Col xs={12} sm={8} md={2}>
+              <Form.Item name="flightType" label="权益卡">
+                <Select style={{ width: '100%' }}>
+                  <Select.Option value="666权益卡航班">666</Select.Option>
+                  <Select.Option value="2666权益卡航班">2666</Select.Option>
+                </Select>
               </Form.Item>
             </Col>
 

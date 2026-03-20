@@ -137,9 +137,11 @@ export class RouteService implements OnApplicationBootstrap {
     maxTransfers?: number;
     minLayoverHours?: number;
     maxLayoverHours?: number;
+    flightType?: string;
   }): Promise<RouteResultDto[]> {
     const endDate = params.departureDateEnd || params.departureDate;
     const maxTransfers = params.maxTransfers ?? 2;
+    const flightType = params.flightType;
 
     // 展开城市为机场列表
     const originAirports = await this.flightService.expandCityToAirports(params.origin);
@@ -151,6 +153,7 @@ export class RouteService implements OnApplicationBootstrap {
       origins: originAirports,
       startDate: params.departureDate,
       endDate,
+      flightType,
     });
 
     const allFlights = [...firstLegFlights];
@@ -165,7 +168,7 @@ export class RouteService implements OnApplicationBootstrap {
       }
       const transitLegsArray = await pLimit(
         Array.from(transitCities).map(city =>
-          () => this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate }),
+          () => this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate, flightType }),
         ), 10);
       transitLegsArray.forEach(legs => allFlights.push(...legs));
     }
@@ -213,12 +216,15 @@ export class RouteService implements OnApplicationBootstrap {
       ? await this.flightService.expandCityToAirports(dto.destination)
       : [];
 
+    const flightType = dto.flightType;
+
     // 第一步：查询起点出发的所有航班（不过滤 destination）
     const firstLegFlights = await this.flightService.queryFlights({
       origin: originAirports[0],
       origins: originAirports,
       startDate: startDateStr,
       endDate: endDateStr,
+      flightType,
     });
 
     if (!dto.destination || dto.maxTransfers === 0) {
@@ -235,7 +241,7 @@ export class RouteService implements OnApplicationBootstrap {
 
     const transitLegsArray = await pLimit(
       Array.from(transitCities).map(city =>
-        () => this.flightService.queryFlights({ origin: city, startDate: startDateStr, endDate: endDateStr }),
+        () => this.flightService.queryFlights({ origin: city, startDate: startDateStr, endDate: endDateStr, flightType }),
       ), 10);
     const allFlights = [...firstLegFlights];
     transitLegsArray.forEach(legs => allFlights.push(...legs));
