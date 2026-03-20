@@ -24,6 +24,16 @@ export class CrawlerService {
   private runningTaskId: number | null = null; // 当前运行的任务 ID
   private stopRequested = false; // 停止信号：true 时后台任务应尽快退出
 
+  // ─── 并发常量（修改这里会同步影响执行逻辑和预估时间）─────────────────
+  /** 发现机场：共享浏览器，最多同时开几个 page */
+  private static readonly DISCOVER_AIRPORTS_PAGE_CONCURRENCY = 5;
+  /** 发现航班：最多同时执行几个日期任务（每个日期独立浏览器） */
+  private static readonly REFRESH_FLIGHTS_DATE_CONCURRENCY = 10;
+  /** 发现航班：每个日期任务内最多同时爬几个机场 page */
+  private static readonly REFRESH_FLIGHTS_AIRPORT_CONCURRENCY = 3;
+  /** 实测单机场单次爬取耗时（秒），用于预估总时间 */
+  private static readonly SECONDS_PER_AIRPORT = 30;
+
   constructor(
     private readonly flightService: FlightService,
     @InjectRepository(CrawlerLog)
@@ -1752,7 +1762,7 @@ export class CrawlerService {
 
   /**
    * 初始化逻辑1：发现所有机场
-   * 优化版：共享单个浏览器实例，信号量控制最大并发 page 数（3个）
+   * 优化版：共享单个浏览器实例，信号量控制最大并发 page 数（5个）
    * 所有（机场×日期）任务并发执行，显著提升效率
    * 支持 planOnly 模式：仅返回执行计划，不实际爬取
    */
@@ -1801,7 +1811,7 @@ export class CrawlerService {
       crawlerInfo: {
         description: `爬取 ${date} 日期的 ${seedAirports.length} 个种子机场（权益卡：666 + 2666）`,
         expectedFlights: Math.ceil(seedAirports.length * 15),
-        maxConcurrency: 3,
+        maxConcurrency: 5,
       },
     }));
 
@@ -1867,7 +1877,7 @@ export class CrawlerService {
         }
       }
 
-      this.logger.log(`🚀 共 ${tasks.length} 个任务（${seedAirports.length} 机场 × ${dates.length} 天），最大并发 3`);
+      this.logger.log(`🚀 共 ${tasks.length} 个任务（${seedAirports.length} 机场 × ${dates.length} 天），最大并发 ${CrawlerService.DISCOVER_AIRPORTS_PAGE_CONCURRENCY}`);
 
       // 启动共享浏览器
       browser = await puppeteer.launch({
@@ -1876,8 +1886,8 @@ export class CrawlerService {
       });
       this.logger.log('🌐 共享浏览器已启动');
 
-      // 信号量：最多 3 个 page 同时运行
-      const MAX_CONCURRENT = 3;
+      // 信号量：最多 DISCOVER_AIRPORTS_PAGE_CONCURRENCY 个 page 同时运行
+      const MAX_CONCURRENT = CrawlerService.DISCOVER_AIRPORTS_PAGE_CONCURRENCY;
       let running = 0;
       let taskIndex = 0;
       const allFlights: Partial<Flight>[] = [];
@@ -2078,7 +2088,7 @@ export class CrawlerService {
         crawlerInfo: {
           description: `爬取 ${date} 日期的 ${airports.length} 个机场的航班数据（权益卡：666 + 2666）`,
           expectedFlights: Math.ceil(airports.length * 2.5), // 每个机场预期 2-3 班航班
-          maxConcurrency: 5, // 机场级最大并发数
+          maxConcurrency: CrawlerService.REFRESH_FLIGHTS_AIRPORT_CONCURRENCY,
         },
       };
     });
@@ -2090,6 +2100,8 @@ export class CrawlerService {
       estimatedTime,
       totalAirports: airports.length,
       airportList: airportNames,
+      dateConcurrency: CrawlerService.REFRESH_FLIGHTS_DATE_CONCURRENCY,
+      airportConcurrency: CrawlerService.REFRESH_FLIGHTS_AIRPORT_CONCURRENCY,
       taskList,
     };
 
@@ -2145,7 +2157,7 @@ export class CrawlerService {
     // 同步模式：等待执行完成（向后兼容）
     try {
       // 执行所有日期任务（分批并行）
-      const MAX_CONCURRENT_TASKS = 10; // 最多同时执行 10 个日期任务
+      const MAX_CONCURRENT_TASKS = CrawlerService.REFRESH_FLIGHTS_DATE_CONCURRENCY;
       const taskResults: Array<{ taskId: number; date: string; success: boolean; count: number }> = [];
       let totalCount = 0;
 
@@ -2254,8 +2266,8 @@ export class CrawlerService {
       // 每个子任务独立浏览器，由父任务控制并发数（MAX_CONCURRENT_DATES）
       browser = await launchBrowser();
 
-      // 信号量：最多 3 个 page 同时运行（避免资源耗尽）
-      const MAX_CONCURRENT = 3;
+      // 信号量：最多 REFRESH_FLIGHTS_AIRPORT_CONCURRENCY 个 page 同时运行
+      const MAX_CONCURRENT = CrawlerService.REFRESH_FLIGHTS_AIRPORT_CONCURRENCY;
       let running = 0;
       let airportIndex = 0;
       let totalSaved = 0;
@@ -2382,6 +2394,8 @@ export class CrawlerService {
     airports: string[],
     executionPlan: any,
   ): Promise<void> {
+    // 确保停止信号已清除（防止上次 forceStop 的残留信号影响本次任务）
+    this.stopRequested = false;
     this.logger.log(`📋 [父任务 #${mainLogId}] 后台开始执行：${dates.length} 天 × ${airports.length} 个机场`);
 
     try {
@@ -2399,14 +2413,14 @@ export class CrawlerService {
       }
       this.logger.log(`📝 [父任务 #${mainLogId}] 预创建 ${dates.length} 个子任务记录`);
 
-      // 日期子任务并行执行，每个子任务独立浏览器，最多 MAX_CONCURRENT_DATES 个同时运行
-      const MAX_CONCURRENT_DATES = 3;
+      // 日期子任务并行执行，每个子任务独立浏览器，最多 REFRESH_FLIGHTS_DATE_CONCURRENCY 个同时运行
+      const MAX_CONCURRENT_DATES = CrawlerService.REFRESH_FLIGHTS_DATE_CONCURRENCY;
       const taskResults: Array<{ taskId: number; date: string; success: boolean; count: number }> = [];
       let totalCount = 0;
       let dateIndex = 0;
       let running = 0;
 
-      this.logger.log(`🚀 [父任务 #${mainLogId}] 最多 ${MAX_CONCURRENT_DATES} 个日期并行，每日 3 个机场并发`);
+      this.logger.log(`🚀 [父任务 #${mainLogId}] 最多 ${MAX_CONCURRENT_DATES} 个日期并行，每日 ${CrawlerService.REFRESH_FLIGHTS_AIRPORT_CONCURRENCY} 个机场并发`);
 
       await new Promise<void>((resolve, reject) => {
         const runNext = () => {
@@ -2498,20 +2512,18 @@ export class CrawlerService {
    * 计算预估执行时间
    */
   private calculateEstimatedTime(totalDays: number, airportCount: number): string {
-    // 估算：每个机场每天需要 30-60 秒
-    // 10 个任务并行，每个任务 5 个机场并行
-    const timePerAirportPerDay = 45; // 秒
-    const concurrentTasks = 10;
-    const airportsPerTask = Math.ceil(airportCount / concurrentTasks);
+    // 直接从执行常量推导，修改并发度时预估自动更新：
+    // 总耗时 = 日期批次数 × 机场批次数 × 单机场耗时
+    const dateBatches = Math.ceil(totalDays / CrawlerService.REFRESH_FLIGHTS_DATE_CONCURRENCY);
+    const airportBatches = Math.ceil(airportCount / CrawlerService.REFRESH_FLIGHTS_AIRPORT_CONCURRENCY);
+    const totalSeconds = dateBatches * airportBatches * CrawlerService.SECONDS_PER_AIRPORT;
+    const totalMinutes = Math.ceil(totalSeconds / 60);
 
-    const estimatedSeconds = Math.ceil((totalDays / concurrentTasks) * (airportsPerTask * timePerAirportPerDay));
-    const minutes = Math.ceil(estimatedSeconds / 60);
-
-    if (minutes < 1) return '小于 1 分钟';
-    if (minutes < 60) return `约 ${minutes} 分钟`;
-
-    const hours = Math.ceil(minutes / 60);
-    return `约 ${hours} 小时`;
+    if (totalMinutes < 1) return '小于 1 分钟';
+    if (totalMinutes < 60) return `约 ${totalMinutes} 分钟`;
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return mins > 0 ? `约 ${hours} 小时 ${mins} 分钟` : `约 ${hours} 小时`;
   }
 
 
