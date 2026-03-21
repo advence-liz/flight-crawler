@@ -343,7 +343,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
           initialValues={{ flightType: '2666权益卡航班' }}
         >
           <Row gutter={[16, 16]} align="bottom">
-            <Col xs={12} sm={6} md={3}>
+            <Col xs={12} sm={4} md={1}>
               <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
                   placeholder="出发地"
@@ -594,7 +594,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
           initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
         >
           <Row gutter={[12, 12]} align="bottom">
-            <Col xs={12} sm={6} md={3}>
+            <Col xs={12} sm={4} md={1}>
               <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
                   placeholder="出发地"
@@ -608,7 +608,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={12} sm={6} md={3}>
+            <Col xs={12} sm={4} md={1}>
               <Form.Item name="destination" rules={[{ required: true, message: '请选择目的地' }]}>
                 <Select
                   placeholder="目的地"
