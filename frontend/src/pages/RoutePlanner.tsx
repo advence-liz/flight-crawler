@@ -338,64 +338,71 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
       <Card style={{ marginBottom: 16 }}>
         <Form
           form={form}
-          layout="horizontal"
+          layout={isMobile ? 'vertical' : 'inline'}
           onFinish={handleSearch}
           initialValues={{ flightType: '2666权益卡航班' }}
         >
-          <Row gutter={[16, 16]} align="bottom">
-            <Col xs={12} sm={4} md={2}>
-              <Form.Item name="origin" label=" " rules={[{ required: true, message: '请选择出发地' }]}>
-                <Select
-                  placeholder="出发地"
-                  style={{ width: '100%' }}
-                  showSearch
-                  filterOption={(input, option) =>
-                    (option?.value?.toString() || '').includes(input)
-                  }
-                  options={cities.map(c => ({ value: c, label: c }))}
-                />
+          {isMobile ? (
+            <Row gutter={[8, 8]}>
+              <Col xs={24}>
+                <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
+                  <Select placeholder="出发地" showSearch style={{ width: '100%' }}
+                    filterOption={(input, option) => (option?.value?.toString() || '').includes(input)}
+                    options={cities.map(c => ({ value: c, label: c }))} />
+                </Form.Item>
+              </Col>
+              <Col xs={24}>
+                <Form.Item name="departureRange" label="去程日期" rules={[{ required: true, message: '请选择去程日期' }]}>
+                  <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: '100%' }}
+                    getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
+                </Form.Item>
+              </Col>
+              <Col xs={24}>
+                <Form.Item name="returnRange" label="返程日期" rules={[{ required: true, message: '请选择返程日期' }]}>
+                  <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: '100%' }}
+                    getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
+                </Form.Item>
+              </Col>
+              <Col xs={12}>
+                <Form.Item name="flightType" label="权益卡">
+                  <Select style={{ width: '100%' }}>
+                    <Select.Option value="666权益卡航班">666</Select.Option>
+                    <Select.Option value="2666权益卡航班">2666</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={12}>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>探索</Button>
+                </Form.Item>
+              </Col>
+            </Row>
+          ) : (
+            <>
+              <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
+                <Select placeholder="出发地" style={{ width: 180 }} showSearch
+                  filterOption={(input, option) => (option?.value?.toString() || '').includes(input)}
+                  options={cities.map(c => ({ value: c, label: c }))} />
               </Form.Item>
-            </Col>
-
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item name="departureRange" label="去程日期" rules={[{ required: true, message: '请选择去程日期范围' }]}>
-                <DatePicker.RangePicker
-                  placeholder={['去程最早', '去程最晚']}
-                  style={{ width: '100%' }}
-                  getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
-                  placement={isMobile ? 'bottomLeft' : undefined}
-                />
+              <Form.Item name="departureRange" label="去程日期" rules={[{ required: true }]}>
+                <DatePicker.RangePicker placeholder={['最早', '最晚']} />
               </Form.Item>
-            </Col>
-
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item name="returnRange" label="返程日期" rules={[{ required: true, message: '请选择返程日期范围' }]}>
-                <DatePicker.RangePicker
-                  placeholder={['返程最早', '返程最晚']}
-                  style={{ width: '100%' }}
-                  getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
-                  placement={isMobile ? 'bottomLeft' : undefined}
-                />
+              <Form.Item name="returnRange" label="返程日期" rules={[{ required: true }]}>
+                <DatePicker.RangePicker placeholder={['最早', '最晚']} />
               </Form.Item>
-            </Col>
-
-            <Col xs={8} sm={4} md={2}>
               <Form.Item name="flightType" label="权益卡">
-                <Select style={{ width: '100%' }}>
+                <Select style={{ width: 80 }}>
                   <Select.Option value="666权益卡航班">666</Select.Option>
                   <Select.Option value="2666权益卡航班">2666</Select.Option>
                 </Select>
               </Form.Item>
-            </Col>
-
-            <Col xs={12} sm={4} md={1}>
               <Form.Item>
-                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block={isMobile}>
+                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>
                   探索
                 </Button>
               </Form.Item>
-            </Col>
-          </Row>
+            </>
+          )}
         </Form>
       </Card>
 
