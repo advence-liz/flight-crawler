@@ -593,8 +593,8 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
           onFinish={handleSearch}
           initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
         >
-          <Row gutter={[16, 16]} align="bottom">
-            <Col xs={12} sm={4} md={2}>
+          <Row gutter={[12, 12]} align="bottom">
+            <Col xs={12} sm={6} md={3}>
               <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
                   placeholder="出发地"
@@ -608,7 +608,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={12} sm={4} md={2}>
+            <Col xs={12} sm={6} md={3}>
               <Form.Item name="destination" rules={[{ required: true, message: '请选择目的地' }]}>
                 <Select
                   placeholder="目的地"
@@ -622,8 +622,8 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={24} sm={12} md={6}>
-              <Form.Item name="departureRange" label="去程日期" rules={[{ required: true, message: '请选择去程日期' }]}>
+            <Col xs={24} sm={12} md={5}>
+              <Form.Item name="departureRange" label="去程" rules={[{ required: true, message: '请选择去程日期' }]}>
                 <DatePicker.RangePicker
                   placeholder={['最早', '最晚']}
                   style={{ width: '100%' }}
@@ -633,8 +633,8 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={24} sm={12} md={6}>
-              <Form.Item name="returnRange" label="返程日期（可选）">
+            <Col xs={24} sm={12} md={5}>
+              <Form.Item name="returnRange" label="返程">
                 <DatePicker.RangePicker
                   placeholder={['最早', '最晚']}
                   style={{ width: '100%' }}
@@ -645,14 +645,14 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={16} sm={8} md={3}>
+            <Col xs={16} sm={8} md={4}>
               <Form.Item label="中转/权益卡" style={{ marginBottom: 0 }}>
                 <Space.Compact style={{ width: '100%' }}>
                   <Form.Item name="maxTransfers" noStyle>
-                    <InputNumber min={0} max={2} style={{ width: '40%' }} placeholder="中转" />
+                    <InputNumber min={0} max={2} style={{ width: '38%' }} placeholder="中转" />
                   </Form.Item>
                   <Form.Item name="flightType" noStyle>
-                    <Select style={{ width: '60%' }}>
+                    <Select style={{ width: '62%' }}>
                       <Select.Option value="666权益卡航班">666</Select.Option>
                       <Select.Option value="2666权益卡航班">2666</Select.Option>
                     </Select>
@@ -661,7 +661,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={8} sm={4} md={1}>
+            <Col xs={8} sm={4} md={2}>
               <Form.Item>
                 <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>
                   查询
