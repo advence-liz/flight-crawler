@@ -96,7 +96,7 @@ function DataManagement() {
   const [logDetailVisible, setLogDetailVisible] = useState(false);
   const [subLogs, setSubLogs] = useState<CrawlerLog[]>([]);
   const [subLogsLoading, setSubLogsLoading] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval] = useState(5); // 默认 5 秒
   const autoRefreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [logStats, setLogStats] = useState<LogStats | null>(null);
