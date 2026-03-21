@@ -344,7 +344,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
         >
           <Row gutter={[16, 16]} align="bottom">
             <Col xs={12} sm={4} md={2}>
-              <Form.Item name="origin" label=" " rules={[{ required: true, message: '请选择出发地' }]}>
+              <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
                   placeholder="出发地"
                   style={{ width: '100%' }}
@@ -593,9 +593,9 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
           onFinish={handleSearch}
           initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
         >
-          <Row gutter={[8, 8]} align="bottom">
+          <Row gutter={[8, 8]} align="middle">
             <Col xs={12} sm={4} md={2}>
-              <Form.Item name="origin" label=" " rules={[{ required: true, message: '请选择出发地' }]}>
+              <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
                   placeholder="出发地"
                   style={{ width: '100%' }}
@@ -609,7 +609,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             </Col>
 
             <Col xs={12} sm={4} md={2}>
-              <Form.Item name="destination" label=" " rules={[{ required: true, message: '请选择目的地' }]}>
+              <Form.Item name="destination" rules={[{ required: true, message: '请选择目的地' }]}>
                 <Select
                   placeholder="目的地"
                   style={{ width: '100%' }}
@@ -623,9 +623,9 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             </Col>
 
             <Col xs={24} sm={12} md={5}>
-              <Form.Item name="departureRange" label="去程" rules={[{ required: true, message: '请选择去程日期' }]}>
+              <Form.Item name="departureRange" rules={[{ required: true, message: '请选择去程日期' }]}>
                 <DatePicker.RangePicker
-                  placeholder={['最早', '最晚']}
+                  placeholder={['去程最早', '去程最晚']}
                   style={{ width: '100%' }}
                   getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
                   placement={isMobile ? 'bottomLeft' : undefined}
@@ -634,9 +634,9 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             </Col>
 
             <Col xs={24} sm={12} md={5}>
-              <Form.Item name="returnRange" label="返程">
+              <Form.Item name="returnRange">
                 <DatePicker.RangePicker
-                  placeholder={['最早', '最晚']}
+                  placeholder={['去程最早', '去程最晚']}
                   style={{ width: '100%' }}
                   allowEmpty={[true, true]}
                   getPopupContainer={isMobile ? (trigger) => trigger.parentElement || document.body : undefined}
@@ -646,7 +646,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             </Col>
 
             <Col xs={16} sm={8} md={4}>
-              <Form.Item label="中转/权益卡" style={{ marginBottom: 0 }}>
+              <Form.Item style={{ marginBottom: 0 }}>
                 <Space.Compact style={{ width: '50%' }}>
                   <Form.Item name="maxTransfers" noStyle>
                     <InputNumber min={0} max={2} style={{ width: '38%' }} placeholder="中转" />
@@ -662,7 +662,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             </Col>
 
             <Col xs={8} sm={4} md={2}>
-              <Form.Item label=" ">
+              <Form.Item>
                 <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>
                   查询
                 </Button>
