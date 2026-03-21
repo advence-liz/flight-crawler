@@ -593,7 +593,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
           onFinish={handleSearch}
           initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
         >
-          <Row gutter={[12, 12]} align="bottom">
+          <Row gutter={[8, 8]} align="bottom">
             <Col xs={12} sm={4} md={2}>
               <Form.Item name="origin" label=" " rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
