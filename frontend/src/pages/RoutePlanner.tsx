@@ -622,7 +622,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={24} sm={12} md={6}>
+            <Col xs={24} sm={12} md={5}>
               <Form.Item name="departureRange" label="去程" rules={[{ required: true, message: '请选择去程日期' }]}>
                 <DatePicker.RangePicker
                   placeholder={['最早', '最晚']}
@@ -633,7 +633,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={24} sm={12} md={6}>
+            <Col xs={24} sm={12} md={5}>
               <Form.Item name="returnRange" label="返程">
                 <DatePicker.RangePicker
                   placeholder={['最早', '最晚']}
