@@ -1806,7 +1806,7 @@ export class CrawlerService implements OnApplicationBootstrap {
   }> {
     this.logger.log(`🔍 【初始化阶段1】${planOnly ? '生成执行计划' : '开始发现机场'}（爬取未来 ${days} 天）...`);
 
-    const seedAirports = ['北京首都', '北京大兴', '上海浦东', '上海虹桥', '深圳'];
+    const seedAirports = ['北京首都', '北京大兴', '上海浦东', '上海虹桥', '深圳', '广州'];
 
     // 生成日期范围（从明天开始）
     const dates: string[] = [];
