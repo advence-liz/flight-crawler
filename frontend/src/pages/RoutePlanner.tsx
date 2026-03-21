@@ -589,7 +589,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
       <Card style={{ marginBottom: 16 }}>
         <Form
           form={form}
-          layout="horizontal"
+          layout="vertical"
           onFinish={handleSearch}
           initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
         >
@@ -622,7 +622,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={24} sm={12} md={4}>
+            <Col xs={24} sm={12} md={5}>
               <Form.Item name="departureRange" label="去程" rules={[{ required: true, message: '请选择去程日期' }]}>
                 <DatePicker.RangePicker
                   placeholder={['去程最早', '去程最晚']}
@@ -633,7 +633,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={24} sm={12} md={4}>
+            <Col xs={24} sm={12} md={5}>
               <Form.Item name="returnRange" label="返程">
                 <DatePicker.RangePicker
                   placeholder={['去程最早', '去程最晚']}
