@@ -344,7 +344,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
         >
           <Row gutter={[16, 16]} align="bottom">
             <Col xs={12} sm={4} md={2}>
-              <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
+              <Form.Item name="origin" label=" " rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
                   placeholder="出发地"
                   style={{ width: '100%' }}
@@ -595,7 +595,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
         >
           <Row gutter={[12, 12]} align="bottom">
             <Col xs={12} sm={4} md={2}>
-              <Form.Item name="origin" rules={[{ required: true, message: '请选择出发地' }]}>
+              <Form.Item name="origin" label=" " rules={[{ required: true, message: '请选择出发地' }]}>
                 <Select
                   placeholder="出发地"
                   style={{ width: '100%' }}
@@ -609,7 +609,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             </Col>
 
             <Col xs={12} sm={4} md={2}>
-              <Form.Item name="destination" rules={[{ required: true, message: '请选择目的地' }]}>
+              <Form.Item name="destination" label=" " rules={[{ required: true, message: '请选择目的地' }]}>
                 <Select
                   placeholder="目的地"
                   style={{ width: '100%' }}
@@ -662,7 +662,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             </Col>
 
             <Col xs={8} sm={4} md={2}>
-              <Form.Item>
+              <Form.Item label=" ">
                 <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>
                   查询
                 </Button>
