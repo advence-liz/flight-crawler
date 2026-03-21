@@ -363,15 +363,15 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
                     getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
                 </Form.Item>
               </Col>
-              <Col xs={12}>
-                <Form.Item name="flightType" label="权益卡">
+              <Col xs={24}>
+                <Form.Item name="flightType" label="权益卡类型">
                   <Select style={{ width: '100%' }}>
                     <Select.Option value="666权益卡航班">666</Select.Option>
                     <Select.Option value="2666权益卡航班">2666</Select.Option>
                   </Select>
                 </Form.Item>
               </Col>
-              <Col xs={12}>
+              <Col xs={24}>
                 <Form.Item>
                   <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>探索</Button>
                 </Form.Item>
@@ -628,13 +628,13 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
                     getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
                 </Form.Item>
               </Col>
-              <Col xs={12}>
-                <Form.Item name="maxTransfers" label="中转">
+              <Col xs={24}>
+                <Form.Item name="maxTransfers" label="最大中转次数">
                   <InputNumber min={0} max={2} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
-              <Col xs={12}>
-                <Form.Item name="flightType" label="权益卡">
+              <Col xs={24}>
+                <Form.Item name="flightType" label="权益卡类型">
                   <Select style={{ width: '100%' }}>
                     <Select.Option value="666权益卡航班">666</Select.Option>
                     <Select.Option value="2666权益卡航班">2666</Select.Option>

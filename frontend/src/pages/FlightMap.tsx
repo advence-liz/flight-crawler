@@ -425,15 +425,15 @@ function FlightMap() {
                     getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
                 </Form.Item>
               </Col>
-              <Col xs={12}>
-                <Form.Item name="flightType" label="权益卡">
+              <Col xs={24}>
+                <Form.Item name="flightType" label="权益卡类型">
                   <Select style={{ width: '100%' }}>
                     <Select.Option value="666权益卡航班">666</Select.Option>
                     <Select.Option value="2666权益卡航班">2666</Select.Option>
                   </Select>
                 </Form.Item>
               </Col>
-              <Col xs={12}>
+              <Col xs={24}>
                 <Form.Item>
                   <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>查询</Button>
                 </Form.Item>
