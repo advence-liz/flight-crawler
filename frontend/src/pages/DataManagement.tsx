@@ -477,16 +477,19 @@ function DataManagement() {
       render: (details?: string) => {
         if (!details) return '-';
         try {
-          const detailsObj = JSON.parse(details);
-          if (detailsObj.dateRange && Array.isArray(detailsObj.dateRange) && detailsObj.dateRange.length > 0) {
-            const startDate = detailsObj.dateRange[0];
-            const endDate = detailsObj.dateRange[detailsObj.dateRange.length - 1];
-            if (startDate === endDate) {
-              return startDate;
-            }
-            return `${startDate} ~ ${endDate}`;
-          }
-          return '-';
+          const d = JSON.parse(details);
+          // 兼容三种结构：
+          // 1. d.dateRange（顶层数组，discover_airports / refresh_flights 写入时）
+          // 2. d.executionPlan.dateRange（refresh_flights 父任务完成后写入）
+          // 3. d.date（refresh_flights_daily 子任务单日字段）
+          const range: string[] | undefined =
+            (Array.isArray(d.dateRange) && d.dateRange.length > 0 ? d.dateRange : null) ??
+            (Array.isArray(d.executionPlan?.dateRange) && d.executionPlan.dateRange.length > 0 ? d.executionPlan.dateRange : null) ??
+            (d.date ? [d.date] : null);
+          if (!range) return '-';
+          const start = range[0];
+          const end = range[range.length - 1];
+          return start === end ? start : `${start} ~ ${end}`;
         } catch {
           return '-';
         }
