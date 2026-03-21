@@ -2810,9 +2810,9 @@ export class CrawlerService implements OnApplicationBootstrap {
   }
 
   /**
-   * 每天凌晨 3 点清理过期缓存
+   * 每小时清理过期缓存
    */
-  @Cron('0 3 * * *', {
+  @Cron('0 * * * *', {
     name: 'clean-expired-cache',
     timeZone: 'Asia/Shanghai',
   })

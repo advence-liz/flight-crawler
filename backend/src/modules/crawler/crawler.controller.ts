@@ -11,7 +11,7 @@ import { CleanLogsDto } from './dto/clean-logs.dto';
 // 定时任务元数据（固定配置，与 crawler.service.ts 中的 @Cron 保持一致）
 const CRON_JOB_META = [
   { name: 'auto-crawl-flights',          cron: '0 2 * * *',  desc: '每日凌晨 2 点自动爬取航班数据' },
-  { name: 'clean-expired-cache',         cron: '0 3 * * *',  desc: '每日凌晨 3 点清理过期缓存' },
+  { name: 'clean-expired-cache',         cron: '0 * * * *',  desc: '每小时清理过期缓存' },
   { name: 'refresh-destination-cache',   cron: '7 * * * *',  desc: '每小时刷新所有城市目的地查询缓存' },
 ];
 
