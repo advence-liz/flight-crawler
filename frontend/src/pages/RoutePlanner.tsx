@@ -645,7 +645,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={16} sm={8} md={6}>
+            <Col xs={16} sm={8} md={4}>
               <Form.Item label="中转/权益卡" style={{ marginBottom: 0 }}>
                 <Space.Compact style={{ width: '50%' }}>
                   <Form.Item name="maxTransfers" noStyle>
