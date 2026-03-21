@@ -661,7 +661,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
-            <Col xs={8} sm={4} md={3}>
+            <Col xs={8} sm={4} md={2}>
               <Form.Item>
                 <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>
                   查询
