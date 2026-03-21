@@ -664,7 +664,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
             <Col xs={8} sm={4} md={3}>
               <Form.Item>
                 <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>
-                  查询路线
+                  查询
                 </Button>
               </Form.Item>
             </Col>
@@ -720,7 +720,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
 
       {!loading && !hasResults && (
         <Card>
-          <Empty description="选择出发地、目的地和日期查询路线方案" />
+          <Empty description="选择出发地、目的地和日期查询方案" />
         </Card>
       )}
     </div>
