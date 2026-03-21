@@ -645,25 +645,26 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
               </Form.Item>
             </Col>
 
+            <Col xs={16} sm={8} md={3}>
+              <Form.Item label="中转/权益卡" style={{ marginBottom: 0 }}>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Form.Item name="maxTransfers" noStyle>
+                    <InputNumber min={0} max={2} style={{ width: '40%' }} placeholder="中转" />
+                  </Form.Item>
+                  <Form.Item name="flightType" noStyle>
+                    <Select style={{ width: '60%' }}>
+                      <Select.Option value="666权益卡航班">666</Select.Option>
+                      <Select.Option value="2666权益卡航班">2666</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Space.Compact>
+              </Form.Item>
+            </Col>
+
             <Col xs={8} sm={4} md={1}>
-              <Form.Item name="maxTransfers" label="中转">
-                <InputNumber min={0} max={2} style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-
-            <Col xs={8} sm={4} md={2}>
-              <Form.Item name="flightType" label="权益卡">
-                <Select style={{ width: '100%' }}>
-                  <Select.Option value="666权益卡航班">666</Select.Option>
-                  <Select.Option value="2666权益卡航班">2666</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-
-            <Col xs={12} sm={16} md={1}>
               <Form.Item>
-                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block={isMobile}>
-                  查询路线
+                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>
+                  查询
                 </Button>
               </Form.Item>
             </Col>
