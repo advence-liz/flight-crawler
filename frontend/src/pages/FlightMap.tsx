@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import {
@@ -41,33 +41,6 @@ function FlightMap() {
   const [transferOneWay, setTransferOneWay] = useState<TransferOneWayDest[]>([]);
   const [transferLoading, setTransferLoading] = useState(false);
   const [nodeDrawer, setNodeDrawer] = useState<{ open: boolean; node: any }>({ open: false, node: null });
-
-  // 用 ref 保存最新的 click 处理逻辑，避免 echarts-for-react onEvents 闭包过期问题
-  const clickHandlerRef = useRef<(params: any) => void>(() => {});
-  useEffect(() => {
-    clickHandlerRef.current = (params: any) => {
-      if (params.dataType !== 'node' || params.data?.id === origin) return;
-      if (isMobile) {
-        setNodeDrawer({ open: true, node: params.data });
-      } else {
-        const values = form.getFieldsValue();
-        const [startDate, endDate] = values.dateRange || [];
-        const start = startDate ? startDate.format('YYYY-MM-DD') : '';
-        const end = endDate ? endDate.format('YYYY-MM-DD') : '';
-        const p = new URLSearchParams({
-          tab: 'plan',
-          origin,
-          destination: params.data.id,
-          departureDate: start,
-          departureDateEnd: end,
-          returnDate: start,
-          returnDateEnd: end,
-        });
-        navigate(`/route-planner?${p.toString()}`);
-      }
-    };
-  });
-  const stableClickHandler = useCallback((params: any) => clickHandlerRef.current(params), []);
 
   const doSearch = async (originVal: string, startDate: string, endDate: string, flightType: string) => {
     setLoading(true);
@@ -192,7 +165,7 @@ function FlightMap() {
           id: dest.destination,
           name: dest.destination,
           symbol: 'circle',
-          symbolSize: isMobile ? 32 : 6,
+          symbolSize: 6,
           itemStyle: { color: 'rgba(0,0,0,0)', borderWidth: 0 },
           label: {
             show: true,
@@ -250,7 +223,7 @@ function FlightMap() {
             id: city,
             name: city,
             symbol: 'circle',
-            symbolSize: isMobile ? 32 : 6,
+            symbolSize: 6,
             itemStyle: { color: 'rgba(0,0,0,0)', borderWidth: 0 },
             label: {
               show: true,
@@ -573,7 +546,31 @@ function FlightMap() {
               style={{ height: isMobile ? Math.round(window.innerHeight * 0.62) : 660, background: '#0f172a' }}
               opts={{ renderer: 'canvas' }}
               showLoading={loading}
-              onEvents={{ click: stableClickHandler }}
+              onEvents={{
+                click: (params: any) => {
+                  if (params.dataType !== 'node' || params.data?.id === origin) return;
+                  if (isMobile) {
+                    // 移动端：先弹出详情 Drawer，不直接跳转
+                    setNodeDrawer({ open: true, node: params.data });
+                  } else {
+                    // PC 端：直接跳转行程规划
+                    const values = form.getFieldsValue();
+                    const [startDate, endDate] = values.dateRange || [];
+                    const start = startDate ? startDate.format('YYYY-MM-DD') : '';
+                    const end = endDate ? endDate.format('YYYY-MM-DD') : '';
+                    const p = new URLSearchParams({
+                      tab: 'plan',
+                      origin,
+                      destination: params.data.id,
+                      departureDate: start,
+                      departureDateEnd: end,
+                      returnDate: start,
+                      returnDateEnd: end,
+                    });
+                    navigate(`/route-planner?${p.toString()}`);
+                  }
+                },
+              }}
             />
           ) : (
             <div style={{ height: isMobile ? Math.round(window.innerHeight * 0.62) : 660, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: '#475569' }}>
@@ -582,7 +579,7 @@ function FlightMap() {
           )}
           <div style={{ padding: '8px 16px', background: '#0f172a', color: '#475569', fontSize: isMobile ? 11 : 12, borderTop: '1px solid #1e293b' }}>
             {isMobile ? (
-              <span>提示：双指缩放 · 点击节点查看详情 · <span style={{ color: '#60a5fa' }}>点击可规划行程</span></span>
+              <span>提示：双指缩放 · 点击节点查看详情 · <span style={{ color: '#60a5fa' }}>点击目的地跳转规划</span></span>
             ) : (
               <span>提示：可拖拽节点调整布局 · 滚轮缩放 · 悬浮节点查看详情 · <span style={{ color: '#60a5fa' }}>点击目的地节点跳转行程规划</span></span>
             )}
