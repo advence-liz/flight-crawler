@@ -165,7 +165,7 @@ function FlightMap() {
           id: dest.destination,
           name: dest.destination,
           symbol: 'circle',
-          symbolSize: 6,
+          symbolSize: isMobile ? 32 : 6,
           itemStyle: { color: 'rgba(0,0,0,0)', borderWidth: 0 },
           label: {
             show: true,
@@ -223,7 +223,7 @@ function FlightMap() {
             id: city,
             name: city,
             symbol: 'circle',
-            symbolSize: 6,
+            symbolSize: isMobile ? 32 : 6,
             itemStyle: { color: 'rgba(0,0,0,0)', borderWidth: 0 },
             label: {
               show: true,
@@ -579,7 +579,7 @@ function FlightMap() {
           )}
           <div style={{ padding: '8px 16px', background: '#0f172a', color: '#475569', fontSize: isMobile ? 11 : 12, borderTop: '1px solid #1e293b' }}>
             {isMobile ? (
-              <span>提示：双指缩放 · 点击节点查看详情 · <span style={{ color: '#60a5fa' }}>点击目的地跳转规划</span></span>
+              <span>提示：双指缩放 · 点击节点查看详情 · <span style={{ color: '#60a5fa' }}>点击可规划行程</span></span>
             ) : (
               <span>提示：可拖拽节点调整布局 · 滚轮缩放 · 悬浮节点查看详情 · <span style={{ color: '#60a5fa' }}>点击目的地节点跳转行程规划</span></span>
             )}
