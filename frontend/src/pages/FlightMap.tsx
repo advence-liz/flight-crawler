@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import {
@@ -41,6 +41,7 @@ function FlightMap() {
   const [transferOneWay, setTransferOneWay] = useState<TransferOneWayDest[]>([]);
   const [transferLoading, setTransferLoading] = useState(false);
   const [nodeDrawer, setNodeDrawer] = useState<{ open: boolean; node: any }>({ open: false, node: null });
+  const chartRef = useRef<any>(null);
 
   const doSearch = async (originVal: string, startDate: string, endDate: string, flightType: string) => {
     setLoading(true);
@@ -398,6 +399,38 @@ function FlightMap() {
     };
   }, [origin, visibleDests, showTransfer, transferRoundTrip, transferOneWay, isMobile]);
 
+  // 用原生事件绑定替代 onEvents，避免 echarts-for-react 闭包过期问题
+  // 放在 chartOption 之后，确保图表渲染后能拿到实例
+  useEffect(() => {
+    const chart = chartRef.current?.getEchartsInstance();
+    if (!chart) return;
+
+    const handler = (params: any) => {
+      if (params.dataType !== 'node' || params.data?.id === origin) return;
+      if (isMobile) {
+        setNodeDrawer({ open: true, node: params.data });
+      } else {
+        const values = form.getFieldsValue();
+        const [startDate, endDate] = values.dateRange || [];
+        const start = startDate ? startDate.format('YYYY-MM-DD') : '';
+        const end = endDate ? endDate.format('YYYY-MM-DD') : '';
+        const p = new URLSearchParams({
+          tab: 'plan',
+          origin,
+          destination: params.data.id,
+          departureDate: start,
+          departureDateEnd: end,
+          returnDate: start,
+          returnDateEnd: end,
+        });
+        navigate(`/route-planner?${p.toString()}`);
+      }
+    };
+
+    chart.on('click', handler);
+    return () => chart.off('click', handler);
+  }, [isMobile, origin, form, navigate, chartOption]);
+
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <Card>
@@ -542,35 +575,11 @@ function FlightMap() {
         >
           {chartOption ? (
             <ReactECharts
+              ref={chartRef}
               option={chartOption}
               style={{ height: isMobile ? Math.round(window.innerHeight * 0.62) : 660, background: '#0f172a' }}
               opts={{ renderer: 'canvas' }}
               showLoading={loading}
-              onEvents={{
-                click: (params: any) => {
-                  if (params.dataType !== 'node' || params.data?.id === origin) return;
-                  if (isMobile) {
-                    // 移动端：先弹出详情 Drawer，不直接跳转
-                    setNodeDrawer({ open: true, node: params.data });
-                  } else {
-                    // PC 端：直接跳转行程规划
-                    const values = form.getFieldsValue();
-                    const [startDate, endDate] = values.dateRange || [];
-                    const start = startDate ? startDate.format('YYYY-MM-DD') : '';
-                    const end = endDate ? endDate.format('YYYY-MM-DD') : '';
-                    const p = new URLSearchParams({
-                      tab: 'plan',
-                      origin,
-                      destination: params.data.id,
-                      departureDate: start,
-                      departureDateEnd: end,
-                      returnDate: start,
-                      returnDateEnd: end,
-                    });
-                    navigate(`/route-planner?${p.toString()}`);
-                  }
-                },
-              }}
             />
           ) : (
             <div style={{ height: isMobile ? Math.round(window.innerHeight * 0.62) : 660, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: '#475569' }}>
