@@ -43,8 +43,17 @@ function FlightMap() {
   const [nodeDrawer, setNodeDrawer] = useState<{ open: boolean; node: any }>({ open: false, node: null });
   // 用 ref 存最新的点击处理逻辑，配合 onEvents 的稳定引用，避免闭包过期又不触发重绑定
   const clickHandlerRef = useRef<(params: any) => void>(() => {});
+  // 防止移动端 touch 触发多次 click，300ms 内只响应一次
+  const lastClickTimeRef = useRef<number>(0);
   // onEvents 必须是稳定引用，否则 echarts-for-react 每次 render 都重新绑定，导致 Drawer 一闪而过
-  const stableOnEvents = useMemo(() => ({ click: (params: any) => clickHandlerRef.current(params) }), []);
+  const stableOnEvents = useMemo(() => ({
+    click: (params: any) => {
+      const now = Date.now();
+      if (now - lastClickTimeRef.current < 300) return;
+      lastClickTimeRef.current = now;
+      clickHandlerRef.current(params);
+    }
+  }), []);
 
   const doSearch = async (originVal: string, startDate: string, endDate: string, flightType: string) => {
     setLoading(true);
