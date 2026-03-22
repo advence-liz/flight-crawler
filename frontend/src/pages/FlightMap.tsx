@@ -145,7 +145,7 @@ function FlightMap() {
         id: origin,
         name: origin,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: isMobile ? 32 : 6,
         itemStyle: { color: 'rgba(0,0,0,0)', borderWidth: 0 },
         label: { show: true, color: '#facc15', fontWeight: 700, fontSize: Math.round(14 * scale), position: 'bottom' as const, distance: 4 },
         category: 0,
