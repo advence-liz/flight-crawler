@@ -300,7 +300,10 @@ function DestinationQuery() {
 
     getAvailableCities()
       .then(cities => {
-        setAvailableOrigins(cities.cityList?.length ? cities.cityList : cities.origins);
+        // 合并城市级（北京）与机场级（北京首都/北京大兴）选项并去重，
+        // 让出发地既能按城市一键查全部、也能精确选具体机场（后端 expandCityToAirports 两者都支持）
+        const merged = Array.from(new Set([...(cities.cityList || []), ...(cities.origins || [])]));
+        setAvailableOrigins(merged.length ? merged : (cities.origins || []));
         // 城市列表加载完成后自动触发一次查询
         form.submit();
       })
@@ -659,7 +662,7 @@ function DestinationQuery() {
                     style={{ width: '100%' }}
                     showSearch
                     filterOption={(input, option) =>
-                      (option?.label?.toString() || '').toLowerCase().includes(input.toLowerCase())
+                      (option?.value?.toString() || '').toLowerCase().includes(input.toLowerCase())
                     }
                   >
                     {availableOrigins.map(city => (
@@ -710,7 +713,7 @@ function DestinationQuery() {
                   style={{ width: 180 }}
                   showSearch
                   filterOption={(input, option) =>
-                    (option?.label?.toString() || '').toLowerCase().includes(input.toLowerCase())
+                    (option?.value?.toString() || '').toLowerCase().includes(input.toLowerCase())
                   }
                 >
                   {availableOrigins.map(city => (
