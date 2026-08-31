@@ -1,0 +1,139 @@
+name: daily-crawl
+
+on:
+  schedule:
+    # 18:00 UTC = 次日 02:00 北京时间，对齐原本 @Cron 里"每日凌晨"的设计
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      skip_crawl:
+        description: '跳过真实爬取，仅用仓库自带的 db 验证「发布到 data 分支 + 触发 Render 重新构建」链路'
+        type: boolean
+        default: false
+      days:
+        description: '爬取未来多少天（1-30）'
+        type: number
+        default: 30
+
+permissions:
+  contents: write
+
+jobs:
+  crawl-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装后端依赖（含 puppeteer，CI 环境不省这个）
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        working-directory: backend
+        run: npm ci
+
+      - name: 准备运行环境
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        working-directory: backend
+        run: |
+          cat > .env <<'EOF'
+          PORT=3000
+          NODE_ENV=production
+          DB_TYPE=sqlite
+          DB_DATABASE=./data/flight-crawler.db
+          CRAWLER_ENABLED=true
+          CRAWLER_HEADLESS=true
+          CRAWLER_TIMEOUT=30000
+          CRAWLER_MAX_RETRIES=3
+          CRAWLER_AUTO_CRAWL=false
+          CORS_ORIGIN=*
+          EOF
+          mkdir -p data logs
+
+      - name: 构建后端
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        working-directory: backend
+        run: npm run build
+
+      - name: 启动后端
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        working-directory: backend
+        run: |
+          nohup node dist/main.js > "$GITHUB_WORKSPACE/server.log" 2>&1 &
+          echo $! > "$GITHUB_WORKSPACE/server.pid"
+          for i in $(seq 1 30); do
+            sleep 1
+            curl -sf http://localhost:3000/api/flights >/dev/null 2>&1 && { echo "后端已就绪"; exit 0; }
+          done
+          echo "::error::后端启动超时"; cat "$GITHUB_WORKSPACE/server.log"; exit 1
+
+      - name: 发现机场（保持机场列表最新）
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        run: |
+          curl -sf -X POST http://localhost:3000/api/crawler/initialize/discover \
+            -H "Content-Type: application/json" -d '{"days":1}'
+
+      - name: 触发发现航班（滚动窗口，异步任务）
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        id: trigger
+        run: |
+          DAYS="${{ github.event.inputs.days || '30' }}"
+          START=$(date -u +%F)
+          END=$(date -u -d "+${DAYS} days" +%F)
+          echo "爬取窗口：$START ~ $END"
+          RESP=$(curl -sf -X POST http://localhost:3000/api/crawler/initialize/refresh \
+            -H "Content-Type: application/json" \
+            -d "{\"startDate\":\"$START\",\"endDate\":\"$END\"}")
+          echo "$RESP"
+          TASK_ID=$(node -e "console.log(JSON.parse(process.argv[1]).taskId)" "$RESP")
+          if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "undefined" ]; then
+            echo "::error::未拿到 taskId，可能已同步完成或接口报错"; exit 1
+          fi
+          echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
+
+      - name: 轮询直到爬取任务结束
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        run: |
+          TASK_ID="${{ steps.trigger.outputs.task_id }}"
+          for i in $(seq 1 1080); do   # 最长 1080*15s = 4.5 小时
+            sleep 15
+            LOG=$(curl -sf "http://localhost:3000/api/crawler/logs/$TASK_ID")
+            STATUS=$(node -e "console.log(JSON.parse(process.argv[1]).status)" "$LOG")
+            echo "[$i] status=$STATUS"
+            if [ "$STATUS" = "success" ]; then echo "$LOG"; exit 0; fi
+            if [ "$STATUS" = "failed" ]; then echo "::error::爬取任务失败"; echo "$LOG"; exit 1; fi
+          done
+          echo "::error::轮询超时"; exit 1
+
+      - name: 停止后端
+        if: ${{ github.event.inputs.skip_crawl != 'true' && always() }}
+        run: kill "$(cat server.pid)" 2>/dev/null || true
+
+      - name: 发布 db 到 data 分支（orphan force-push，不进 main 历史）
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          DB_PATH="$GITHUB_WORKSPACE/backend/data/flight-crawler.db"
+          TMP_DIR=$(mktemp -d)
+          git clone --depth=1 --branch=data "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TMP_DIR"
+          mkdir -p "$TMP_DIR/backend/data"
+          cp "$DB_PATH" "$TMP_DIR/backend/data/flight-crawler.db"
+          cd "$TMP_DIR"
+          git add -f backend/data/flight-crawler.db
+          git commit --allow-empty -m "data: 自动更新航班数据库 $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push origin data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 触发 Render 重新构建部署
+        if: ${{ secrets.RENDER_API_KEY != '' }}
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          curl -sf -X POST "https://api.render.com/v1/services/srv-d6t91fua2pns738l8iqg/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}'
+          echo "已触发 Render 重新部署"
