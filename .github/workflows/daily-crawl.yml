@@ -69,11 +69,25 @@ jobs:
           done
           echo "::error::后端启动超时"; cat "$GITHUB_WORKSPACE/server.log"; exit 1
 
-      - name: 发现机场（保持机场列表最新）
+      - name: 发现机场（保持机场列表最新，异步任务，需轮询到完成再继续）
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
         run: |
-          curl -sf -X POST http://localhost:3000/api/crawler/initialize/discover \
-            -H "Content-Type: application/json" -d '{"days":1}'
+          RESP=$(curl -sf -X POST http://localhost:3000/api/crawler/initialize/discover \
+            -H "Content-Type: application/json" -d '{"days":1}')
+          echo "$RESP"
+          TASK_ID=$(node -e "console.log(JSON.parse(process.argv[1]).taskId)" "$RESP")
+          if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "undefined" ]; then
+            echo "::error::发现机场未拿到 taskId"; exit 1
+          fi
+          for i in $(seq 1 60); do   # discover 历史耗时 <3 分钟，最长等 15 分钟
+            sleep 15
+            LOG=$(curl -sf "http://localhost:3000/api/crawler/logs/$TASK_ID")
+            STATUS=$(node -e "console.log(JSON.parse(process.argv[1]).status)" "$LOG")
+            echo "[discover $i] status=$STATUS"
+            if [ "$STATUS" = "success" ]; then break; fi
+            if [ "$STATUS" = "failed" ]; then echo "::error::发现机场任务失败"; echo "$LOG"; exit 1; fi
+            if [ "$i" = "60" ]; then echo "::error::发现机场轮询超时"; exit 1; fi
+          done
 
       - name: 触发发现航班（滚动窗口，异步任务）
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
