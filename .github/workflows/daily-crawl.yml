@@ -65,7 +65,7 @@ jobs:
           echo $! > "$GITHUB_WORKSPACE/server.pid"
           for i in $(seq 1 30); do
             sleep 1
-            curl -sf http://localhost:3000/api/flights >/dev/null 2>&1 && { echo "后端已就绪"; exit 0; }
+            curl -sf http://localhost:3000/api/health >/dev/null 2>&1 && { echo "后端已就绪"; exit 0; }
           done
           echo "::error::后端启动超时"; cat "$GITHUB_WORKSPACE/server.log"; exit 1
 
