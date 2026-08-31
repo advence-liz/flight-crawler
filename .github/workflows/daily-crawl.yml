@@ -1,6 +1,6 @@
 name: daily-crawl
 
-on:
+"on":
   schedule:
     # 18:00 UTC = 次日 02:00 北京时间，对齐原本 @Cron 里"每日凌晨"的设计
     - cron: '0 18 * * *'
