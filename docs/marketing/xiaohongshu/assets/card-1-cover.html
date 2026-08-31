@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1080px; height: 1440px;
+    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(circle at 15% 10%, #eaf4ff 0%, #dcebff 45%, #cfe3ff 100%);
+    overflow: hidden;
+    position: relative;
+  }
+  .blob {
+    position: absolute; border-radius: 50%; filter: blur(2px); opacity: 0.5;
+  }
+  .blob.b1 { width: 420px; height: 420px; background: #bcd9ff; top: -140px; right: -120px; }
+  .blob.b2 { width: 300px; height: 300px; background: #ffd9b8; bottom: 120px; left: -100px; opacity: 0.55; }
+  .badge {
+    position: absolute; top: 96px; left: 96px;
+    background: #0f2a4a; color: #fff; font-size: 26px; font-weight: 600;
+    padding: 14px 32px; border-radius: 999px; letter-spacing: 2px;
+  }
+  .plane {
+    position: absolute; top: 230px; right: 130px; font-size: 130px; transform: rotate(18deg);
+  }
+  .title {
+    position: absolute; top: 400px; left: 96px; right: 96px;
+    font-size: 84px; font-weight: 800; color: #0f2a4a; line-height: 1.28;
+  }
+  .title .hl { color: #1677ff; }
+  .subtitle {
+    position: absolute; top: 650px; left: 96px; right: 96px;
+    font-size: 36px; color: #3a5a80; font-weight: 500; line-height: 1.55;
+  }
+  .cardlist {
+    position: absolute; top: 830px; left: 96px; right: 96px;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .item {
+    display: flex; align-items: center; gap: 18px;
+    background: #ffffffcc; border-radius: 22px; padding: 22px 32px;
+    font-size: 32px; color: #0f2a4a; font-weight: 600;
+    box-shadow: 0 8px 24px rgba(15,42,74,0.08);
+  }
+  .item .tag {
+    font-size: 36px;
+  }
+  .footer {
+    position: absolute; bottom: 60px; left: 96px; right: 96px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 28px; color: #7d93ad; font-weight: 500;
+  }
+  .footer .brand { color: #1677ff; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="badge">随心飞攻略 · 自制工具</div>
+  <div class="plane">✈️</div>
+  <div class="title">666/2666 权益卡<br>怎么飞最<span class="hl">划算</span>？</div>
+  <div class="subtitle">程序员自己写了个工具，一次帮你搞定"去哪飞"和"怎么飞"</div>
+  <div class="cardlist">
+    <div class="item"><span class="tag">🗺️</span> 目的地查询：一键看遍能飞的城市</div>
+    <div class="item"><span class="tag">🧭</span> 智能行程规划：自动排出 Top 10 路线</div>
+    <div class="item"><span class="tag">📍</span> 全国航线地图可视化</div>
+    <div class="item"><span class="tag">🔄</span> 数据每天自动更新</div>
+  </div>
+  <div class="footer">
+    <span>随心飞比价助手</span>
+    <span class="brand">01 / 04</span>
+  </div>
+</body>
+</html>

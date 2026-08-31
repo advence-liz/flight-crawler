@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1080px; height: 1440px;
+    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    background: linear-gradient(160deg, #eef6ff 0%, #ffffff 55%);
+    position: relative; overflow: hidden;
+  }
+  .header { position: absolute; top: 90px; left: 96px; right: 96px; }
+  .kicker { font-size: 30px; color: #1677ff; font-weight: 700; letter-spacing: 2px; margin-bottom: 20px; }
+  .h1 { font-size: 72px; font-weight: 800; color: #0f2a4a; line-height: 1.35; }
+  .h1 .hl { color: #1677ff; }
+  .desc { margin-top: 28px; font-size: 34px; color: #5b7392; line-height: 1.6; }
+
+  .plan { position: absolute; top: 470px; left: 96px; right: 96px;
+    background: #fff; border-radius: 28px; padding: 44px 48px; box-shadow: 0 12px 32px rgba(15,42,74,0.08); }
+  .plan-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+  .rank { background: #1677ff; color: #fff; font-size: 28px; font-weight: 800; padding: 10px 24px; border-radius: 999px; }
+  .score { font-size: 30px; color: #ff6b35; font-weight: 800; }
+
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+  .stop { display: flex; align-items: center; gap: 24px; padding: 18px 0; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; background: #1677ff; flex-shrink: 0; }
+  .dot.mid { background: #ffb24d; }
+  .line { width: 4px; height: 60px; background: #d9e6f8; margin-left: 9px; }
+  .stopcity { font-size: 38px; font-weight: 700; color: #0f2a4a; }
+  .stoptime { font-size: 26px; color: #93a5bc; margin-top: 6px; }
+
+  .stats { display: flex; gap: 24px; margin-top: 34px; }
+  .stat { flex: 1; background: #f4f8ff; border-radius: 20px; padding: 24px; text-align: center; }
+  .stat .num { font-size: 40px; font-weight: 800; color: #0f2a4a; }
+  .stat .lbl { font-size: 24px; color: #93a5bc; margin-top: 6px; }
+
+  .footer {
+    position: absolute; bottom: 60px; left: 96px; right: 96px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 28px; color: #7d93ad; font-weight: 500;
+  }
+  .footer .brand { color: #1677ff; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="kicker">功能二 · 智能行程规划</div>
+    <div class="h1">中转怎么飞<span class="hl">最划算</span>？<br>自动帮你排 Top 10</div>
+    <div class="desc">输入起点、终点和出发日期，综合价格、耗时、中转次数，自动算出最优路线</div>
+  </div>
+
+  <div class="plan">
+    <div class="plan-top">
+      <span class="rank">推荐方案 · TOP 1</span>
+      <span class="score">综合评分 94.5</span>
+    </div>
+    <div class="timeline">
+      <div class="stop">
+        <div class="dot"></div>
+        <div>
+          <div class="stopcity">北京首都</div>
+          <div class="stoptime">08:30 起飞</div>
+        </div>
+      </div>
+      <div class="line"></div>
+      <div class="stop">
+        <div class="dot mid"></div>
+        <div>
+          <div class="stopcity">武汉天河（中转）</div>
+          <div class="stoptime">停留 3 小时 20 分</div>
+        </div>
+      </div>
+      <div class="line"></div>
+      <div class="stop">
+        <div class="dot"></div>
+        <div>
+          <div class="stopcity">三亚凤凰</div>
+          <div class="stoptime">16:10 到达</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="num">1 次</div><div class="lbl">中转</div></div>
+      <div class="stat"><div class="num">7h40m</div><div class="lbl">总耗时</div></div>
+      <div class="stat"><div class="num">2666</div><div class="lbl">权益卡</div></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>随心飞比价助手</span>
+    <span class="brand">03 / 04</span>
+  </div>
+</body>
+</html>

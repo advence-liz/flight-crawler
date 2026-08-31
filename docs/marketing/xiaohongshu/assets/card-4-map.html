@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1080px; height: 1440px;
+    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    background: linear-gradient(160deg, #eef6ff 0%, #ffffff 55%);
+    position: relative; overflow: hidden;
+  }
+  .header { position: absolute; top: 90px; left: 96px; right: 96px; }
+  .kicker { font-size: 30px; color: #1677ff; font-weight: 700; letter-spacing: 2px; margin-bottom: 20px; }
+  .h1 { font-size: 72px; font-weight: 800; color: #0f2a4a; line-height: 1.35; }
+  .h1 .hl { color: #1677ff; }
+  .desc { margin-top: 28px; font-size: 34px; color: #5b7392; line-height: 1.6; }
+
+  .map { position: absolute; top: 470px; left: 96px; right: 96px; height: 560px;
+    background: #fff; border-radius: 28px; box-shadow: 0 12px 32px rgba(15,42,74,0.08);
+    display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .map svg { width: 100%; height: 100%; }
+  .node { fill: #1677ff; }
+  .node.hub { fill: #ff6b35; }
+  .edge { stroke: #bcd9ff; stroke-width: 3; fill: none; }
+
+  .bottom-cards { position: absolute; top: 1090px; left: 96px; right: 96px; display: flex; gap: 24px; }
+  .bcard { flex: 1; background: #fff; border-radius: 24px; padding: 32px; box-shadow: 0 10px 26px rgba(15,42,74,0.07); }
+  .bcard .icon { font-size: 44px; }
+  .bcard .t { font-size: 32px; font-weight: 700; color: #0f2a4a; margin-top: 14px; }
+  .bcard .d { font-size: 24px; color: #93a5bc; margin-top: 10px; line-height: 1.5; }
+
+  .footer {
+    position: absolute; bottom: 60px; left: 96px; right: 96px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 28px; color: #7d93ad; font-weight: 500;
+  }
+  .footer .brand { color: #1677ff; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="kicker">功能三 · 航线地图 &amp; 数据更新</div>
+    <div class="h1">全国航线<span class="hl">一图看全</span><br>数据每天自动更新</div>
+    <div class="desc">所有可飞航线画在地图上，哪里能去一目了然；后台一键爬取，数据每天自动刷新</div>
+  </div>
+
+  <div class="map">
+    <svg viewBox="0 0 900 500">
+      <path class="edge" d="M450,250 C400,180 300,140 220,120" />
+      <path class="edge" d="M450,250 C500,180 600,150 700,110" />
+      <path class="edge" d="M450,250 C420,320 360,380 300,420" />
+      <path class="edge" d="M450,250 C520,330 600,370 680,400" />
+      <path class="edge" d="M450,250 C520,240 620,230 720,240" />
+      <path class="edge" d="M450,250 C380,240 280,240 200,250" />
+      <circle class="node hub" cx="450" cy="250" r="16" />
+      <circle class="node" cx="220" cy="120" r="10" />
+      <circle class="node" cx="700" cy="110" r="10" />
+      <circle class="node" cx="300" cy="420" r="10" />
+      <circle class="node" cx="680" cy="400" r="10" />
+      <circle class="node" cx="720" cy="240" r="10" />
+      <circle class="node" cx="200" cy="250" r="10" />
+    </svg>
+  </div>
+
+  <div class="bottom-cards">
+    <div class="bcard">
+      <div class="icon">🕑</div>
+      <div class="t">每日自动更新</div>
+      <div class="d">定时爬取未来 30 天航班，过期数据自动清理</div>
+    </div>
+    <div class="bcard">
+      <div class="icon">🎫</div>
+      <div class="t">666 / 2666 双卡</div>
+      <div class="d">两种权益卡分别爬取，数据更准确</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>随心飞比价助手</span>
+    <span class="brand">04 / 04</span>
+  </div>
+</body>
+</html>

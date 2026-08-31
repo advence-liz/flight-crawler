@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1080px; height: 1440px;
+    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    background: linear-gradient(160deg, #eef6ff 0%, #ffffff 55%);
+    position: relative; overflow: hidden;
+  }
+  .header { position: absolute; top: 90px; left: 96px; right: 96px; }
+  .kicker { font-size: 30px; color: #1677ff; font-weight: 700; letter-spacing: 2px; margin-bottom: 20px; }
+  .h1 { font-size: 72px; font-weight: 800; color: #0f2a4a; line-height: 1.35; }
+  .h1 .hl { color: #1677ff; }
+  .desc { margin-top: 28px; font-size: 34px; color: #5b7392; line-height: 1.6; }
+
+  .search { position: absolute; top: 450px; left: 96px; right: 96px; display: flex; gap: 20px; }
+  .pill { flex: 1; background: #fff; border-radius: 20px; padding: 22px 30px; box-shadow: 0 10px 30px rgba(15,42,74,0.08); font-size: 30px; color: #0f2a4a; font-weight: 600; }
+  .pill .lbl { display:block; font-size: 22px; color: #93a5bc; font-weight: 500; margin-bottom: 6px; }
+
+  .results { position: absolute; top: 590px; left: 96px; right: 96px; display: flex; flex-direction: column; gap: 18px; }
+  .row { background: #fff; border-radius: 26px; padding: 26px 36px; box-shadow: 0 10px 28px rgba(15,42,74,0.07);
+         display: flex; align-items: center; justify-content: space-between; }
+  .city { font-size: 44px; font-weight: 700; color: #0f2a4a; }
+  .meta { font-size: 26px; color: #93a5bc; margin-top: 10px; }
+  .tags { display: flex; gap: 12px; }
+  .roundtrip { background: #e6f7ec; color: #16a34a; font-size: 24px; font-weight: 700; padding: 10px 20px; border-radius: 999px; }
+  .price { background: #fff1e6; color: #ff6b35; font-size: 30px; font-weight: 800; padding: 12px 24px; border-radius: 999px; }
+
+  .footer {
+    position: absolute; bottom: 60px; left: 96px; right: 96px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 28px; color: #7d93ad; font-weight: 500;
+  }
+  .footer .brand { color: #1677ff; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="kicker">功能一 · 目的地查询</div>
+    <div class="h1">不知道去哪飞？<br>一次<span class="hl">看遍所有城市</span></div>
+    <div class="desc">输入出发地 + 日期范围，自动列出所有能飞的目的地</div>
+  </div>
+
+  <div class="search">
+    <div class="pill"><span class="lbl">出发地</span>北京首都</div>
+    <div class="pill"><span class="lbl">日期范围</span>近 30 天</div>
+  </div>
+
+  <div class="results">
+    <div class="row">
+      <div>
+        <div class="city">杭州</div>
+        <div class="meta">去程 95 班 · 返程 88 班 · 可飞 24 天</div>
+      </div>
+      <div class="tags"><span class="roundtrip">可往返</span></div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="city">成都</div>
+        <div class="meta">去程 62 班 · 返程 57 班 · 可飞 19 天</div>
+      </div>
+      <div class="tags"><span class="roundtrip">可往返</span></div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="city">三亚</div>
+        <div class="meta">去程 41 班 · 返程 40 班 · 可飞 21 天</div>
+      </div>
+      <div class="tags"><span class="roundtrip">可往返</span></div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="city">西安</div>
+        <div class="meta">去程 33 班 · 单程可飞</div>
+      </div>
+      <div class="tags"><span class="price">666 权益卡</span></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>随心飞比价助手</span>
+    <span class="brand">02 / 04</span>
+  </div>
+</body>
+</html>
