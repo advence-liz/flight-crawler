@@ -12,8 +12,8 @@ on:
         default: false
       days:
         description: '爬取未来多少天（1-30）'
-        type: number
-        default: 30
+        type: string
+        default: '30'
 
 permissions:
   contents: write
