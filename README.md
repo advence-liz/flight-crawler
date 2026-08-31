@@ -9,6 +9,8 @@
 [![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://reactjs.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-10-e0234e.svg)](https://nestjs.com/)
 
+🔗 在线体验：[flight-crawler-frontend.onrender.com](https://flight-crawler-frontend.onrender.com)
+
 </div>
 
 ## 📖 项目简介
