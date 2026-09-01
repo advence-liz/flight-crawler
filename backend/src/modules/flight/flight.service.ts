@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Flight } from './entities/flight.entity';
 import { Airport } from './entities/airport.entity';
 import { QueryCache } from '../route/entities/query-cache.entity';
@@ -30,6 +30,25 @@ export class FlightService {
     @InjectRepository(QueryCache)
     private queryCacheRepository: Repository<QueryCache>,
   ) {}
+
+  /**
+   * 按权益卡类型追加过滤条件（用 has666Card/has2666Card 布尔列精确匹配，
+   * 不再用 cardType LIKE 字符串子串匹配——"2666权益卡航班" 包含 "666权益卡航班" 子串会导致误命中）。
+   * flightType 为空或 '全部' 时不过滤。
+   */
+  private applyCardTypeFilter<T extends Flight | Record<string, unknown>>(
+    query: SelectQueryBuilder<T>,
+    flightType?: string,
+    alias = 'flight',
+  ): SelectQueryBuilder<T> {
+    if (flightType === '666权益卡航班') {
+      return query.andWhere(`${alias}.has666Card = :has666Card`, { has666Card: true });
+    }
+    if (flightType === '2666权益卡航班') {
+      return query.andWhere(`${alias}.has2666Card = :has2666Card`, { has2666Card: true });
+    }
+    return query;
+  }
 
   /**
    * 查询所有可达目的地（包含往返航班信息）
@@ -68,9 +87,7 @@ export class FlightService {
       .orderBy('flight.departureTime', 'ASC');
 
     // 选 666 时只显示 666 可用航班；选 2666 或不传时显示全部（2666 全部可用）
-    if (flightType === '666权益卡航班') {
-      query = query.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
-    }
+    query = this.applyCardTypeFilter(query, flightType === '666权益卡航班' ? flightType : undefined);
 
     // 查询所有符合条件的去程航班
     const outboundFlights = await query.getMany();
@@ -121,7 +138,7 @@ export class FlightService {
         .andWhere('flight.departureTime <= :endDateTime', { endDateTime });
 
       if (flightType === '666权益卡航班') {
-        returnQuery = returnQuery.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
+        returnQuery = this.applyCardTypeFilter(returnQuery, flightType);
       }
 
       const allReturnFlights = await returnQuery.getMany();
@@ -188,7 +205,7 @@ export class FlightService {
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
     if (flightType === '666权益卡航班') {
-      query = query.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
+      query = this.applyCardTypeFilter(query, flightType);
     }
     return query.getMany();
   }
@@ -216,12 +233,9 @@ export class FlightService {
       query = query.andWhere('flight.destination = :destination', { destination });
     }
 
-    // 权益卡类型过滤：使用 Like 匹配，支持组合类型（如"666权益卡航班,2666权益卡航班"）
-    if (flightType && flightType !== '全部') {
-      // 查询包含指定权益卡类型的航班（支持组合类型）
-      query = query.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
-    }
-    // 如果是"全部"，不添加 cardType 过滤条件，查询所有航班
+    // 权益卡类型过滤：用 has666Card/has2666Card 精确匹配，避免子串误命中
+    query = this.applyCardTypeFilter(query, flightType);
+    // 如果是"全部"（或未传），不添加 cardType 过滤条件，查询所有航班
 
     return query.getMany();
   }
@@ -257,10 +271,8 @@ export class FlightService {
       .orderBy('flight.departureTime', 'ASC');
 
     // 应用权益卡类型过滤
-    if (flightType && flightType !== '全部') {
-      outboundQuery = outboundQuery.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
-      returnQuery = returnQuery.andWhere('flight.cardType LIKE :cardType', { cardType: `%${flightType}%` });
-    }
+    outboundQuery = this.applyCardTypeFilter(outboundQuery, flightType);
+    returnQuery = this.applyCardTypeFilter(returnQuery, flightType);
 
     // 查询去程航班
     const outboundFlights = await outboundQuery.getMany();
@@ -281,13 +293,33 @@ export class FlightService {
   async saveFlights(flights: Partial<Flight>[]): Promise<void> {
     if (flights.length === 0) return;
 
+    const flightsWithCardFlags = flights.map((flight) => ({
+      ...flight,
+      ...this.deriveCardFlags(flight.cardType),
+    }));
+
     await this.flightRepository
       .createQueryBuilder()
       .insert()
       .into(Flight)
-      .values(flights as Flight[])
+      .values(flightsWithCardFlags as Flight[])
       .orIgnore()
       .execute();
+  }
+
+  /**
+   * 从 cardType 字符串（如 "666权益卡航班,2666权益卡航班"）解析出精确的布尔标记。
+   * 用逗号分隔的 token 精确匹配，避免 "2666权益卡航班" 被子串 "666权益卡航班" 误命中。
+   */
+  private deriveCardFlags(cardType?: string): { has666Card: boolean; has2666Card: boolean } {
+    if (!cardType || cardType === '全部') {
+      return { has666Card: true, has2666Card: true };
+    }
+    const tokens = cardType.split(',').map((t) => t.trim());
+    return {
+      has666Card: tokens.includes('666权益卡航班'),
+      has2666Card: tokens.includes('2666权益卡航班'),
+    };
   }
 
   /**
@@ -614,10 +646,7 @@ export class FlightService {
       });
     }
 
-    if (cardType && cardType !== '全部') {
-      // 使用 LIKE 匹配，支持组合类型（如"666权益卡航班,2666权益卡航班"）
-      queryBuilder.andWhere('flight.cardType LIKE :cardType', { cardType: `%${cardType}%` });
-    }
+    this.applyCardTypeFilter(queryBuilder, cardType);
 
     if (flightNo) {
       queryBuilder.andWhere('flight.flightNo LIKE :flightNo', { flightNo: `%${flightNo}%` });
@@ -649,21 +678,12 @@ export class FlightService {
     if (flightNo) statsBuilder.andWhere('flight.flightNo LIKE :flightNo', { flightNo: `%${flightNo}%` });
 
     const cardTypeStats = await statsBuilder
-      .select('flight.cardType', 'cardType')
-      .addSelect('COUNT(*)', 'cnt')
-      .groupBy('flight.cardType')
-      .getRawMany<{ cardType: string; cnt: string }>();
+      .select('SUM(CASE WHEN flight.has666Card THEN 1 ELSE 0 END)', 'cardType666Count')
+      .addSelect('SUM(CASE WHEN flight.has2666Card THEN 1 ELSE 0 END)', 'cardType2666Count')
+      .getRawOne<{ cardType666Count: string | null; cardType2666Count: string | null }>();
 
-    let cardType666Count = 0;
-    let cardType2666Count = 0;
-    cardTypeStats.forEach(({ cardType: ct, cnt }) => {
-      if (!ct) return;
-      const count = parseInt(cnt, 10);
-      const has666 = ct === '666权益卡航班' || ct.startsWith('666权益卡航班,') || ct.includes(',666权益卡航班');
-      const has2666 = ct.includes('2666权益卡航班');
-      if (has666) cardType666Count += count;
-      if (has2666) cardType2666Count += count;
-    });
+    const cardType666Count = parseInt(cardTypeStats?.cardType666Count || '0', 10);
+    const cardType2666Count = parseInt(cardTypeStats?.cardType2666Count || '0', 10);
 
     return {
       flights,
