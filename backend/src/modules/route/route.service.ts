@@ -391,7 +391,7 @@ export class RouteService implements OnApplicationBootstrap {
         routes.push(this.buildRouteResult([...path]));
         return;
       }
-      if (path.length > maxTransfers + 1) return;
+      if (path.length >= maxTransfers + 1) return;
       if (visited.has(current)) return;
 
       visited.add(current);

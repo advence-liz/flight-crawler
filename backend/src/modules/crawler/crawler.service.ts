@@ -339,7 +339,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       if (!allCardsSelected) {
         this.logger.warn(`⚠️ 部分权益卡选择失败，跳过本次查询`);
         if (enableScreenshot) await this.safeScreenshot(page, path.join(this.screenshotDir, `${timestamp}-${origin}-${date}-${cardTypeShort}-card-fail.png`), '权益卡选择失败截图');
-        return flights;
+        throw new Error(`权益卡选择失败: ${cardTypeLabel}`);
       }
       this.logger.log(`✅ 所有权益卡选择完成: ${cardTypeLabel}`);
 
@@ -355,7 +355,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       if (!originSelected) {
         this.logger.warn(`⚠️ 出发地选择失败，跳过: ${origin}`);
         if (enableScreenshot) await this.safeScreenshot(page, path.join(this.screenshotDir, `${timestamp}-${origin}-${date}-${cardTypeShort}-origin-fail.png`), '出发地选择失败截图');
-        return flights;
+        throw new Error(`出发地选择失败: ${origin}`);
       }
       this.logger.log(`✅ 出发地选择成功: ${origin}`);
 
@@ -368,7 +368,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       if (!dateSelected) {
         this.logger.warn(`⚠️ 日期选择失败，跳过: ${date}`);
         if (enableScreenshot) await this.safeScreenshot(page, path.join(this.screenshotDir, `${timestamp}-${origin}-${date}-${cardTypeShort}-date-fail.png`), '日期选择失败截图');
-        return flights;
+        throw new Error(`日期选择失败: ${date}`);
       }
       this.logger.log(`✅ 日期选择成功: ${date}`);
 
@@ -384,7 +384,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       if (!queryClicked) {
         this.logger.warn('⚠️ 查询按钮点击失败，跳过');
         if (enableScreenshot) await this.safeScreenshot(page, path.join(this.screenshotDir, `${timestamp}-${origin}-${date}-${cardTypeShort}-query-fail.png`), '查询按钮点击失败截图');
-        return flights;
+        throw new Error('查询按钮点击失败');
       }
       this.logger.log(`✅ 查询按钮点击成功`);
 
@@ -872,6 +872,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       this.logger.log(`${flights.length > 0 ? '✅' : '⚠️'} ${date} 获取 ${flights.length} 条数据`);
     } catch (error) {
       this.logger.error(`❌ 爬取失败: ${error.message}`);
+      throw error;
     } finally {
       await page.close();
     }
@@ -1909,6 +1910,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       let taskIndex = 0;
       const allFlights: Partial<Flight>[] = [];
       const taskResults: Record<string, number> = {};
+      const failedTasks: string[] = [];
 
       await new Promise<void>((resolve, reject) => {
         const runNext = () => {
@@ -1929,16 +1931,23 @@ export class CrawlerService implements OnApplicationBootstrap {
             running++;
 
             this.crawlSinglePageWithBrowser(browser!, airport, date)
-              .then(flights => {
+              .then(async flights => {
                 const key = `${airport}@${date}`;
                 taskResults[key] = flights.length;
+                // 按机场+日期粒度删旧存新，只替换本次真正爬取成功的部分，
+                // 避免个别机场/日期失败时把整个日期区间的数据一并清空（数据洞）
+                await this.flightService.deleteFlightsByOriginAndDate(airport, date);
+                if (flights.length > 0) {
+                  await this.flightService.saveFlights(flights);
+                }
                 allFlights.push(...flights);
                 this.logger.log(`  ✅ ${airport} / ${date}: ${flights.length} 条`);
               })
               .catch(err => {
                 const key = `${airport}@${date}`;
                 taskResults[key] = 0;
-                this.logger.warn(`  ⚠️ ${airport} / ${date}: 失败 - ${err.message}`);
+                failedTasks.push(key);
+                this.logger.warn(`  ⚠️ ${airport} / ${date}: 失败，保留旧数据 - ${err.message}`);
               })
               .finally(() => {
                 running--;
@@ -1949,16 +1958,7 @@ export class CrawlerService implements OnApplicationBootstrap {
         runNext();
       });
 
-      this.logger.log(`📊 全部任务完成，共爬取 ${allFlights.length} 条航班`);
-
-      // 一次性替换数据
-      if (allFlights.length > 0) {
-        this.logger.log(`🔄 替换数据：删除旧数据并保存 ${allFlights.length} 条新数据...`);
-        const deletedCount = await this.flightService.deleteDiscoveryFlights(dates);
-        this.logger.log(`🗑️ 已删除 ${deletedCount} 条旧数据`);
-        await this.flightService.saveFlights(allFlights);
-        this.logger.log(`✅ 已保存 ${allFlights.length} 条新数据`);
-      }
+      this.logger.log(`📊 全部任务完成，共爬取 ${allFlights.length} 条航班${failedTasks.length > 0 ? `，${failedTasks.length} 个任务失败（旧数据已保留）：${failedTasks.join(', ')}` : ''}`);
 
       // 从航班数据中自动发现机场
       if (allFlights.length > 0) {
@@ -1974,7 +1974,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       this.logger.log(`📋 机场列表: ${airports.join(', ')}`);
       this.logger.log(`📊 本次爬取航班数: ${allFlights.length} 条`);
 
-      await this.completeCrawlerLog(logId, true, {
+      await this.completeCrawlerLog(logId, failedTasks.length === 0, {
         airportCount: airports.length,
         flightCount: allFlights.length,
         details: {
@@ -1983,6 +1983,9 @@ export class CrawlerService implements OnApplicationBootstrap {
           discoveredAirports: airports,
           dateRange: dates,
         },
+        errorMessage: failedTasks.length > 0
+          ? `${failedTasks.length} 个任务失败（旧数据已保留）：${failedTasks.join(', ')}`
+          : undefined,
       });
     } catch (error) {
       this.logger.error('❌ 【初始化阶段1】失败', error);
@@ -2374,9 +2377,10 @@ export class CrawlerService implements OnApplicationBootstrap {
       });
 
       const successAirports = airports.length - failedAirports.length;
+      const dayFullySucceeded = failedAirports.length === 0;
       this.logger.log(`  ├─ [子任务 ${taskId}] ✅ ${date} 完成：${successAirports}/${airports.length} 机场成功，删 ${totalDeleted} 旧，存 ${totalSaved} 新${failedAirports.length > 0 ? `，失败保留：${failedAirports.join(', ')}` : ''}`);
 
-      await this.completeCrawlerLog(logId, true, {
+      await this.completeCrawlerLog(logId, dayFullySucceeded, {
         airportCount: airports.length,
         flightCount: totalSaved,
         details: { date, taskId, airports, failedAirports, totalDeleted, totalSaved },
@@ -2385,7 +2389,7 @@ export class CrawlerService implements OnApplicationBootstrap {
           : undefined,
       });
 
-      return { taskId, date, success: true, count: totalSaved };
+      return { taskId, date, success: dayFullySucceeded, count: totalSaved };
     } catch (error) {
       this.logger.error(`  ├─ [子任务 ${taskId}] ❌ ${date} 异常`, error);
       await this.completeCrawlerLog(logId, false, {

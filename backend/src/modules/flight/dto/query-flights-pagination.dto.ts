@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, IsString, IsIn } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryFlightsWithPaginationDto {
@@ -11,6 +11,7 @@ export class QueryFlightsWithPaginationDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(200)
   @Type(() => Number)
   pageSize?: number = 10;
 

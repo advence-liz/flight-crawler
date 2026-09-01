@@ -77,6 +77,7 @@ export class RoundTripService {
       maxTransfers: dto.maxTransfers || 0,
       minLayoverHours: dto.minLayoverHours || 2,
       maxLayoverHours: dto.maxLayoverHours || 24,
+      flightType: dto.flightType,
     });
 
     // 2. 规划返程（支持日期范围）
@@ -88,6 +89,7 @@ export class RoundTripService {
       maxTransfers: dto.maxTransfers || 0,
       minLayoverHours: dto.minLayoverHours || 2,
       maxLayoverHours: dto.maxLayoverHours || 24,
+      flightType: dto.flightType,
     });
 
     // 3. 组合去程和返程

@@ -1,4 +1,4 @@
-import { IsOptional, IsIn, IsInt, Min } from 'class-validator';
+import { IsOptional, IsIn, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CrawlerTaskType, CrawlerTaskStatus } from '../entities/crawler-log.entity';
 
@@ -29,5 +29,6 @@ export class QueryLogsDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(200)
   pageSize?: number = 10;
 }

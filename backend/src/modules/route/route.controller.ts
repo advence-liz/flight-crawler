@@ -19,6 +19,9 @@ export class RouteController {
   @Post('plan')
   @HttpCode(HttpStatus.OK)
   async planRoute(@Body() dto: PlanRouteDto) {
+    if (dto.destination && dto.origin === dto.destination) {
+      throw new BadRequestException('出发地和目的地不能相同');
+    }
     return this.routeService.planRoute(dto);
   }
 

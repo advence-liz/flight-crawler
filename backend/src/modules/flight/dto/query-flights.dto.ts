@@ -1,8 +1,9 @@
-import { IsString, IsDateString, IsOptional, IsIn, IsBoolean } from 'class-validator';
+import { IsString, IsDateString, IsOptional, IsIn, IsBoolean, IsNotEmpty } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class QueryFlightsDto {
   @IsString()
+  @IsNotEmpty()
   origin: string;
 
   @IsString()

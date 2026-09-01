@@ -1,10 +1,11 @@
-import { IsString, IsDateString, IsOptional, IsInt, Min, Max, IsBoolean, IsIn } from 'class-validator';
+import { IsString, IsDateString, IsOptional, IsInt, Min, Max, IsBoolean, IsIn, IsNotEmpty } from 'class-validator';
 
 /**
  * 往返行程规划 DTO
  */
 export class PlanRoundTripDto {
   @IsString()
+  @IsNotEmpty()
   origin: string;
 
   @IsString()
