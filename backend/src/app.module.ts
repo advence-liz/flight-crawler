@@ -1,5 +1,6 @@
-import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { AppController } from './app.controller';
 import { HttpLoggerMiddleware } from './http-logger.middleware';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -40,7 +41,17 @@ import { winstonConfig } from './config/logger.config';
     RouteModule,
   ],
 })
-export class AppModule implements NestModule {
+export class AppModule implements NestModule, OnModuleInit {
+  constructor(private readonly dataSource: DataSource) {}
+
+  // 默认的 rollback journal 模式每次写事务都要走"建日志→写数据→fsync→删日志"多次 fsync，
+  // 在 Render 免费套餐这种慢磁盘环境下会显著拖慢 query_cache 的写入（缓存未命中时的查询因此变慢）。
+  // 切到 WAL + synchronous=NORMAL 后写事务只需一次 fsync，读写也不互相阻塞。
+  async onModuleInit() {
+    await this.dataSource.query('PRAGMA journal_mode = WAL;');
+    await this.dataSource.query('PRAGMA synchronous = NORMAL;');
+  }
+
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(HttpLoggerMiddleware).forRoutes('*');
   }
