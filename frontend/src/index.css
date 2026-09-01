@@ -11,6 +11,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f0f2f5;
+  /* 微信内置浏览器（尤其安卓 X5 内核）会无视 viewport 的 user-scalable=no，
+     用户双指/系统字体设置仍能把页面文字整体放大，这里显式锁死避免布局跑版 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 #root {

@@ -42,6 +42,7 @@ import {
   TransferOneWayDest,
 } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
+import CuteLoader from '@/components/CuteLoader';
 
 const { RangePicker } = DatePicker;
 const { useBreakpoint } = Grid;
@@ -795,7 +796,11 @@ function DestinationQuery() {
               children: isMobile ? (
                 // 移动端：卡片视图
                 <div style={{ padding: '12px 0' }}>
-                  {t.data.length > 0 ? (
+                  {loading && t.data.length === 0 ? (
+                    <div style={{ padding: '40px 0' }}>
+                      <CuteLoader text="正在爬取最新航班..." />
+                    </div>
+                  ) : t.data.length > 0 ? (
                     t.data.map(row => (
                       <DestinationCard
                         key={getCity(row)}
@@ -819,7 +824,7 @@ function DestinationQuery() {
                   rowKey={r => getCity(r)}
                   size="small"
                   pagination={{ pageSize: 20, showSizeChanger: true, showTotal: total => `共 ${total} 个目的地` }}
-                  loading={loading}
+                  loading={{ spinning: loading, indicator: <CuteLoader size={56} /> }}
                   scroll={{ x: 1000 }}
                 />
               ),

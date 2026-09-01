@@ -1,0 +1,63 @@
+.cute-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+}
+
+.cute-loader__svg {
+  overflow: visible;
+}
+
+.cute-loader__bounce {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cute-loader-bounce 1s ease-in-out infinite;
+}
+
+.cute-loader__leg {
+  animation: cute-loader-leg 0.5s ease-in-out infinite;
+}
+
+.cute-loader__leg--a {
+  animation-delay: 0s;
+}
+
+.cute-loader__leg--b {
+  animation-delay: 0.25s;
+}
+
+.cute-loader__blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cute-loader-blink 3s ease-in-out infinite;
+}
+
+.cute-loader__text {
+  font-size: 13px;
+  color: #888;
+}
+
+@keyframes cute-loader-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes cute-loader-leg {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+
+@keyframes cute-loader-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cute-loader__bounce,
+  .cute-loader__leg,
+  .cute-loader__blink {
+    animation: none;
+  }
+}

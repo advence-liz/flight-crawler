@@ -16,7 +16,6 @@ import {
   Row,
   Col,
   Divider,
-  Spin,
   Drawer,
   Grid,
 } from 'antd';
@@ -38,6 +37,7 @@ import {
 } from '@/api/route';
 import { getAvailableCities } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
+import CuteLoader from '@/components/CuteLoader';
 
 const { useBreakpoint } = Grid;
 
@@ -408,7 +408,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
 
       {loading && (
         <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin size="large" tip="正在发现可往返目的地..." />
+          <CuteLoader text="正在发现可往返目的地..." />
         </div>
       )}
 
@@ -449,7 +449,7 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
       >
         {loadingRoutes ? (
           <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin tip="加载方案中..." />
+            <CuteLoader size={48} text="加载方案中..." />
           </div>
         ) : roundTripRoutes.length > 0 ? (
           <>
@@ -684,7 +684,7 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
 
       {loading && (
         <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin size="large" tip="正在规划路线..." />
+          <CuteLoader text="正在规划路线..." />
         </div>
       )}
 

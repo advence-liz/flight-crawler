@@ -33,6 +33,20 @@ import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/
 
 const { useBreakpoint } = Grid;
 
+// 力导向图 5 类节点/边配色。用 dataviz skill 的 validate_palette.js 跑过 --mode dark
+// --surface #0f172a：亮度/纯度/对比度三项全过；5 类互相 all-pairs 对比在参考色板的 8 色家族体系下
+// 无法同时通过 CVD 与色觉正常人区分度硬阈值（skill 自身文档也承认超过 3 类的 all-pairs 场景做不到，
+// 只能靠折叠类目或二次编码兜底）——这是目前能找到的两两区分度最优解（枚举全部 C(8,5) 组合验证过），
+// 配合本图已有的"文字标签常驻 + 去程实线/中转虚线/返程细虚线"三层线型区分兜底，不靠颜色单独承载身份。
+const GRAPH_COLORS = {
+  origin: '#c98500', // 出发地：黄
+  roundTrip: '#008300', // 可往返：绿
+  oneWay: '#3987e5', // 仅单程：蓝
+  transferRoundTrip: '#e66767', // 中转往返：红
+  transferOneWay: '#199e70', // 中转单程：青（原来是纯灰 #94a3b8，色度 0.035 跌破可读阈值会读成"没颜色"，
+  // 换成低调的青色而不是抹掉色相，降权感靠更低的透明度/字重传达）
+};
+
 // ─── 主页面 ──────────────────────────────────────────────────
 function FlightMap() {
   const [form] = Form.useForm();
@@ -168,7 +182,7 @@ function FlightMap() {
         symbol: 'circle',
         symbolSize: isMobile ? 32 : 6,
         itemStyle: { color: 'rgba(0,0,0,0)', borderWidth: 0 },
-        label: { show: true, color: '#facc15', fontWeight: 700, fontSize: Math.round(14 * scale), position: 'bottom' as const, distance: 4 },
+        label: { show: true, color: GRAPH_COLORS.origin, fontWeight: 700, fontSize: Math.round(14 * scale), position: 'bottom' as const, distance: 4 },
         category: 0,
         fixed: !isMobile,
         ...(isMobile ? {} : { x: 400, y: 330 }),
@@ -190,7 +204,7 @@ function FlightMap() {
           itemStyle: { color: 'rgba(0,0,0,0)', borderWidth: 0 },
           label: {
             show: true,
-            color: isReturn ? '#4ade80' : '#60a5fa',
+            color: isReturn ? GRAPH_COLORS.roundTrip : GRAPH_COLORS.oneWay,
             fontSize: Math.round(12 * scale),
             fontWeight: isReturn ? 600 : 400,
             position: 'bottom' as const,
@@ -211,7 +225,7 @@ function FlightMap() {
         source: origin,
         target: dest.destination,
         lineStyle: {
-          color: isReturn ? '#4ade80' : '#60a5fa',
+          color: isReturn ? GRAPH_COLORS.roundTrip : GRAPH_COLORS.oneWay,
           width: (isReturn ? 2 : 1) * scale,
           opacity: isReturn ? 0.8 : 0.45,
           curveness: 0.15,
@@ -226,7 +240,7 @@ function FlightMap() {
         edges.push({
           source: dest.destination,
           target: origin,
-          lineStyle: { color: '#a3e635', width: 1.5 * scale, opacity: 0.5, curveness: 0.15, type: 'dashed' },
+          lineStyle: { color: GRAPH_COLORS.roundTrip, width: 1.5 * scale, opacity: 0.55, curveness: 0.15, type: 'dashed' },
           symbol: ['none', 'arrow'],
           symbolSize: [0, 6 * scale],
           value: dest.returnFlightCount,
@@ -248,7 +262,7 @@ function FlightMap() {
             itemStyle: { color: 'rgba(0,0,0,0)', borderWidth: 0 },
             label: {
               show: true,
-              color: isRoundTrip ? '#fb923c' : '#94a3b8',
+              color: isRoundTrip ? GRAPH_COLORS.transferRoundTrip : GRAPH_COLORS.transferOneWay,
               fontSize: Math.round(11 * scale),
               fontWeight: isRoundTrip ? 500 : 400,
               position: 'bottom' as const,
@@ -269,7 +283,7 @@ function FlightMap() {
           source: origin,
           target: city,
           lineStyle: {
-            color: isRoundTrip ? '#fb923c' : '#94a3b8',
+            color: isRoundTrip ? GRAPH_COLORS.transferRoundTrip : GRAPH_COLORS.transferOneWay,
             width: 1 * scale,
             opacity: 0.35,
             curveness: 0.25,
@@ -313,31 +327,32 @@ function FlightMap() {
             const textSize = Math.round(13 * scale);
 
             if (d.id === origin) {
-              return `<div style="font-weight:700;font-size:${titleSize}px;color:#facc15">${d.name}</div><div style="color:#94a3b8;margin-top:${Math.round(2 * scale)}px;font-size:${subtitleSize}px">出发地</div>`;
+              return `<div style="font-weight:700;font-size:${titleSize}px;color:${GRAPH_COLORS.origin}">${d.name}</div><div style="color:#94a3b8;margin-top:${Math.round(2 * scale)}px;font-size:${subtitleSize}px">出发地</div>`;
             }
             if (d.nodeType === 'transfer') {
+              const transferColor = d.isRoundTrip ? GRAPH_COLORS.transferRoundTrip : GRAPH_COLORS.transferOneWay;
               const lines = [
                 `<div style="font-weight:700;font-size:${titleSize}px;margin-bottom:${Math.round(4 * scale)}px">${d.name}</div>`,
-                d.via ? `<div style="color:#fb923c;font-size:${subtitleSize}px">经 ${d.via} 中转</div>` : '',
-                `<div style="font-size:${textSize}px">去程：<b style="color:#fb923c">${d.outboundCount} 条方案</b></div>`,
+                d.via ? `<div style="color:${transferColor};font-size:${subtitleSize}px">经 ${d.via} 中转</div>` : '',
+                `<div style="font-size:${textSize}px">去程：<b style="color:${transferColor}">${d.outboundCount} 条方案</b></div>`,
               ];
               if (d.isRoundTrip) {
-                lines.push(`<div style="font-size:${textSize}px">返程：<b style="color:#fb923c">${d.returnCount} 条方案</b></div>`);
-                lines.push(`<div style="margin-top:${Math.round(4 * scale)}px;color:#fb923c;font-size:${subtitleSize}px">⇄ 中转往返</div>`);
+                lines.push(`<div style="font-size:${textSize}px">返程：<b style="color:${transferColor}">${d.returnCount} 条方案</b></div>`);
+                lines.push(`<div style="margin-top:${Math.round(4 * scale)}px;color:${transferColor};font-size:${subtitleSize}px">⇄ 中转往返</div>`);
               } else {
-                lines.push(`<div style="margin-top:${Math.round(4 * scale)}px;color:#94a3b8;font-size:${subtitleSize}px">→ 中转单程</div>`);
+                lines.push(`<div style="margin-top:${Math.round(4 * scale)}px;color:${transferColor};font-size:${subtitleSize}px">→ 中转单程</div>`);
               }
               return lines.join('');
             }
             const lines = [
               `<div style="font-weight:700;font-size:${titleSize}px;margin-bottom:${Math.round(4 * scale)}px">${d.name}</div>`,
-              `<div style="font-size:${textSize}px">✈ 去程：<b style="color:#60a5fa">${d.flightCount} 班</b>（${d.availableDates?.length} 天）</div>`,
+              `<div style="font-size:${textSize}px">✈ 去程：<b style="color:${GRAPH_COLORS.oneWay}">${d.flightCount} 班</b>（${d.availableDates?.length} 天）</div>`,
             ];
             if (d.hasReturn) {
-              lines.push(`<div style="font-size:${textSize}px">↩ 返程：<b style="color:#4ade80">${d.returnFlightCount} 班</b>（${d.returnAvailableDates?.length} 天）</div>`);
-              lines.push(`<div style="margin-top:${Math.round(4 * scale)}px;color:#4ade80;font-size:${subtitleSize}px">⇄ 可往返</div>`);
+              lines.push(`<div style="font-size:${textSize}px">↩ 返程：<b style="color:${GRAPH_COLORS.roundTrip}">${d.returnFlightCount} 班</b>（${d.returnAvailableDates?.length} 天）</div>`);
+              lines.push(`<div style="margin-top:${Math.round(4 * scale)}px;color:${GRAPH_COLORS.roundTrip};font-size:${subtitleSize}px">⇄ 可往返</div>`);
             } else {
-              lines.push(`<div style="margin-top:${Math.round(4 * scale)}px;color:#64748b;font-size:${subtitleSize}px">→ 仅单程</div>`);
+              lines.push(`<div style="margin-top:${Math.round(4 * scale)}px;color:${GRAPH_COLORS.oneWay};font-size:${subtitleSize}px">→ 仅单程</div>`);
             }
             return lines.join('');
           }
@@ -346,12 +361,12 @@ function FlightMap() {
             const titleSize = Math.round(13 * scale);
             const textSize = Math.round(12 * scale);
             if (d.isTransfer) {
-              return `<div style="color:${d.isRoundTrip ? '#fb923c' : '#94a3b8'};font-size:${titleSize}px">⇌ 中转${d.isRoundTrip ? '往返' : '单程'}</div><div style="font-size:${textSize}px">${d.source} → ${d.target}${d.via ? `（经 ${d.via}）` : ''}</div>`;
+              return `<div style="color:${d.isRoundTrip ? GRAPH_COLORS.transferRoundTrip : GRAPH_COLORS.transferOneWay};font-size:${titleSize}px">⇌ 中转${d.isRoundTrip ? '往返' : '单程'}</div><div style="font-size:${textSize}px">${d.source} → ${d.target}${d.via ? `（经 ${d.via}）` : ''}</div>`;
             }
             if (d.isReturn) {
-              return `<div style="color:#a3e635;font-size:${titleSize}px">↩ 返程航线</div><div style="font-size:${textSize}px">${d.source} → ${d.target}：${d.value} 班</div>`;
+              return `<div style="color:${GRAPH_COLORS.roundTrip};font-size:${titleSize}px">↩ 返程航线</div><div style="font-size:${textSize}px">${d.source} → ${d.target}：${d.value} 班</div>`;
             }
-            return `<div style="color:${d.hasReturn ? '#4ade80' : '#60a5fa'};font-size:${titleSize}px">✈ 去程航线</div><div style="font-size:${textSize}px">${d.source} → ${d.target}：${d.value} 班</div>`;
+            return `<div style="color:${d.hasReturn ? GRAPH_COLORS.roundTrip : GRAPH_COLORS.oneWay};font-size:${titleSize}px">✈ 去程航线</div><div style="font-size:${textSize}px">${d.source} → ${d.target}：${d.value} 班</div>`;
           }
           return '';
         },
@@ -373,11 +388,11 @@ function FlightMap() {
       },
       legend: isMobile ? { show: false } : {
         data: [
-          { name: '出发地', icon: 'none', textStyle: { color: '#facc15', fontWeight: 700 } },
-          { name: '可往返', icon: 'none', textStyle: { color: '#4ade80', fontWeight: 600 } },
-          { name: '仅单程', icon: 'none', textStyle: { color: '#60a5fa' } },
-          { name: '中转往返', icon: 'none', textStyle: { color: '#fb923c', fontWeight: 500 } },
-          { name: '中转单程', icon: 'none', textStyle: { color: '#94a3b8' } },
+          { name: '出发地', icon: 'none', textStyle: { color: GRAPH_COLORS.origin, fontWeight: 700 } },
+          { name: '可往返', icon: 'none', textStyle: { color: GRAPH_COLORS.roundTrip, fontWeight: 600 } },
+          { name: '仅单程', icon: 'none', textStyle: { color: GRAPH_COLORS.oneWay } },
+          { name: '中转往返', icon: 'none', textStyle: { color: GRAPH_COLORS.transferRoundTrip, fontWeight: 500 } },
+          { name: '中转单程', icon: 'none', textStyle: { color: GRAPH_COLORS.transferOneWay } },
         ],
         textStyle: { color: '#94a3b8' },
         top: 12,
@@ -524,7 +539,7 @@ function FlightMap() {
                     value={returnDests.length}
                     suffix={isMobile ? '' : '个可往返'}
                     title={isMobile ? '可往返' : undefined}
-                    valueStyle={{ color: '#4ade80', fontSize: isMobile ? 16 : 18 }}
+                    valueStyle={{ color: GRAPH_COLORS.roundTrip, fontSize: isMobile ? 16 : 18 }}
                     prefix={<SwapOutlined />}
                   />
                 </Col>
@@ -533,7 +548,7 @@ function FlightMap() {
                     value={onewayDests.length}
                     suffix={isMobile ? '' : '个仅单程'}
                     title={isMobile ? '仅单程' : undefined}
-                    valueStyle={{ color: '#60a5fa', fontSize: isMobile ? 16 : 18 }}
+                    valueStyle={{ color: GRAPH_COLORS.oneWay, fontSize: isMobile ? 16 : 18 }}
                     prefix={<ArrowRightOutlined />}
                   />
                 </Col>
@@ -542,7 +557,7 @@ function FlightMap() {
                     value={transferRoundTrip.length + transferOneWay.length}
                     suffix={transferLoading ? (isMobile ? '...' : '搜索中...') : (isMobile ? '' : '个中转')}
                     title={isMobile ? '中转' : undefined}
-                    valueStyle={{ color: '#fb923c', fontSize: isMobile ? 16 : 18 }}
+                    valueStyle={{ color: GRAPH_COLORS.transferRoundTrip, fontSize: isMobile ? 16 : 18 }}
                     prefix={<NodeIndexOutlined />}
                   />
                 </Col>
@@ -603,9 +618,9 @@ function FlightMap() {
           )}
           <div style={{ padding: '8px 16px', background: '#0f172a', color: '#475569', fontSize: isMobile ? 11 : 12, borderTop: '1px solid #1e293b' }}>
             {isMobile ? (
-              <span>提示：双指缩放 · 点击节点查看详情 · <span style={{ color: '#60a5fa' }}>点击目的地跳转规划</span></span>
+              <span>提示：双指缩放 · 点击节点查看详情 · <span style={{ color: GRAPH_COLORS.oneWay }}>点击目的地跳转规划</span></span>
             ) : (
-              <span>提示：可拖拽节点调整布局 · 滚轮缩放 · 悬浮节点查看详情 · <span style={{ color: '#60a5fa' }}>点击目的地节点跳转行程规划</span></span>
+              <span>提示：可拖拽节点调整布局 · 滚轮缩放 · 悬浮节点查看详情 · <span style={{ color: GRAPH_COLORS.oneWay }}>点击目的地节点跳转行程规划</span></span>
             )}
           </div>
         </Card>
@@ -641,7 +656,7 @@ function FlightMap() {
                     {n.availableDates?.length > 0 && (
                       <Descriptions.Item label="去程日期" span={2}>
                         <Space size={4} wrap>
-                          <CalendarOutlined style={{ color: '#60a5fa' }} />
+                          <CalendarOutlined style={{ color: GRAPH_COLORS.oneWay }} />
                           {n.availableDates.slice(0, 5).join('、')}
                           {n.availableDates.length > 5 && `…共${n.availableDates.length}天`}
                         </Space>
@@ -650,7 +665,7 @@ function FlightMap() {
                     {n.hasReturn && n.returnAvailableDates?.length > 0 && (
                       <Descriptions.Item label="返程日期" span={2}>
                         <Space size={4} wrap>
-                          <CalendarOutlined style={{ color: '#4ade80' }} />
+                          <CalendarOutlined style={{ color: GRAPH_COLORS.roundTrip }} />
                           {n.returnAvailableDates.slice(0, 5).join('、')}
                           {n.returnAvailableDates.length > 5 && `…共${n.returnAvailableDates.length}天`}
                         </Space>
