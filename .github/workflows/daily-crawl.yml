@@ -123,14 +123,33 @@ jobs:
           done
           echo "::error::轮询超时"; exit 1
 
+      - name: 清理查询缓存 + 旧执行日志（控制 db 体积）
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        run: |
+          echo "清理 query_cache（destinations + transfer 查询缓存，不需要随 db 分发）..."
+          curl -sf -X DELETE http://localhost:3000/api/crawler/cache/clear || true
+          echo "清理 30 天前的执行日志..."
+          curl -sf -X DELETE http://localhost:3000/api/crawler/logs/clean \
+            -H "Content-Type: application/json" -d '{"days":30}' || true
+
       - name: 停止后端
         if: ${{ github.event.inputs.skip_crawl != 'true' && always() }}
         run: kill "$(cat server.pid)" 2>/dev/null || true
 
+      - name: 清理越界/过期航班并 VACUUM 压缩体积
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
+          DB=backend/data/flight-crawler.db
+          echo "清理前：$(du -h "$DB" | cut -f1)"
+          sqlite3 "$DB" "DELETE FROM flights WHERE departureTime < datetime('now');"
+          sqlite3 "$DB" "DELETE FROM flights WHERE departureTime > datetime('now', '+31 days');"
+          sqlite3 "$DB" "VACUUM;"
+          echo "清理后：$(du -h "$DB" | cut -f1)"
+
       - name: 发布 db 到 data 分支（orphan force-push，不进 main 历史）
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           DB_PATH="$GITHUB_WORKSPACE/backend/data/flight-crawler.db"
           TMP_DIR=$(mktemp -d)
           git clone --depth=1 --branch=data "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TMP_DIR"
