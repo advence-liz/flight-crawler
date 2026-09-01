@@ -22,6 +22,8 @@ jobs:
   crawl-and-publish:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -142,9 +144,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 触发 Render 重新构建部署
-        if: ${{ secrets.RENDER_API_KEY != '' }}
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        if: ${{ env.RENDER_API_KEY != '' }}
         run: |
           curl -sf -X POST "https://api.render.com/v1/services/srv-d6t91fua2pns738l8iqg/deploys" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
