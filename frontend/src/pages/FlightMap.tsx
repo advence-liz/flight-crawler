@@ -364,6 +364,9 @@ function FlightMap() {
             pixelRatio: 2,
           },
         },
+        // 默认 itemSize 15px 在移动端点击热区偏小，放大到 24px 并加大图标间距方便触控
+        itemSize: isMobile ? 24 : 15,
+        itemGap: isMobile ? 16 : 10,
         iconStyle: { borderColor: '#94a3b8' },
         top: 12,
         left: 12,

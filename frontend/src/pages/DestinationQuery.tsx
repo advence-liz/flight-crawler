@@ -787,6 +787,7 @@ function DestinationQuery() {
             activeKey={activeTab}
             onChange={setActiveTab}
             size="small"
+            tabBarGutter={isMobile ? 12 : undefined}
             style={{ padding: isMobile ? '0 8px' : '0 16px' }}
             items={tabItems.map(t => ({
               key: t.key,
