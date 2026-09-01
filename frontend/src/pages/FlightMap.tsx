@@ -1,6 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import ReactECharts from 'echarts-for-react';
+import ReactEChartsCore from 'echarts-for-react/lib/core';
+import * as echarts from 'echarts/core';
+import { GraphChart } from 'echarts/charts';
+import { TooltipComponent, LegendComponent, ToolboxComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+
+// 本页只用力导向图（graph），按需注册避免打包全量 echarts（原方案把 bar/line/pie/geo 等全部图表类型都打进了 bundle）
+// ToolboxComponent 的 install() 内部已自带注册 SaveAsImage 等 feature，无需单独从 echarts/features 引入
+echarts.use([GraphChart, TooltipComponent, LegendComponent, ToolboxComponent, CanvasRenderer]);
 import {
   Card,
   Form,
@@ -577,7 +585,8 @@ function FlightMap() {
           }
         >
           {chartOption ? (
-            <ReactECharts
+            <ReactEChartsCore
+              echarts={echarts}
               option={chartOption}
               style={{ height: isMobile ? Math.round(window.innerHeight * 0.62) : 660, background: '#0f172a' }}
               opts={{ renderer: 'canvas' }}
