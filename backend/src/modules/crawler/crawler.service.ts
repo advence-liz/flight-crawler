@@ -2066,11 +2066,16 @@ export class CrawlerService implements OnApplicationBootstrap {
     this.logger.log(`🔄 【发现航班】按日期区间 ${options.startDate} ~ ${options.endDate}...`);
 
     // 计算日期列表（按日期区间）
+    // 网站日历把"今天"这一格标成不可选（当天不放特价票，业务规则非故障），跳过避免必然失败拖累整体任务判定
+    // （发现机场那条路径本来就是从"明天"开始，这里补齐同样的约定）
     const dates: string[] = [];
     const start = new Date(options.startDate);
     const end = new Date(options.endDate);
+    const todayStr = new Date().toISOString().split('T')[0];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      dates.push(d.toISOString().split('T')[0]);
+      const dateStr = d.toISOString().split('T')[0];
+      if (dateStr === todayStr) continue;
+      dates.push(dateStr);
     }
 
     // 获取启用的机场
@@ -2224,6 +2229,9 @@ export class CrawlerService implements OnApplicationBootstrap {
           executionPlan,
           taskResults,
         },
+        errorMessage: failedCount > 0
+          ? `${failedCount} 天完全没抓到数据：${taskResults.filter(t => !t.success).map(t => t.date).join(', ')}`
+          : undefined,
       });
 
       return {
@@ -2378,6 +2386,10 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       const successAirports = airports.length - failedAirports.length;
       const dayFullySucceeded = failedAirports.length === 0;
+      // 整体任务是否要算这一天"能用"：只要有机场成功就算，不能因为 79 个机场里 1 个抽风
+      // 就把这一天、进而把整个刷新任务判为失败——线上曾出现过 79 个机场里 1 个报错
+      // 就拖累整天、甚至整批并发日期一起被判失败，而实际已经拿到几百条数据的情况
+      const dayUsable = successAirports > 0;
       this.logger.log(`  ├─ [子任务 ${taskId}] ✅ ${date} 完成：${successAirports}/${airports.length} 机场成功，删 ${totalDeleted} 旧，存 ${totalSaved} 新${failedAirports.length > 0 ? `，失败保留：${failedAirports.join(', ')}` : ''}`);
 
       await this.completeCrawlerLog(logId, dayFullySucceeded, {
@@ -2389,7 +2401,7 @@ export class CrawlerService implements OnApplicationBootstrap {
           : undefined,
       });
 
-      return { taskId, date, success: dayFullySucceeded, count: totalSaved };
+      return { taskId, date, success: dayUsable, count: totalSaved };
     } catch (error) {
       this.logger.error(`  ├─ [子任务 ${taskId}] ❌ ${date} 异常`, error);
       await this.completeCrawlerLog(logId, false, {
@@ -2511,6 +2523,9 @@ export class CrawlerService implements OnApplicationBootstrap {
           executionPlan,
           taskResults,
         },
+        errorMessage: failedCount > 0
+          ? `${failedCount} 天完全没抓到数据：${taskResults.filter(t => !t.success).map(t => t.date).join(', ')}`
+          : undefined,
       });
     } catch (error) {
       this.logger.error(`❌ 后台执行异常`, error);
