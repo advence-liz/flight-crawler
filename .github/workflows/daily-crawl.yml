@@ -14,12 +14,6 @@ name: daily-crawl
         description: '爬取未来多少天（1-30）'
         type: string
         default: '30'
-  # 临时触发条件：账号没有 workflow_dispatch 所需的仓库 admin 权限，借这次改动本身的 push
-  # 立即验证 crawler.service.ts 的稳定性修复，跑完后会在下一个提交里删掉这段
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/daily-crawl.yml'
 
 permissions:
   contents: write
