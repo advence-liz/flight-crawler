@@ -36,11 +36,37 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      # puppeteer 的 postinstall 脚本每次都会从 Google 的 CDN 现下 Chromium（~200MB+），
+      # 之前两次连续卡住都精确停在这一步——npm 本身的 registry 缓存（上面 cache:'npm'）
+      # 覆盖不到这个下载，因为它不是走 npm registry，得单独缓存 puppeteer 的实际下载目录。
+      # 缓存命中后这步只需要几秒，不再依赖那个 CDN 是否稳定
+      - name: 缓存 puppeteer 的 Chromium 下载
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-chromium-${{ hashFiles('backend/package-lock.json') }}
 
       - name: 安装后端依赖（含 puppeteer，CI 环境不省这个）
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
         working-directory: backend
-        run: npm ci
+        # 网络抖动时 npm ci 本身没有超时兜底，历史上出现过卡满 300 分钟 job 超时的情况。
+        # 步骤级 timeout-minutes 只能兜底"整体卡死"，但如果第一次 npm ci 本身被这个
+        # 超时杀掉，shell 层面的 `||` 重试根本来不及触发——所以每次尝试单独用 `timeout`
+        # 包一层（5 分钟一次机会），卡住就换下一次尝试，而不是白等到步骤超时
+        timeout-minutes: 12
+        run: |
+          for attempt in 1 2; do
+            echo "▶ npm ci 第 $attempt 次尝试"
+            if timeout 300 npm ci; then
+              exit 0
+            fi
+            echo "::warning::第 $attempt 次 npm ci 失败/超时"
+          done
+          echo "::error::npm ci 连续两次失败/超时"
+          exit 1
 
       - name: 准备运行环境
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
