@@ -606,7 +606,7 @@ function FlightMap() {
             <ReactEChartsCore
               echarts={echarts}
               option={chartOption}
-              style={{ height: isMobile ? Math.round(window.innerHeight * 0.62) : 660, background: '#0f172a' }}
+              style={{ height: isMobile ? Math.round(window.innerHeight * 0.62) : 660, background: '#0f172a', touchAction: isMobile ? 'none' : undefined }}
               opts={{ renderer: 'canvas' }}
               showLoading={loading}
               onEvents={stableOnEvents}

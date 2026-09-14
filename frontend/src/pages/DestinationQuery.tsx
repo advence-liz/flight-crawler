@@ -412,23 +412,26 @@ function DestinationQuery() {
 
 
   const flightDetailColumns: ColumnsType<Flight> = [
-    { title: '航班号', dataIndex: 'flightNo', key: 'flightNo' },
+    { title: '航班号', dataIndex: 'flightNo', key: 'flightNo', width: 100 },
     {
       title: '出发时间',
       dataIndex: 'departureTime',
       key: 'departureTime',
+      width: 120,
       render: (t: string) => dayjs(t).format('MM-DD HH:mm'),
     },
     {
       title: '到达时间',
       dataIndex: 'arrivalTime',
       key: 'arrivalTime',
+      width: 120,
       render: (t: string) => dayjs(t).format('MM-DD HH:mm'),
     },
     {
       title: '权益卡',
       dataIndex: 'cardType',
       key: 'cardType',
+      width: 140,
       render: (cardType: string) => (
         <Space>
           {cardType.split(',').map(t => t.trim()).map(type => (
@@ -965,6 +968,7 @@ function DestinationQuery() {
               rowKey="id"
               loading={detailLoading}
               size="small"
+              scroll={{ x: 480 }}
               pagination={{ pageSize: 5, showSizeChanger: false, showTotal: total => `共 ${total} 班` }}
             />
           </div>
@@ -983,6 +987,7 @@ function DestinationQuery() {
                 rowKey="id"
                 loading={detailLoading}
                 size="small"
+                scroll={{ x: 480 }}
                 pagination={{ pageSize: 5, showSizeChanger: false, showTotal: total => `共 ${total} 班` }}
               />
             ) : (
