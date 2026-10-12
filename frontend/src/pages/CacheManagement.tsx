@@ -165,7 +165,7 @@ export default function CacheManagement() {
       width: 80,
       render: (_, record) => (
         <Popconfirm title="确认删除?" onConfirm={() => handleDeleteOne(record.cacheKey)} okText="删除" cancelText="取消">
-          <Button type="link" danger size="small" icon={<DeleteOutlined />} />
+          <Button type="link" danger size="small" icon={<DeleteOutlined />} aria-label="删除该缓存" />
         </Popconfirm>
       ),
     },

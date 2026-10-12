@@ -17,8 +17,8 @@ const LEGS = [
 // 复用 logo.svg 的猫蜘蛛形象做成爬取中的动效：呼应"爬虫"的爬，六条腿分两组交替摆动模拟爬行，身体轻微起伏
 function CuteLoader({ size = 64, text }: CuteLoaderProps) {
   return (
-    <div className="cute-loader" style={{ width: size }}>
-      <svg viewBox="0 0 100 100" width={size} height={size} className="cute-loader__svg">
+    <div className="cute-loader" style={{ width: size }} role="status" aria-live="polite" aria-label={text || '加载中'}>
+      <svg viewBox="0 0 100 100" width={size} height={size} className="cute-loader__svg" aria-hidden="true">
         <g className="cute-loader__bounce">
           {LEGS.map((leg, i) => (
             <g

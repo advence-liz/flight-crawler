@@ -555,6 +555,7 @@ function DataManagement() {
               onChange={(e) => setTokenInput(e.target.value)}
               placeholder="输入管理员 Token（未配置时留空）"
               style={{ width: 320 }}
+              autoComplete="off"
               allowClear
             />
             <Button

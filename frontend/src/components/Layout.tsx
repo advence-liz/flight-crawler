@@ -90,6 +90,7 @@ function Layout() {
             <Button
               type="text"
               icon={<MenuOutlined />}
+              aria-label="打开导航菜单"
               onClick={() => setDrawerVisible(true)}
               style={{ color: 'white' }}
             />
@@ -163,7 +164,8 @@ function Layout() {
           onChange={e => setTokenInput(e.target.value)}
           onPressEnter={handleLogin}
           style={{ marginTop: 16 }}
-          autoFocus
+          autoComplete="off"
+          autoFocus={!isMobile}
         />
       </Modal>
     </AntLayout>

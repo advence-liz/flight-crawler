@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card,
@@ -860,8 +860,8 @@ function DestinationQuery() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
               {route.segments.map((seg, si) => (
-                <>
-                  <div key={`seg-${si}`} style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 6, padding: '6px 10px', fontSize: 12, minWidth: 160 }}>
+                <Fragment key={si}>
+                  <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 6, padding: '6px 10px', fontSize: 12, minWidth: 160 }}>
                     <div style={{ fontWeight: 600, marginBottom: 2 }}>{seg.origin} → {seg.destination}</div>
                     <div style={{ color: '#666' }}>
                       {seg.flightNo}&nbsp;
@@ -872,13 +872,13 @@ function DestinationQuery() {
                     <div style={{ color: '#999', fontSize: 11 }}>飞行 {Math.floor(seg.duration / 60)}h{seg.duration % 60}m</div>
                   </div>
                   {si < route.layovers.length && (
-                    <div key={`layover-${si}`} style={{ textAlign: 'center', fontSize: 11, color: '#fa8c16', padding: '0 4px' }}>
+                    <div style={{ textAlign: 'center', fontSize: 11, color: '#fa8c16', padding: '0 4px' }}>
                       <div>⏱</div>
                       <div>{route.layovers[si].city}</div>
                       <div>停 {Math.floor(route.layovers[si].duration / 60)}h{route.layovers[si].duration % 60}m</div>
                     </div>
                   )}
-                </>
+                </Fragment>
               ))}
             </div>
           </div>
