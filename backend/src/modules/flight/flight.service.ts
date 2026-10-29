@@ -293,6 +293,10 @@ export class FlightService {
   async saveFlights(flights: Partial<Flight>[]): Promise<void> {
     if (flights.length === 0) return;
 
+    // 落库前先归一机场名 + 补齐 airports 表，覆盖所有爬取路径（发现机场 1 天种子、
+    // 30 天滚动刷新都走这里），避免只有"发现机场"那一条路径能登记新机场
+    await this.discoverAirportsFromFlights(flights);
+
     const flightsWithCardFlags = flights.map((flight) => ({
       ...flight,
       ...this.deriveCardFlags(flight.cardType),
@@ -532,27 +536,65 @@ export class FlightService {
   }
 
   /**
-   * 批量保存机场信息（从航班数据中自动发现）
-   * 所有发现的机场都可以作为出发地或目的地
+   * 已知确实拥有多座机场的城市白名单。不在此名单里的城市如果同时冒出两个不同的
+   * 机场名（如"大连"和"大连周水子"），判定为同一座机场改口叫法，而不是新机场。
+   */
+  private static readonly MULTI_AIRPORT_CITIES = new Set(['北京', '上海']);
+
+  /**
+   * 批量保存机场信息（从航班数据中自动发现），并把爬虫爬回来的、同城市下跟已有
+   * 机场只是叫法不同的名字（如"大连周水子"对已有的"大连"）改写成已有机场名，
+   * 直接改掉传入 flights 的 origin/destination，避免同一座机场的数据被名字分裂
+   * 成两条、互不合并。
    */
   async discoverAirportsFromFlights(flights: Partial<Flight>[]): Promise<void> {
     // 收集所有唯一机场名
-    const airportMap = new Map<string, string>(); // name -> city
+    const rawNames = new Set<string>();
     for (const flight of flights) {
-      if (flight.origin) airportMap.set(flight.origin, this.extractCityName(flight.origin));
-      if (flight.destination) airportMap.set(flight.destination, this.extractCityName(flight.destination));
+      if (flight.origin) rawNames.add(flight.origin);
+      if (flight.destination) rawNames.add(flight.destination);
     }
-    if (airportMap.size === 0) return;
+    if (rawNames.size === 0) return;
 
-    // 一次查出已存在的机场，避免 N+1
-    const names = Array.from(airportMap.keys());
-    const existing = await this.airportRepository.find({ where: names.map(name => ({ name })) });
-    const existingNames = new Set(existing.map(a => a.name));
+    // 一次查出全部已知机场，按城市分组，避免 N+1
+    const allAirports = await this.airportRepository.find();
+    const byName = new Map(allAirports.map(a => [a.name, a]));
+    const byCity = new Map<string, Airport[]>();
+    for (const airport of allAirports) {
+      const list = byCity.get(airport.city) ?? [];
+      list.push(airport);
+      byCity.set(airport.city, list);
+    }
 
-    // 只插入不存在的
-    const toInsert = names
-      .filter(name => !existingNames.has(name))
-      .map(name => this.airportRepository.create({ name, city: airportMap.get(name)! }));
+    const nameAlias = new Map<string, string>(); // 爬虫原始名 -> 落库用的规范名
+    const toInsert: Airport[] = [];
+
+    for (const rawName of rawNames) {
+      if (byName.has(rawName)) continue; // 已是已知机场，原样使用
+
+      const city = this.extractCityName(rawName);
+      const cityAirports = byCity.get(city) ?? [];
+      const isKnownMultiAirportCity = FlightService.MULTI_AIRPORT_CITIES.has(city);
+
+      if (!isKnownMultiAirportCity && cityAirports.length === 1) {
+        // 该城市已有且仅有一座机场，且不是已知的多机场城市：判定为同一座机场改口叫法
+        nameAlias.set(rawName, cityAirports[0].name);
+      } else {
+        const airport = this.airportRepository.create({ name: rawName, city });
+        toInsert.push(airport);
+        byCity.set(city, [...cityAirports, airport]); // 同批次内再遇到同城市新名字也能命中上面的判断
+      }
+    }
+
+    if (nameAlias.size > 0) {
+      for (const flight of flights) {
+        if (flight.origin && nameAlias.has(flight.origin)) flight.origin = nameAlias.get(flight.origin);
+        if (flight.destination && nameAlias.has(flight.destination)) flight.destination = nameAlias.get(flight.destination);
+      }
+      this.logger.warn(
+        `机场名改口归一：${Array.from(nameAlias.entries()).map(([from, to]) => `${from}→${to}`).join('，')}`,
+      );
+    }
 
     if (toInsert.length > 0) {
       await this.airportRepository.save(toInsert);
