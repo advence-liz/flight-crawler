@@ -70,6 +70,7 @@ export class RouteService implements OnApplicationBootstrap {
    */
   async planRoute(dto: PlanRouteDto): Promise<RoutePlanResponseDto> {
     const isDateRange = !!dto.endDate;
+    const maxTransfers = dto.maxTransfers ?? 2;
 
     this.logger.log(`开始规划单程路线: ${dto.origin} -> ${dto.destination || '所有目的地'}`);
     if (isDateRange) {
@@ -77,7 +78,7 @@ export class RouteService implements OnApplicationBootstrap {
     }
 
     // 1. 获取所有相关航班（支持日期区间，城市自动展开为机场）
-    const { flights: allFlights, originAirports, destAirports } = await this.getAllRelevantFlights(dto);
+    const { flights: allFlights, originAirports, destAirports } = await this.getAllRelevantFlights(dto, maxTransfers);
 
     // 如果目的地为空，直接返回所有航班
     if (!dto.destination) {
@@ -90,7 +91,7 @@ export class RouteService implements OnApplicationBootstrap {
           destination: dto.destination,
           departureDate: dto.departureDate,
           endDate: dto.endDate,
-          maxTransfers: dto.maxTransfers || 2,
+          maxTransfers,
         },
       };
     }
@@ -103,7 +104,7 @@ export class RouteService implements OnApplicationBootstrap {
       graph,
       originAirports,
       destAirports,
-      dto.maxTransfers || 2,
+      maxTransfers,
       dto.minLayoverHours || 2,
       dto.maxLayoverHours || 24,
     );
@@ -120,7 +121,7 @@ export class RouteService implements OnApplicationBootstrap {
         destination: dto.destination,
         departureDate: dto.departureDate,
         endDate: dto.endDate,
-        maxTransfers: dto.maxTransfers || 2,
+        maxTransfers,
       },
     };
   }
@@ -139,7 +140,8 @@ export class RouteService implements OnApplicationBootstrap {
     maxLayoverHours?: number;
     flightType?: string;
   }): Promise<RouteResultDto[]> {
-    const endDate = params.departureDateEnd || params.departureDate;
+    // 跟 planRoute 保持一致：不指定结束日期时自动把搜索窗口多扩 1 天，支持跨天中转
+    const endDate = params.departureDateEnd || this.addOneDay(params.departureDate);
     const maxTransfers = params.maxTransfers ?? 2;
     const flightType = params.flightType;
 
@@ -147,31 +149,14 @@ export class RouteService implements OnApplicationBootstrap {
     const originAirports = await this.flightService.expandCityToAirports(params.origin);
     const destAirports = await this.flightService.expandCityToAirports(params.destination);
 
-    // 查起点出发的所有航班
-    const firstLegFlights = await this.flightService.queryFlights({
-      origin: originAirports[0],
-      origins: originAirports,
-      startDate: params.departureDate,
+    // 按跳数逐层加载航班池，确保图的深度覆盖 maxTransfers 次中转
+    const allFlights = await this.loadFlightsByHops(
+      originAirports,
+      params.departureDate,
       endDate,
+      maxTransfers,
       flightType,
-    });
-
-    const allFlights = [...firstLegFlights];
-
-    if (maxTransfers > 0) {
-      // 查中转城市出发的航班（排除出发城市的机场）
-      const transitCities = new Set<string>();
-      for (const f of firstLegFlights) {
-        if (!originAirports.includes(f.destination)) {
-          transitCities.add(f.destination);
-        }
-      }
-      const transitLegsArray = await pLimit(
-        Array.from(transitCities).map(city =>
-          () => this.flightService.queryFlights({ origin: city, startDate: params.departureDate, endDate, flightType }),
-        ), 10);
-      transitLegsArray.forEach(legs => allFlights.push(...legs));
-    }
+    );
 
     const graph = this.buildGraph(allFlights);
     const routes = this.findAllRoutesMulti(
@@ -195,20 +180,11 @@ export class RouteService implements OnApplicationBootstrap {
    */
   private async getAllRelevantFlights(
     dto: PlanRouteDto,
+    maxTransfers: number,
   ): Promise<{ flights: Flight[]; originAirports: string[]; destAirports: string[] }> {
-    const startDate = new Date(dto.departureDate);
-    let endDate: Date;
-
-    if (dto.endDate) {
-      endDate = new Date(dto.endDate);
-    } else {
-      // 查询当天和次日，支持跨天中转
-      endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 1);
-    }
-
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
+    const startDateStr = dto.departureDate;
+    // 不指定结束日期时自动把搜索窗口多扩 1 天，支持跨天中转
+    const endDateStr = dto.endDate || this.addOneDay(dto.departureDate);
 
     // 展开城市为机场列表
     const originAirports = await this.flightService.expandCityToAirports(dto.origin);
@@ -218,35 +194,74 @@ export class RouteService implements OnApplicationBootstrap {
 
     const flightType = dto.flightType;
 
-    // 第一步：查询起点出发的所有航班（不过滤 destination）
+    if (!dto.destination || maxTransfers === 0) {
+      // 直飞only：只需起点自身的航班
+      const directFlights = await this.flightService.queryFlights({
+        origin: originAirports[0],
+        origins: originAirports,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        flightType,
+      });
+      return { flights: directFlights, originAirports, destAirports };
+    }
+
+    // 按跳数逐层加载航班池，确保图的深度覆盖 maxTransfers 次中转
+    const allFlights = await this.loadFlightsByHops(
+      originAirports,
+      startDateStr,
+      endDateStr,
+      maxTransfers,
+      flightType,
+    );
+
+    return { flights: allFlights, originAirports, destAirports };
+  }
+
+  /**
+   * 按跳数逐层展开加载航班池：先查起点自身航班，再按 maxTransfers 层数
+   * 依次把上一层新出现的城市当出发地继续查，确保建图深度覆盖 maxTransfers
+   * 次中转所需的全部航段——否则 DFS 允许走更多段，但图里压根没有更深层
+   * 城市的出发航班，搜索会在还没到终点时就因为找不到节点而被截断。
+   * 已查过的城市不会重复查询，查询总量有上限（<= 机场总数），不会随层数
+   * 指数级增长。
+   */
+  private async loadFlightsByHops(
+    originAirports: string[],
+    startDate: string,
+    endDate: string,
+    maxTransfers: number,
+    flightType?: string,
+  ): Promise<Flight[]> {
     const firstLegFlights = await this.flightService.queryFlights({
       origin: originAirports[0],
       origins: originAirports,
-      startDate: startDateStr,
-      endDate: endDateStr,
+      startDate,
+      endDate,
       flightType,
     });
 
-    if (!dto.destination || dto.maxTransfers === 0) {
-      return { flights: firstLegFlights, originAirports, destAirports };
-    }
+    const pool: Flight[] = [...firstLegFlights];
+    const visited = new Set<string>(originAirports);
+    let frontierFlights = firstLegFlights;
 
-    // 第二步：收集所有中转城市，查询它们出发的航班（排除出发城市的机场）
-    const transitCities = new Set<string>();
-    for (const f of firstLegFlights) {
-      if (!originAirports.includes(f.destination)) {
-        transitCities.add(f.destination);
+    for (let level = 0; level < maxTransfers && frontierFlights.length > 0; level++) {
+      const nextCities = new Set<string>();
+      for (const f of frontierFlights) {
+        if (!visited.has(f.destination)) nextCities.add(f.destination);
       }
+      if (nextCities.size === 0) break;
+      nextCities.forEach((c) => visited.add(c));
+
+      const legsArray = await pLimit(
+        Array.from(nextCities).map(city =>
+          () => this.flightService.queryFlights({ origin: city, startDate, endDate, flightType }),
+        ), 10);
+      frontierFlights = legsArray.flat();
+      pool.push(...frontierFlights);
     }
 
-    const transitLegsArray = await pLimit(
-      Array.from(transitCities).map(city =>
-        () => this.flightService.queryFlights({ origin: city, startDate: startDateStr, endDate: endDateStr, flightType }),
-      ), 10);
-    const allFlights = [...firstLegFlights];
-    transitLegsArray.forEach(legs => allFlights.push(...legs));
-
-    return { flights: allFlights, originAirports, destAirports };
+    return pool;
   }
 
   /** 供 RoundTripService 调用的 public 代理 */
@@ -255,6 +270,45 @@ export class RouteService implements OnApplicationBootstrap {
     return this.findAllRoutesGroupedByDest(...args);
   }
   calculateScorePublic(route: RouteResultDto) { return this.calculateScore(route); }
+  expandReachableOriginsPublic(...args: Parameters<typeof RouteService.prototype['expandReachableOrigins']>) {
+    return this.expandReachableOrigins(...args);
+  }
+
+  /**
+   * 从若干起始城市出发，在已加载的航班列表里按跳数逐层展开"自身出发航班需要
+   * 被纳入子图的城市集合"，用于从全量航班中筛出建图所需的子集。
+   * excludeFromExpansion 里的城市只会作为到达终点，不会被当成继续展开的
+   * 中转枢纽（比如返程图里不该把出发机场自己的出发航班当成中转段）。
+   */
+  private expandReachableOrigins(
+    allFlights: Flight[],
+    startCities: string[],
+    maxTransfers: number,
+    excludeFromExpansion?: Set<string>,
+  ): Set<string> {
+    const byOrigin = new Map<string, Flight[]>();
+    for (const f of allFlights) {
+      const list = byOrigin.get(f.origin);
+      if (list) list.push(f); else byOrigin.set(f.origin, [f]);
+    }
+
+    const reachable = new Set<string>(startCities);
+    let frontier = startCities;
+    for (let level = 0; level < maxTransfers; level++) {
+      const next = new Set<string>();
+      for (const city of frontier) {
+        for (const f of byOrigin.get(city) ?? []) {
+          if (!reachable.has(f.destination) && !excludeFromExpansion?.has(f.destination)) {
+            next.add(f.destination);
+          }
+        }
+      }
+      if (next.size === 0) break;
+      next.forEach((c) => reachable.add(c));
+      frontier = Array.from(next);
+    }
+    return reachable;
+  }
 
   /**
    * 构建航班图
@@ -486,6 +540,13 @@ export class RouteService implements OnApplicationBootstrap {
     return this.calculateDuration(flight1.arrivalTime, flight2.departureTime);
   }
 
+  /** 日期字符串（YYYY-MM-DD）加 1 天 */
+  private addOneDay(dateStr: string): string {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
   /**
    * 发现所有通过中转可达但直飞不可达的目的地，区分中转往返和中转单程
    * POST /api/routes/discover-transfer
@@ -520,14 +581,10 @@ export class RouteService implements OnApplicationBootstrap {
     const allFlights = await this.flightService.queryAllFlightsInRange(params.departureDate, endDate);
     this.logger.log(`全量加载航班 ${allFlights.length} 条，开始内存建图`);
 
-    // 去程图：只保留从出发城市机场出发，以及它们一跳可达的城市出发的航班
-    const firstHopDestinations = new Set<string>();
-    for (const f of allFlights) {
-      if (originAirports.includes(f.origin)) firstHopDestinations.add(f.destination);
-    }
-    const outboundFlights = allFlights.filter(f =>
-      originAirports.includes(f.origin) || firstHopDestinations.has(f.origin),
-    );
+    // 去程图：出发城市机场 + 按 maxTransfers 层数展开可达的城市出发的航班
+    const originSet = new Set(originAirports);
+    const outboundReachableOrigins = this.expandReachableOrigins(allFlights, originAirports, maxTransfers);
+    const outboundFlights = allFlights.filter(f => outboundReachableOrigins.has(f.origin));
     const outboundGraph = this.buildGraph(outboundFlights);
 
     // 2. 收集去程可达的所有目的地（排除出发城市的所有机场）
@@ -540,18 +597,13 @@ export class RouteService implements OnApplicationBootstrap {
     const candidateCities = Array.from(outboundReachable);
     this.logger.log(`去程可达 ${candidateCities.length} 个目的地`);
 
-    // 3. 返程图：候选目的地出发，以及它们一跳可达的城市出发的航班（全量数据已在内存，直接过滤）
-    const returnFirstHopDestinations = new Set<string>(candidateCities);
-    for (const f of allFlights) {
-      if (candidateCities.includes(f.origin)) returnFirstHopDestinations.add(f.destination);
-    }
-    const returnFlights = allFlights.filter(f =>
-      candidateCities.includes(f.origin) || (returnFirstHopDestinations.has(f.origin) && !originAirports.includes(f.origin)),
-    );
+    // 3. 返程图：候选目的地 + 按 maxTransfers 层数展开可达的城市出发的航班
+    //    （出发机场只作为返程终点，不当成继续展开的中转枢纽，全量数据已在内存，直接过滤）
+    const returnReachableOrigins = this.expandReachableOrigins(allFlights, candidateCities, maxTransfers, originSet);
+    const returnFlights = allFlights.filter(f => returnReachableOrigins.has(f.origin));
     const returnGraph = this.buildGraph(returnFlights);
 
     // 4. 一次 DFS 收集所有目的地路径，按目的地分组
-    const originSet = new Set(originAirports);
 
     // 去程：从出发机场出发，一次 DFS 得到所有目的地的路径
     const outboundByDest = this.findAllRoutesGroupedByDest(

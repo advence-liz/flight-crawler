@@ -270,14 +270,9 @@ export class RoundTripService {
       this.flightService.queryAllFlightsInRange(dto.returnDate, returnDateEnd, dto.flightType),
     ]);
 
-    // 2. 内存建去程图（出发机场 + 一跳可达城市）
-    const outboundFirstHop = new Set<string>();
-    for (const f of outboundAllFlights) {
-      if (originAirports.includes(f.origin)) outboundFirstHop.add(f.destination);
-    }
-    const outboundFiltered = outboundAllFlights.filter(f =>
-      originAirports.includes(f.origin) || outboundFirstHop.has(f.origin),
-    );
+    // 2. 内存建去程图（出发机场 + 按 maxTransfers 层数展开可达城市）
+    const outboundReachableOrigins = this.routeService.expandReachableOriginsPublic(outboundAllFlights, originAirports, maxTransfers);
+    const outboundFiltered = outboundAllFlights.filter(f => outboundReachableOrigins.has(f.origin));
     const outboundGraph = this.routeService.buildGraphPublic(outboundFiltered);
 
     // 3. 一次DFS得到所有目的地的去程路径
@@ -288,14 +283,9 @@ export class RoundTripService {
     const candidateCities = Array.from(outboundByDest.keys());
     this.logger.log(`发现 ${candidateCities.length} 个可达目的地，开始返程搜索`);
 
-    // 4. 内存建返程图（候选目的地 + 一跳可达城市）
-    const returnFirstHop = new Set<string>(candidateCities);
-    for (const f of returnAllFlights) {
-      if (candidateCities.includes(f.origin)) returnFirstHop.add(f.destination);
-    }
-    const returnFiltered = returnAllFlights.filter(f =>
-      candidateCities.includes(f.origin) || (returnFirstHop.has(f.origin) && !originAirports.includes(f.origin)),
-    );
+    // 4. 内存建返程图（候选目的地 + 按 maxTransfers 层数展开可达城市，出发机场只当返程终点）
+    const returnReachableOrigins = this.routeService.expandReachableOriginsPublic(returnAllFlights, candidateCities, maxTransfers, originSet);
+    const returnFiltered = returnAllFlights.filter(f => returnReachableOrigins.has(f.origin));
     const returnGraph = this.routeService.buildGraphPublic(returnFiltered);
 
     // 5. 一次DFS得到所有能回到出发城市的返程路径，按出发城市分组
