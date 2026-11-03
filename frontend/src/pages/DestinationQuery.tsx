@@ -42,6 +42,7 @@ import {
   TransferOneWayDest,
 } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
+import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
 import CuteLoader from '@/components/CuteLoader';
 
 const { RangePicker } = DatePicker;
@@ -299,14 +300,18 @@ function DestinationQuery() {
       form.setFieldValue('dateRange', [dayjs(defStart), dayjs(defEnd)]);
     }
 
+    // 预设出发地先用着（首屏即可选），接口回来后只做并集补新机场，
+    // 这样 Render 冷启动几十秒的空窗里用户也能直接查询
+    setAvailableOrigins(PRESET_CITIES);
+    // 预设已经够用时不必等接口：直接触发首屏查询，接口只负责补充增量
+    form.submit();
+
     getAvailableCities()
       .then(cities => {
         // 合并城市级（北京）与机场级（北京首都/北京大兴）选项并去重，
         // 让出发地既能按城市一键查全部、也能精确选具体机场（后端 expandCityToAirports 两者都支持）
         const merged = Array.from(new Set([...(cities.cityList || []), ...(cities.origins || [])]));
-        setAvailableOrigins(merged.length ? merged : (cities.origins || []));
-        // 城市列表加载完成后自动触发一次查询
-        form.submit();
+        setAvailableOrigins(prev => mergeOriginOptions(prev, merged.length ? merged : (cities.origins || [])));
       })
       .catch(console.error);
   }, []);

@@ -30,6 +30,7 @@ import { SearchOutlined, SwapOutlined, ArrowRightOutlined, NodeIndexOutlined, Ca
 import dayjs from 'dayjs';
 import { queryDestinations, getAvailableCities, DestinationResult, discoverTransferDestinations, TransferRoundTripDest, TransferOneWayDest } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
+import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
 
 const { useBreakpoint } = Grid;
 
@@ -128,22 +129,30 @@ function FlightMap() {
       form.setFieldValue('dateRange', [dayjs(urlDepartureDate), dayjs(urlReturnDate)]);
     }
 
-    // 加载城市列表，完成后自动触发初始查询
+    // 预设出发地兜底：不等接口返回就能选、能查，避免 Render 冷启动期间下拉框空着
+    setAvailableOrigins(PRESET_CITIES);
+    // 如果没有 URL 参数提供日期，使用今天~今天+30天（与目的地查询保持一致，命中缓存）
+    if (!urlDepartureDate && !urlReturnDate) {
+      const [defStart, defEnd] = getDefaultDateRange();
+      form.setFieldValue('dateRange', [dayjs(defStart), dayjs(defEnd)]);
+    }
+
+    // 用预设 + 表单现有值立即触发首屏查询，不阻塞在城市列表接口上
+    const initialValues = form.getFieldsValue();
+    const initialRange = initialValues.dateRange || [];
+    if (initialRange[0] && initialRange[1]) {
+      doSearch(
+        defaultOrigin,
+        initialRange[0].format('YYYY-MM-DD'),
+        initialRange[1].format('YYYY-MM-DD'),
+        initialValues.flightType || '2666权益卡航班',
+      );
+    }
+
+    // 城市列表接口只负责补充预设里没有的新机场
     getAvailableCities()
       .then(c => {
-        setAvailableOrigins(c.cityList?.length ? c.cityList : c.origins);
-        // 如果没有 URL 参数提供日期，使用今天~今天+30天（与目的地查询保持一致，命中缓存）
-        if (!urlDepartureDate && !urlReturnDate) {
-          const [defStart, defEnd] = getDefaultDateRange();
-          form.setFieldValue('dateRange', [dayjs(defStart), dayjs(defEnd)]);
-        }
-        // 自动触发初始查询
-        const values = form.getFieldsValue();
-        const dateRange = values.dateRange || [];
-        const [start, end] = dateRange;
-        if (start && end) {
-          doSearch(defaultOrigin, start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD'), values.flightType || '2666权益卡航班');
-        }
+        setAvailableOrigins(prev => mergeOriginOptions(prev, c.cityList?.length ? c.cityList : c.origins));
       })
       .catch(console.error);
   }, []);

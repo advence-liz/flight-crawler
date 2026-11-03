@@ -37,6 +37,7 @@ import {
 } from '@/api/route';
 import { getAvailableCities } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
+import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
 import CuteLoader from '@/components/CuteLoader';
 
 const { useBreakpoint } = Grid;
@@ -247,8 +248,6 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
   const isMobile = !screens.md;
 
   useEffect(() => {
-    if (cities.length === 0 || !dateRange.minDate) return;
-
     // URL params 优先，否则用 cookie 默认值
     const origin = urlParams?.origin || getDefaultOrigin();
     form.setFieldValue('origin', origin);
@@ -270,6 +269,10 @@ function ExploreTab({ cities, urlParams, dateRange }: ExploreTabProps) {
       const [defStart, defEnd] = getDefaultDateRange();
       form.setFieldValue('returnRange', [dayjs(defStart), dayjs(defEnd)]);
     }
+
+    // 表单字段已填好（cities 由预设兜底，下拉框首屏可用），
+    // 但自动查询仍等接口返回真实的 minDate，避免用错的默认区间去查
+    if (cities.length === 0 || !dateRange.minDate) return;
 
     // 自动触发一次查询
     if (!triggeredRef.current) {
@@ -483,8 +486,6 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
   const isMobile = !screens.md;
 
   useEffect(() => {
-    if (cities.length === 0 || !dateRange.minDate) return;
-
     const origin = urlParams?.origin || getDefaultOrigin();
     form.setFieldValue('origin', origin);
 
@@ -518,6 +519,10 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
     if (urlParams?.maxTransfers !== undefined) {
       form.setFieldValue('maxTransfers', parseInt(urlParams.maxTransfers, 10));
     }
+
+    // 下面是"来自目的地查询页跳转"的自动触发，依赖接口返回的 dateRange 做上限钳制，
+    // 所以仍要等城市列表接口；但表单字段和下拉框已由预设兜底，用户不必等接口
+    if (cities.length === 0 || !dateRange.minDate) return;
 
     // 有目的地时（来自跳转）自动触发查询
     if (urlParams?.destination) {
@@ -740,7 +745,8 @@ function PlanTab({ cities, urlParams, dateRange }: PlanTabProps) {
 // ─── 主页面 ────────────────────────────────────────────────
 
 function RoutePlanner() {
-  const [cities, setCities] = useState<string[]>([]);
+  // 预设兜底：出发地/目的地下拉框不必等接口返回，冷启动期间也能选
+  const [cities, setCities] = useState<string[]>(PRESET_CITIES);
   const [dateRange, setDateRange] = useState<{ minDate: string | null; maxDate: string | null }>({ minDate: null, maxDate: null });
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('explore');
@@ -764,7 +770,7 @@ function RoutePlanner() {
         const all = cityList?.length
           ? cityList
           : Array.from(new Set([...origins, ...destinations])).sort();
-        setCities(all);
+        setCities(prev => mergeOriginOptions(prev, all));
         setDateRange({ minDate, maxDate });
       })
       .catch(() => {});
