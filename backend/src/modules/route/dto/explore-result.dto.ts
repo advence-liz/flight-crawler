@@ -15,6 +15,14 @@ export class ExploreDestinationDto {
   departDate: string;
   returnDate: string;
   noLeaveNeeded: boolean;
+
+  // ── 行程形态 ──
+  /** 在目的地过几晚（0 = 当天往返） */
+  nights: number;
+  /** 0~100，越大越贴近"下班走、周末回" */
+  weekendScore: number;
+  /** 人类可读标签，如「周五走 · 周日回」 */
+  patternLabel: string;
 }
 
 export class ExplorePlanResponseDto {

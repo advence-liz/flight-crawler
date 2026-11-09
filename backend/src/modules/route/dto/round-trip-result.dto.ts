@@ -42,6 +42,14 @@ export class RoundTripResultDto {
   returnDate: string;
   /** 是否无需请假（完整落在周末或法定节假日里） */
   noLeaveNeeded: boolean;
+
+  // ── 行程形态（判断"像不像人安排的"）──
+  /** 在目的地过几晚（返程起飞日 - 去程落地日），0 = 当天往返 */
+  nights: number;
+  /** 0~100，越大越贴近"下班走、周末回"的人类习惯 */
+  weekendScore: number;
+  /** 人类可读标签，如「周五走 · 周日回」 */
+  patternLabel: string;
 }
 
 /**

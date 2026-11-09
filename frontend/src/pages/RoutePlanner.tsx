@@ -181,6 +181,11 @@ function RoundTripCard({ result, index }: RoundTripCardProps) {
     <Card size="small" style={{ height: '100%' }} title={header}>
       <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
         {formatDayWithWeekday(result.departDate)} 出发 · {formatDayWithWeekday(result.returnDate)} 返回
+        {typeof result.nights === 'number' && (
+          result.nights > 0
+            ? ` · 住 ${result.nights} 晚`
+            : ' · 当天往返'
+        )}
         {stayMinutes > 0 && ` · 在目的地 ${formatDuration(stayMinutes)}`}
       </div>
       <div style={{ marginBottom: 4 }}>
@@ -241,6 +246,7 @@ function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
     >
       <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
         {formatDayWithWeekday(dest.departDate)} 出发 · {formatDayWithWeekday(dest.returnDate)} 返回
+        {typeof dest.nights === 'number' && (dest.nights > 0 ? ` · 住 ${dest.nights} 晚` : ' · 当天往返')}
       </div>
       <div style={{ marginBottom: 4 }}>
         <Tag color="blue">✈ 去程</Tag>

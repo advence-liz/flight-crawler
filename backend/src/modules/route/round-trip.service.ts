@@ -16,6 +16,7 @@ import {
 } from './dto/explore-result.dto';
 import { QueryCache } from './entities/query-cache.entity';
 import { calcLeaveDays } from './utils/leave-days';
+import { evaluateTripPattern, TripPattern } from './utils/trip-pattern';
 import { readCache, writeCache } from './utils/query-cache';
 import { pLimit } from './utils/p-limit';
 import {
@@ -41,9 +42,20 @@ const CANDIDATES_PER_DATE = 2;
  */
 const MIN_STAY_MS = 4 * 60 * 60 * 1000;
 
-/** 排序：先比请假天数（越少越靠前），再比综合评分 */
+/**
+ * 默认排序：请假最少 → 不是当天往返 → 越贴近"下班走/周末回"越靠前 → 综合评分。
+ *
+ * 第二档很关键：只按请假天数排时，「周六出发周六回」这种当天往返请假 0 天、
+ * 总耗时还最短，会牢牢霸占第一名，但没人会把它当成一趟旅行。
+ */
 function sortByLeaveThenScore(a: RoundTripResultDto, b: RoundTripResultDto): number {
   if (a.leaveDays !== b.leaveDays) return a.leaveDays - b.leaveDays;
+  const aSameDay = (a.nights ?? 0) <= 0 ? 1 : 0;
+  const bSameDay = (b.nights ?? 0) <= 0 ? 1 : 0;
+  if (aSameDay !== bSameDay) return aSameDay - bSameDay;
+  if ((a.weekendScore ?? 0) !== (b.weekendScore ?? 0)) {
+    return (b.weekendScore ?? 0) - (a.weekendScore ?? 0);
+  }
   return b.score - a.score;
 }
 
@@ -256,6 +268,9 @@ export class RoundTripService {
     leaveDays: number;
     departDate: string;
     returnDate: string;
+    nights: number;
+    weekendScore: number;
+    label: string;
   } | null {
     const outCandidates = pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
     const retCandidates = pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
@@ -267,6 +282,9 @@ export class RoundTripService {
       leaveDays: number;
       departDate: string;
       returnDate: string;
+      nights: number;
+      weekendScore: number;
+      label: string;
     } | null = null;
 
     for (const outbound of outCandidates) {
@@ -277,19 +295,36 @@ export class RoundTripService {
         const returnDeparture = new Date(returnRoute.segments[0].departureTime).getTime();
         if (returnDeparture - outboundArrival < MIN_STAY_MS) continue;
 
-        const leave = calcLeaveDays(
-          new Date(outbound.segments[0].departureTime),
-          new Date(returnRoute.segments[returnRoute.segments.length - 1].arrivalTime),
-        );
-        // 已经找到更省假的组合，这个就不必再算评分了
+        const firstDeparture = new Date(outbound.segments[0].departureTime);
+        const finalArrival = new Date(returnRoute.segments[returnRoute.segments.length - 1].arrivalTime);
+        const leave = calcLeaveDays(firstDeparture, finalArrival);
+        // 已经找到更省假的组合，这个就不必再算了
         if (best && leave.leaveDays > best.leaveDays) continue;
 
+        const pattern = evaluateTripPattern(
+          firstDeparture,
+          new Date(returnRoute.segments[0].departureTime),
+          finalArrival,
+        );
         const score = this.calculateRoundTripScore(
           outbound.totalDuration + returnRoute.totalDuration,
           outbound.transferCount + returnRoute.transferCount,
         );
 
-        if (!best || leave.leaveDays < best.leaveDays || score > best.score) {
+        // 与 planSpecificRoundTrip 的排序口径保持一致：
+        // 请假天数 → 当天往返垫底 → 周末契合度 → 综合评分
+        const better =
+          !best ||
+          leave.leaveDays < best.leaveDays ||
+          (leave.leaveDays === best.leaveDays &&
+            (pattern.nights > 0) !== (best.nights > 0) &&
+            pattern.nights > 0) ||
+          (leave.leaveDays === best.leaveDays &&
+            (pattern.nights > 0) === (best.nights > 0) &&
+            (pattern.weekendScore > best.weekendScore ||
+              (pattern.weekendScore === best.weekendScore && score > best.score)));
+
+        if (better) {
           best = {
             outbound,
             return: returnRoute,
@@ -297,6 +332,9 @@ export class RoundTripService {
             leaveDays: leave.leaveDays,
             departDate: leave.departDate,
             returnDate: leave.returnDate,
+            nights: pattern.nights,
+            weekendScore: pattern.weekendScore,
+            label: pattern.label,
           };
         }
       }
@@ -333,9 +371,15 @@ export class RoundTripService {
     );
 
     // 请假成本：首段起飞 → 末段落地
-    const leave = calcLeaveDays(
-      new Date(outbound.segments[0].departureTime),
-      new Date(returnRoute.segments[returnRoute.segments.length - 1].arrivalTime),
+    const firstDeparture = new Date(outbound.segments[0].departureTime);
+    const finalArrival = new Date(returnRoute.segments[returnRoute.segments.length - 1].arrivalTime);
+    const leave = calcLeaveDays(firstDeparture, finalArrival);
+
+    // 行程形态：过几晚、是不是"下班走周末回"——单纯按请假天数排会选出当天往返
+    const pattern = evaluateTripPattern(
+      firstDeparture,
+      new Date(firstReturnSegment.departureTime),
+      finalArrival,
     );
 
     return {
@@ -359,6 +403,9 @@ export class RoundTripService {
       departDate: leave.departDate,
       returnDate: leave.returnDate,
       noLeaveNeeded: leave.noLeaveNeeded,
+      nights: pattern.nights,
+      weekendScore: pattern.weekendScore,
+      patternLabel: pattern.label,
     };
   }
 
@@ -483,6 +530,9 @@ export class RoundTripService {
         departDate: bestPair.departDate,
         returnDate: bestPair.returnDate,
         noLeaveNeeded: bestPair.leaveDays === 0,
+        nights: bestPair.nights,
+        weekendScore: bestPair.weekendScore,
+        patternLabel: bestPair.label,
       });
     }
 

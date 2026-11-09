@@ -82,6 +82,12 @@ export interface RoundTripResult {
   returnDate: string;
   /** 是否无需请假 */
   noLeaveNeeded: boolean;
+  /** 在目的地过几晚（0 = 当天往返） */
+  nights: number;
+  /** 0~100，越大越贴近"下班走、周末回" */
+  weekendScore: number;
+  /** 如「周五走 · 周日回」 */
+  patternLabel: string;
 }
 
 // 往返行程响应
@@ -120,6 +126,12 @@ export interface ExploreDestination {
   departDate: string;
   returnDate: string;
   noLeaveNeeded: boolean;
+  /** 在目的地过几晚（0 = 当天往返） */
+  nights: number;
+  /** 0~100，越大越贴近"下班走、周末回" */
+  weekendScore: number;
+  /** 如「周五走 · 周日回」 */
+  patternLabel: string;
 }
 
 export interface ExplorePlanResponse {
