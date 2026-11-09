@@ -8,6 +8,9 @@ name: render-logs
       hours:
         description: '回溯小时数'
         default: '3'
+      text:
+        description: '只保留包含该文本的日志（留空=全部）'
+        default: ''
 
 permissions:
   contents: read
@@ -36,6 +39,7 @@ jobs:
           END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           echo "window=$START ~ $END"
 
+          TEXT="${{ inputs.text }}"
           curl -sf -G "https://api.render.com/v1/logs" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
             --data-urlencode "ownerId=${OWNER}" \
@@ -43,7 +47,8 @@ jobs:
             --data-urlencode "startTime=${START}" \
             --data-urlencode "endTime=${END}" \
             --data-urlencode "limit=100" \
-            --data-urlencode "direction=backward" > /tmp/logs.json
+            --data-urlencode "direction=backward" \
+            ${TEXT:+--data-urlencode "text=${TEXT}"} > /tmp/logs.json
 
           echo "returned=$(jq '.logs | length' /tmp/logs.json) hasMore=$(jq '.hasMore' /tmp/logs.json)"
           echo "=== 按 10 分钟分桶（全部日志条数） ==="
@@ -56,4 +61,4 @@ jobs:
 
           echo "=== 请求路径统计 ==="
           jq -r '.logs[].message' /tmp/logs.json \
-            | grep -oE '(GET|POST) /api/[^ ]*' | sort | uniq -c | sort -rn | head -20
+            | grep -oE '(GET|POST) /api/[^ ]*' | sort | uniq -c | sort -rn | head -20 || echo '(无 HTTP 请求日志)'
