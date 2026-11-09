@@ -153,16 +153,21 @@ export class RoundTripService {
     );
 
     // 1. 查询去程所有航班
+    //    先把城市名展开成机场名（北京 → 北京首都/北京大兴），否则按城市名精确匹配
+    //    永远查不到航班——库里存的是机场名。
+    const originAirports = await this.flightService.expandCityToAirports(dto.origin);
     const outboundFlights = await this.flightService.queryFlights({
-      origin: dto.origin,
+      origin: originAirports[0],
+      origins: originAirports,
       startDate: dto.departureDate,
-      endDate: dto.departureDate,
+      endDate: dto.departureDateEnd || dto.departureDate,
     });
 
-    // 2. 提取所有可达目的地
+    // 2. 提取所有可达目的地（排除本城市的其他机场，如 北京首都 → 北京大兴）
+    const originAirportSet = new Set(originAirports);
     const destinations = new Set<string>();
     outboundFlights.forEach((flight) => {
-      if (flight.destination && flight.destination !== dto.origin) {
+      if (flight.destination && !originAirportSet.has(flight.destination)) {
         destinations.add(flight.destination);
       }
     });
