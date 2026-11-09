@@ -140,6 +140,7 @@ export class CrawlerController {
    * GET /api/crawler/logs
    */
   @Get('logs')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async getLogs(@Query() query: QueryLogsDto) {
     return this.crawlerService.queryLogs(
@@ -155,6 +156,7 @@ export class CrawlerController {
    * GET /api/crawler/logs/:id
    */
   @Get('logs/:id')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async getLogDetail(@Param('id') id: string) {
     const log = await this.crawlerService.getLogDetail(parseInt(id, 10));
@@ -169,6 +171,7 @@ export class CrawlerController {
    * GET /api/crawler/logs/:id/sub-tasks
    */
   @Get('logs/:id/sub-tasks')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async getSubLogs(@Param('id') id: string) {
     return this.crawlerService.getSubLogs(parseInt(id, 10));
@@ -179,6 +182,7 @@ export class CrawlerController {
    * GET /api/crawler/logs/stats
    */
   @Get('logs-stats')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async getLogStats() {
     return this.crawlerService.getLogStats();
@@ -235,6 +239,7 @@ export class CrawlerController {
    * GET /api/crawler/cache/stats
    */
   @Get('cache/stats')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async getQueryCacheStats() {
     return this.flightService.getQueryCacheStats();
@@ -245,6 +250,7 @@ export class CrawlerController {
    * GET /api/crawler/cache/list
    */
   @Get('cache/list')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async listQueryCache(
     @Query('page') page?: string,
@@ -286,6 +292,7 @@ export class CrawlerController {
    * GET /api/crawler/cron/list
    */
   @Get('cron/list')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   getCronJobs() {
     return CRON_JOB_META.map(meta => {

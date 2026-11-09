@@ -18,11 +18,31 @@ async function bootstrap() {
     }),
   );
 
-  // 启用 CORS（未配置时允许所有来源，适配线上前后端不同域场景）
-  const corsOrigin = process.env.CORS_ORIGIN || '*';
+  // 启用 CORS：只放行自家前端和本地开发地址。
+  // 仓库是公开的，接口清单人人可见，再放任 `*` 等于给所有网站发通行证
+  // （写接口有 AdminGuard 兜底，但没必要把整张银行卡摊开）。
+  // CORS_ORIGIN 支持逗号分隔多个来源；显式配置成 `*` 时仍按"全放行"处理，保持向后兼容。
+  const DEFAULT_ORIGINS = [
+    'https://flight-crawler-frontend.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:8899',
+    'http://localhost:8901',
+  ];
+  const configuredOrigins = (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const allowedOrigins = configuredOrigins.length ? configuredOrigins : DEFAULT_ORIGINS;
+  const allowAll = allowedOrigins.includes('*');
+
   app.enableCors({
-    origin: corsOrigin,
-    credentials: corsOrigin !== '*',
+    // 不带 Origin 的请求（curl / 服务端调用 / 同源导航）不受 CORS 约束，直接放行
+    origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin || allowAll || allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(null, false);
+    },
+    // 用 Authorization 头传 token，不用 cookie，因此不需要 credentials
+    credentials: false,
   });
 
   // 设置全局路由前缀

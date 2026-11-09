@@ -1,10 +1,11 @@
-import { Controller, Post, Get, Body, Query, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, HttpCode, HttpStatus, BadRequestException, UseGuards } from '@nestjs/common';
 import { RouteService } from './route.service';
 import { RoundTripService } from './round-trip.service';
 import { PlanRouteDto } from './dto/plan-route.dto';
 import { PlanRoundTripDto } from './dto/plan-round-trip.dto';
 import { ExploreRouteDto } from './dto/explore-route.dto';
 import { RouteDateWindowDto } from './dto/route-date-window.dto';
+import { AdminGuard } from '../../admin.guard';
 
 @Controller('routes')
 export class RouteController {
@@ -83,6 +84,7 @@ export class RouteController {
    * POST /api/routes/warmup-cache
    */
   @Post('warmup-cache')
+  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   async warmupCache() {
     this.routeService.warmupTransferCachePublic();
@@ -94,6 +96,7 @@ export class RouteController {
    * GET /api/routes/warmup-cache/status
    */
   @Get('warmup-cache/status')
+  @UseGuards(AdminGuard)
   async warmupCacheStatus() {
     return this.routeService.getWarmupStatus();
   }
