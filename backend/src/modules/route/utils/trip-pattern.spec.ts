@@ -74,6 +74,20 @@ describe('evaluateTripPattern', () => {
     expect(satSameDay).toBeGreaterThan(weekdaySameDay);
   });
 
+  it('周日回程偏好：傍晚走 > 一大早走（当天不至于全耗在路上）', () => {
+    const lateSunday = evaluateTripPattern(
+      at('2026-11-13T20:00:00Z'),
+      at('2026-11-15T17:00:00Z'), // 周日下午走
+      at('2026-11-15T19:00:00Z'),
+    );
+    const earlySunday = evaluateTripPattern(
+      at('2026-11-13T20:00:00Z'),
+      at('2026-11-15T08:00:00Z'), // 周日一早走
+      at('2026-11-15T10:00:00Z'),
+    );
+    expect(lateSunday.weekendScore).toBeGreaterThan(earlySunday.weekendScore);
+  });
+
   it('跨周（周五走下周一早班机回）仍算周末友好', () => {
     const p = evaluateTripPattern(
       at('2026-11-13T20:00:00Z'),

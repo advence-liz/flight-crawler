@@ -25,17 +25,30 @@ function makeRoute(departureIso: string, arrivalIso: string, score: number): Rou
 }
 
 describe('分桶', () => {
-  it('去程按是否 18:00 后出发分桶', () => {
-    expect(outboundBucket(makeRoute('2026-11-13T08:00:00Z', '2026-11-13T10:00:00Z', 1))).toBe('day');
-    expect(outboundBucket(makeRoute('2026-11-13T17:59:00Z', '2026-11-13T19:59:00Z', 1))).toBe('day');
+  it('去程按起飞时段分早/午/晚', () => {
+    expect(outboundBucket(makeRoute('2026-11-13T08:00:00Z', '2026-11-13T10:00:00Z', 1))).toBe('morning');
+    expect(outboundBucket(makeRoute('2026-11-13T11:59:00Z', '2026-11-13T13:59:00Z', 1))).toBe('morning');
+    expect(outboundBucket(makeRoute('2026-11-13T17:59:00Z', '2026-11-13T19:59:00Z', 1))).toBe('afternoon');
     expect(outboundBucket(makeRoute('2026-11-13T18:00:00Z', '2026-11-13T20:00:00Z', 1))).toBe('evening');
     expect(outboundBucket(makeRoute('2026-11-13T21:00:00Z', '2026-11-13T23:00:00Z', 1))).toBe('evening');
   });
 
-  it('返程按是否 08:00 前落地分桶', () => {
-    expect(returnBucket(makeRoute('2026-11-16T04:00:00Z', '2026-11-16T07:59:00Z', 1))).toBe('early');
-    expect(returnBucket(makeRoute('2026-11-16T04:00:00Z', '2026-11-16T08:00:00Z', 1))).toBe('late');
-    expect(returnBucket(makeRoute('2026-11-16T14:00:00Z', '2026-11-16T16:00:00Z', 1))).toBe('late');
+  it('返程：08:00 前落地单独一桶，其余按起飞时段', () => {
+    expect(returnBucket(makeRoute('2026-11-16T04:00:00Z', '2026-11-16T07:59:00Z', 1))).toBe('early-arrival');
+    expect(returnBucket(makeRoute('2026-11-16T04:00:00Z', '2026-11-16T08:00:00Z', 1))).toBe('morning');
+    expect(returnBucket(makeRoute('2026-11-16T14:00:00Z', '2026-11-16T16:00:00Z', 1))).toBe('afternoon');
+    expect(returnBucket(makeRoute('2026-11-16T21:25:00Z', '2026-11-16T23:45:00Z', 1))).toBe('evening');
+  });
+
+  it('周日返程：白天的航班再快，也不能把晚班挤掉', () => {
+    // 真实数据：9/27 杭州→北京 有 07:30、08:25（白天）和 21:25（晚上）
+    const routes = [
+      makeRoute('2026-09-27T07:30:00Z', '2026-09-27T09:45:00Z', 100),
+      makeRoute('2026-09-27T08:25:00Z', '2026-09-27T10:40:00Z', 99),
+      makeRoute('2026-09-27T21:25:00Z', '2026-09-27T23:45:00Z', 80),
+    ];
+    const picked = pickCandidatesPerDate(routes, 2, returnBucket);
+    expect(picked.some(r => returnBucket(r) === 'evening')).toBe(true);
   });
 });
 
@@ -61,9 +74,9 @@ describe('pickCandidatesPerDate', () => {
       makeRoute('2026-11-15T18:00:00Z', '2026-11-16T05:00:00Z', 60),
     ];
     const picked = pickCandidatesPerDate(routes, 1, returnBucket);
-    const early = picked.filter(r => returnBucket(r) === 'early');
+    const early = picked.filter(r => returnBucket(r) === 'early-arrival');
     expect(early.length).toBe(1);
-    expect(picked.length).toBe(2); // early 1 + late 1
+    expect(picked.length).toBeGreaterThanOrEqual(2); // 早到桶 + 晚走桶各至少 1
   });
 
   it('不同日期互不影响', () => {

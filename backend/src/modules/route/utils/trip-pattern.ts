@@ -54,12 +54,18 @@ function scoreDeparture(departureTime: Date): number {
   return evening ? 22 : 8; // 工作日晚走 / 工作日白天
 }
 
-/** 返回日打分：周末回 > 周一早班机 > 其他 */
-function scoreReturn(arrivalTime: Date): number {
+/**
+ * 返回日打分：周日晚 > 周日早 ≈ 周一早班机 > 周六 > 其他。
+ *
+ * 周日下午/傍晚走能把最后一天玩满（"周六早出发、周日晚返回"是公认的舒服走法），
+ * 周日一早的航班虽然也算"周日回"，但等于把当天浪费在路上了，给低一档。
+ */
+function scoreReturn(returnDepartureTime: Date, arrivalTime: Date): number {
   const w = weekdayOf(arrivalTime);
   const hour = arrivalTime.getUTCHours();
+  const depHour = returnDepartureTime.getUTCHours();
 
-  if (w === 0) return 40; // 周日回
+  if (w === 0) return depHour >= 14 && depHour <= 21 ? 40 : 35; // 周日晚走 / 周日早走
   if (w === 1 && hour < EARLY_ARRIVAL_HOUR) return 30; // 周一早班机落地，赶得上上班
   if (w === 6) return 25; // 周六回
   if (w === 5) return 20; // 周五回（请周五一整天）
@@ -98,7 +104,7 @@ export function evaluateTripPattern(
 
   const weekendScore = Math.min(
     100,
-    scoreDeparture(departureTime) + scoreReturn(finalArrivalTime) + scoreNights(nights),
+    scoreDeparture(departureTime) + scoreReturn(returnDepartureTime, finalArrivalTime) + scoreNights(nights),
   );
 
   return {

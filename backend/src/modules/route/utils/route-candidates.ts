@@ -11,21 +11,42 @@ import { RouteResultDto } from '../dto/route-result.dto';
 
 /** 下班后出发的判定点（含） */
 export const EVENING_DEPARTURE_HOUR = 18;
+/** 上午的判定点（不含） */
+export const MORNING_HOUR = 12;
 /** 赶得上上班的落地判定点（不含） */
 export const MORNING_ARRIVAL_HOUR = 8;
 
-/** 去程分桶：是否下班后出发 */
+/**
+ * 按起飞时刻分早/午/晚三段。
+ *
+ * 只用「18 点前/后」两段不够用：同一个周日下午，07:30 和 21:25 的返程都会落进
+ * 同一个桶，桶内按评分（时长越短越好）取前 2 时，晚上的航班会被白天的挤掉，
+ * 于是「周日晚回」这种更舒服的走法根本进不了候选池。
+ */
+function departurePeriod(hour: number): 'morning' | 'afternoon' | 'evening' {
+  if (hour < MORNING_HOUR) return 'morning';
+  if (hour >= EVENING_DEPARTURE_HOUR) return 'evening';
+  return 'afternoon';
+}
+
+/** 去程分桶：按首段起飞时段 */
 export function outboundBucket(route: RouteResultDto): string {
   const first = route.segments[0];
   const hour = first ? new Date(first.departureTime).getUTCHours() : 12;
-  return hour >= EVENING_DEPARTURE_HOUR ? 'evening' : 'day';
+  return departurePeriod(hour);
 }
 
-/** 返程分桶：是否早上落地（赶得上上班） */
+/**
+ * 返程分桶：早上落地（赶得上上班）单独一桶，其余按起飞时段分。
+ * 早到和晚走是两件不同的事，都要在候选池里留位置。
+ */
 export function returnBucket(route: RouteResultDto): string {
   const last = route.segments[route.segments.length - 1];
-  const hour = last ? new Date(last.arrivalTime).getUTCHours() : 12;
-  return hour < MORNING_ARRIVAL_HOUR ? 'early' : 'late';
+  const first = route.segments[0];
+  const arrivalHour = last ? new Date(last.arrivalTime).getUTCHours() : 12;
+  if (arrivalHour < MORNING_ARRIVAL_HOUR) return 'early-arrival';
+  const departHour = first ? new Date(first.departureTime).getUTCHours() : 12;
+  return departurePeriod(departHour);
 }
 
 /**
