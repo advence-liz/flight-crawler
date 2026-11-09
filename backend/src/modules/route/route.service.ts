@@ -85,10 +85,19 @@ export class RouteService implements OnApplicationBootstrap {
     // 1. 获取所有相关航班（支持日期区间，城市自动展开为机场）
     const { flights: allFlights, originAirports, destAirports } = await this.getAllRelevantFlights(dto, maxTransfers);
 
+    // 建图多载了一天，用户请求的出发区间上界
+    const userEndDate = dto.endDate || dto.departureDate;
+    const inUserWindow = (firstDeparture: Date): boolean => {
+      const day = new Date(firstDeparture).toISOString().slice(0, 10);
+      return day >= dto.departureDate && day <= userEndDate;
+    };
+
     // 如果目的地为空，直接返回所有航班
     if (!dto.destination) {
       this.logger.log(`目的地为空，返回所有 ${allFlights.length} 条航班`);
-      const directRoutes = allFlights.map(flight => this.buildRouteResult([flight]));
+      const directRoutes = allFlights
+        .filter(flight => inUserWindow(flight.departureTime))
+        .map(flight => this.buildRouteResult([flight]));
       return {
         routes: directRoutes,
         searchParams: {
@@ -112,7 +121,7 @@ export class RouteService implements OnApplicationBootstrap {
       maxTransfers,
       dto.minLayoverHours || 2,
       dto.maxLayoverHours || 24,
-    );
+    ).filter(route => route.segments[0] && inUserWindow(route.segments[0].departureTime));
 
     // 4. 计算评分并排序
     const scoredRoutes = routes.map((route) => this.calculateScore(route));
@@ -181,10 +190,11 @@ export class RouteService implements OnApplicationBootstrap {
 
     // 起点和终点都作为第一层加载，这样一张图就能同时支撑去程和返程两个方向
     const firstLegOrigins = Array.from(new Set([...originAirports, ...destAirports]));
+    // 多载一天，覆盖"最后一天晚班起飞、次日转机"的跨天中转
     const allFlights = await this.loadFlightsByHops(
       firstLegOrigins,
       startDate,
-      endDate,
+      this.addOneDay(endDate),
       maxTransfers,
       dto.flightType,
     );
@@ -194,11 +204,21 @@ export class RouteService implements OnApplicationBootstrap {
     const outboundRoutes = this.findAllRoutesMulti(graph, originAirports, destAirports, maxTransfers, 2, 24);
     const returnRoutes = this.findAllRoutesMulti(graph, destAirports, originAirports, maxTransfers, 2, 24);
 
+    // 建图多载了一天，窗口里只保留用户区间内的出发日期
+    const withinWindow = (route: RouteResultDto) => {
+      const first = route.segments[0];
+      if (!first) return false;
+      const day = new Date(first.departureTime).toISOString().slice(0, 10);
+      return day >= startDate && day <= endDate;
+    };
+    const outboundInWindow = outboundRoutes.filter(withinWindow);
+    const returnInWindow = returnRoutes.filter(withinWindow);
+
     const result: RouteDateWindowResult = {
       ...emptyResult,
-      outbound: this.collectFirstLegDates(outboundRoutes),
-      return: this.collectFirstLegDates(returnRoutes),
-      hasReturn: returnRoutes.length > 0,
+      outbound: this.collectFirstLegDates(outboundInWindow),
+      return: this.collectFirstLegDates(returnInWindow),
+      hasReturn: returnInWindow.length > 0,
     };
 
     this.logger.log(
@@ -247,8 +267,12 @@ export class RouteService implements OnApplicationBootstrap {
     maxLayoverHours?: number;
     flightType?: string;
   }): Promise<RouteResultDto[]> {
-    // 跟 planRoute 保持一致：不指定结束日期时自动把搜索窗口多扩 1 天，支持跨天中转
-    const endDate = params.departureDateEnd || this.addOneDay(params.departureDate);
+    // 用户请求的出发日期区间
+    const userEndDate = params.departureDateEnd || params.departureDate;
+    // 建图窗口始终多载一天：最后一天晚班起飞、次日转机的跨天中转需要次日的航班，
+    // 只按 departureDateEnd 建图会把这些方案整批丢掉（之前只在不传结束日期时才 +1 天，
+    // 而前端总是传结束日期，等于这个修复从没生效过）
+    const loadEndDate = this.addOneDay(userEndDate);
     const maxTransfers = params.maxTransfers ?? 2;
     const flightType = params.flightType;
 
@@ -260,12 +284,13 @@ export class RouteService implements OnApplicationBootstrap {
     const allFlights = await this.loadFlightsByHops(
       originAirports,
       params.departureDate,
-      endDate,
+      loadEndDate,
       maxTransfers,
       flightType,
     );
 
     const graph = this.buildGraph(allFlights);
+    // 建图多载了一天，这里把"首段起飞日期"落在用户区间外的路线滤掉
     const routes = this.findAllRoutesMulti(
       graph,
       originAirports,
@@ -273,7 +298,12 @@ export class RouteService implements OnApplicationBootstrap {
       maxTransfers,
       params.minLayoverHours ?? 2,
       params.maxLayoverHours ?? 24,
-    );
+    ).filter((route) => {
+      const first = route.segments[0];
+      if (!first) return false;
+      const day = new Date(first.departureTime).toISOString().slice(0, 10);
+      return day >= params.departureDate && day <= userEndDate;
+    });
 
     const scoredRoutes = routes.map((route) => this.calculateScore(route));
     scoredRoutes.sort((a, b) => b.score - a.score);
@@ -290,8 +320,9 @@ export class RouteService implements OnApplicationBootstrap {
     maxTransfers: number,
   ): Promise<{ flights: Flight[]; originAirports: string[]; destAirports: string[] }> {
     const startDateStr = dto.departureDate;
-    // 不指定结束日期时自动把搜索窗口多扩 1 天，支持跨天中转
-    const endDateStr = dto.endDate || this.addOneDay(dto.departureDate);
+    // 建图窗口始终多扩 1 天：最后一天晚班起飞、次日转机的跨天中转需要次日的航班。
+    // 结果侧会按首段起飞日期滤回用户区间（见 planRoute）。
+    const endDateStr = this.addOneDay(dto.endDate || dto.departureDate);
 
     // 展开城市为机场列表
     const originAirports = await this.flightService.expandCityToAirports(dto.origin);

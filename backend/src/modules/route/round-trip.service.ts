@@ -40,6 +40,26 @@ function sortByLeaveThenScore(a: RoundTripResultDto, b: RoundTripResultDto): num
   return b.score - a.score;
 }
 
+/**
+ * 候选分桶：请假成本取决于"去程是不是下班后走""返程是不是早上落地"，
+ * 而这两个维度评分完全不感知。若只按评分取每天前 N，晚班/早班会被整批淘汰，
+ * 再准的排序也救不回来——所以按这两个维度分桶，每个桶各取最优几条。
+ */
+const EVENING_DEPARTURE_HOUR = 18;
+const MORNING_ARRIVAL_HOUR = 8;
+
+function outboundBucket(route: RouteResultDto): string {
+  const first = route.segments[0];
+  const hour = first ? new Date(first.departureTime).getUTCHours() : 12;
+  return hour >= EVENING_DEPARTURE_HOUR ? 'evening' : 'day';
+}
+
+function returnBucket(route: RouteResultDto): string {
+  const last = route.segments[route.segments.length - 1];
+  const hour = last ? new Date(last.arrivalTime).getUTCHours() : 12;
+  return hour < MORNING_ARRIVAL_HOUR ? 'early' : 'late';
+}
+
 async function pLimit<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
   const results: T[] = [];
   let i = 0;
@@ -116,8 +136,8 @@ export class RoundTripService {
     // 3. 组合去程和返程
     //    候选按"每个出发日取最优的几条"来挑，而不是全局取前 5——否则周末/假期
     //    那几天的航班可能因为耗时不占优，压根进不了候选池，也就永远排不到前面。
-    const outboundCandidates = this.pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE);
-    const returnCandidates = this.pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE);
+    const outboundCandidates = this.pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
+    const returnCandidates = this.pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
 
     const roundTripRoutes: RoundTripResultDto[] = [];
     for (const outbound of outboundCandidates) {
@@ -227,17 +247,20 @@ export class RoundTripService {
   private pickCandidatesPerDate(
     routes: RouteResultDto[],
     perDate: number,
+    bucketOf: (route: RouteResultDto) => string,
   ): RouteResultDto[] {
-    const byDate = new Map<string, RouteResultDto[]>();
+    // 按「出发日 + 请假相关维度」分桶，每桶各取评分最高的几条
+    const byKey = new Map<string, RouteResultDto[]>();
     for (const route of routes) {
       const first = route.segments[0];
       if (!first) continue;
       const date = new Date(first.departureTime).toISOString().slice(0, 10);
-      if (!byDate.has(date)) byDate.set(date, []);
-      byDate.get(date)!.push(route);
+      const key = `${date}|${bucketOf(route)}`;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push(route);
     }
     const picked: RouteResultDto[] = [];
-    for (const list of byDate.values()) {
+    for (const list of byKey.values()) {
       list.sort((a, b) => b.score - a.score);
       picked.push(...list.slice(0, perDate));
     }
@@ -259,8 +282,8 @@ export class RoundTripService {
     departDate: string;
     returnDate: string;
   } | null {
-    const outCandidates = this.pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE);
-    const retCandidates = this.pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE);
+    const outCandidates = this.pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
+    const retCandidates = this.pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
 
     let best: {
       outbound: RouteResultDto;

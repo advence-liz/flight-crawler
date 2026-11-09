@@ -78,7 +78,7 @@ export class FlightService {
     // 构建查询条件
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
-    endDateTime.setHours(23, 59, 59, 999);
+    endDateTime.setUTCHours(23, 59, 59, 999);
 
     let query = this.flightRepository.createQueryBuilder('flight')
       .where('flight.origin IN (:...originAirports)', { originAirports })
@@ -199,7 +199,7 @@ export class FlightService {
   async queryAllFlightsInRange(startDate: string, endDate: string, flightType?: string): Promise<Flight[]> {
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
-    endDateTime.setHours(23, 59, 59, 999);
+    endDateTime.setUTCHours(23, 59, 59, 999);
     let query = this.flightRepository.createQueryBuilder('flight')
       .where('flight.departureTime >= :startDateTime', { startDateTime })
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
@@ -218,7 +218,7 @@ export class FlightService {
 
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
-    endDateTime.setHours(23, 59, 59, 999);
+    endDateTime.setUTCHours(23, 59, 59, 999);
 
     // 支持多出发地（origins 优先，兼容单出发地 origin）
     const originList = origins && origins.length > 0 ? origins : [origin];
@@ -248,7 +248,7 @@ export class FlightService {
 
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
-    endDateTime.setHours(23, 59, 59, 999);
+    endDateTime.setUTCHours(23, 59, 59, 999);
 
     // 展开城市为机场列表（支持"北京"→["北京首都","北京大兴"]）
     const originAirports = await this.expandCityToAirports(origin);
@@ -366,7 +366,7 @@ export class FlightService {
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date(dates[dates.length - 1]);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     const result = await this.flightRepository
       .createQueryBuilder()
@@ -404,7 +404,7 @@ export class FlightService {
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     const result = await this.flightRepository
       .createQueryBuilder()
@@ -428,7 +428,7 @@ export class FlightService {
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     const result = await this.flightRepository
       .createQueryBuilder()
@@ -689,7 +689,7 @@ export class FlightService {
     if (startDate && endDate) {
       const startDateTime = new Date(startDate);
       const endDateTime = new Date(endDate);
-      endDateTime.setHours(23, 59, 59, 999);
+      endDateTime.setUTCHours(23, 59, 59, 999);
       queryBuilder.andWhere('flight.departureTime BETWEEN :startDate AND :endDate', {
         startDate: startDateTime,
         endDate: endDateTime,
@@ -719,7 +719,7 @@ export class FlightService {
     if (startDate && endDate) {
       const startDateTime = new Date(startDate);
       const endDateTime = new Date(endDate);
-      endDateTime.setHours(23, 59, 59, 999);
+      endDateTime.setUTCHours(23, 59, 59, 999);
       statsBuilder.andWhere('flight.departureTime BETWEEN :startDate AND :endDate', {
         startDate: startDateTime,
         endDate: endDateTime,
