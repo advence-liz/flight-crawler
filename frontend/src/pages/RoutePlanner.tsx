@@ -610,9 +610,10 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
       };
       const cacheKey = snapshotKey('explore', exploreParams);
       // 先上本地快照：有的话立刻可见，不用干等后端（可能是 15~40 秒的冷启动）
-      const snap = readSnapshot<ExploreDestination[]>(cacheKey, SNAPSHOT_TTL_MS);
+      const snap = readSnapshot<{ items: ExploreDestination[]; total: number }>(cacheKey, SNAPSHOT_TTL_MS);
       if (snap) {
-        setExploreResults(snap.data);
+        setExploreResults(snap.data.items);
+        setExploreTotal(snap.data.total ?? snap.data.items.length);
         setSnapshotAge(snap.ageMs);
         if (!isStale()) setLoading(false);
       }
@@ -622,7 +623,10 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
         setExploreResults(resp.destinations);
         setExploreTotal(resp.total ?? resp.destinations.length);
         setSnapshotAge(null);
-        writeSnapshot(cacheKey, resp.destinations);
+        writeSnapshot(cacheKey, {
+          items: resp.destinations,
+          total: resp.total ?? resp.destinations.length,
+        });
         if (resp.destinations.length === 0) {
           message.warning('未找到可往返的目的地，请换个日期试试');
         } else if (!snap) {
@@ -861,7 +865,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
               : '（按请假成本优先排序）'}
             {snapshotAge !== null && (
               <Tag color="default" style={{ marginLeft: 8 }}>
-                {formatAge(snapshotAge)}前的数据 · 更新中
+                {formatAge(snapshotAge)}的数据 · 更新中
               </Tag>
             )}
           </div>
@@ -887,7 +891,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
               {isRoundTrip ? `（往返，已按${SORT_LABELS[sortBy] || '请假成本优先'}排序）` : '（单程）'}
               {snapshotAge !== null && (
                 <Tag color="default" style={{ marginLeft: 8 }}>
-                  {formatAge(snapshotAge)}前的数据 · 更新中
+                  {formatAge(snapshotAge)}的数据 · 更新中
                 </Tag>
               )}
             </span>

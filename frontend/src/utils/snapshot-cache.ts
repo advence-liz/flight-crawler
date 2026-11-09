@@ -17,7 +17,7 @@
  * 键前缀里带版本号：接口返回结构变化时把版本号 +1，旧快照自动失效，
  * 避免发版后旧结构的数据被读出来渲染（可能直接白屏）。
  */
-const SNAPSHOT_VERSION = 'v1';
+const SNAPSHOT_VERSION = 'v2';
 const PREFIX = `fc-snapshot:${SNAPSHOT_VERSION}:`;
 /** 单条快照上限，避免把 localStorage 撑爆（超出直接不写） */
 const MAX_ENTRY_BYTES = 512 * 1024;
