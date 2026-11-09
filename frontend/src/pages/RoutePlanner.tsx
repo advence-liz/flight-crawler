@@ -38,7 +38,13 @@ import { getAvailableCities } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
 import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
 import { formatFlightTime } from '@/utils/datetime';
+import { readSnapshot, writeSnapshot, snapshotKey, formatAge } from '@/utils/snapshot-cache';
 import CuteLoader from '@/components/CuteLoader';
+
+/** 结果快照有效期：航班数据每天更新一次，12 小时内复用没问题（命中后仍会后台刷新） */
+const SNAPSHOT_TTL_MS = 12 * 60 * 60 * 1000;
+/** 冷启动提示阈值：超过这个时间还没结果就告诉用户后端在唤醒 */
+const SLOW_HINT_MS = 4000;
 
 const { useBreakpoint } = Grid;
 
@@ -296,6 +302,10 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const [roundTripRoutes, setRoundTripRoutes] = useState<RoundTripResult[]>([]);
   const [mode, setMode] = useState<'explore' | 'plan'>('explore');
   const [searched, setSearched] = useState(false);
+  /** 当前展示的结果来自本地快照时的年龄（毫秒），真实结果回来后清空 */
+  const [snapshotAge, setSnapshotAge] = useState<number | null>(null);
+  /** 请求超过阈值仍未返回 → 提示后端可能在冷启动 */
+  const [slowHint, setSlowHint] = useState(false);
   const sortBy = Form.useWatch('sortBy', form) ?? 'leave';
   const maxStayDays = Form.useWatch('maxStayDays', form) ?? DEFAULT_MAX_STAY_DAYS;
   const triggeredRef = useRef(false);
@@ -308,6 +318,16 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const reqIdRef = useRef(0);
   const screens = useBreakpoint();
   const isMobile = !screens.md;
+
+  // 请求迟迟不返回时给个解释：Render 免费实例休眠后首个请求要 15~40 秒
+  useEffect(() => {
+    if (!loading) {
+      setSlowHint(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlowHint(true), SLOW_HINT_MS);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   /**
    * 把日期区间吸附到"离用户区间最近的可飞窗口"，而不是直接换成整库首尾。
@@ -384,12 +404,22 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     setMode('plan');
     if (origin && destination && origin !== destination) {
       try {
-        const win = await getRouteDateWindow({
+        // 日期窗口按航线固定，12 小时内不会变——命中快照就不必多等一个 RTT
+        const winParams = {
           origin,
           destination,
           maxTransfers: values.maxTransfers ?? 1,
           flightType: toFlightTypeParam(values.flightType),
-        });
+        };
+        const winKey = snapshotKey('date-window', winParams);
+        const cachedWin = readSnapshot<RouteDateWindow>(winKey, SNAPSHOT_TTL_MS);
+        let win: RouteDateWindow;
+        if (cachedWin) {
+          win = cachedWin.data;
+        } else {
+          win = await getRouteDateWindow(winParams);
+          writeSnapshot(winKey, win);
+        }
         // 对齐请求可能跑了很久，期间用户可能已经把航线改成别的了，
         // 这时旧航线的窗口不能套到新航线上
         const latest = form.getFieldsValue();
@@ -523,29 +553,44 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     setExploreResults([]);
     setOneWayRoutes([]);
     setRoundTripRoutes([]);
+    setSnapshotAge(null);
     setOriginCookie(values.origin);
 
     // 目的地留空 → 探索：从这里出发能去哪
     if (!destination) {
+      const exploreParams = {
+        origin: values.origin,
+        departureDate,
+        departureDateEnd,
+        returnDate: returnDate!,
+        returnDateEnd: returnDateEnd!,
+        maxTransfers: values.maxTransfers ?? 1,
+        flightType,
+      };
+      const cacheKey = snapshotKey('explore', exploreParams);
+      // 先上本地快照：有的话立刻可见，不用干等后端（可能是 15~40 秒的冷启动）
+      const snap = readSnapshot<ExploreDestination[]>(cacheKey, SNAPSHOT_TTL_MS);
+      if (snap) {
+        setExploreResults(snap.data);
+        setSnapshotAge(snap.ageMs);
+        if (!isStale()) setLoading(false);
+      }
       try {
-        const resp = await exploreDestinations({
-          origin: values.origin,
-          departureDate,
-          departureDateEnd,
-          returnDate: returnDate!,
-          returnDateEnd: returnDateEnd!,
-          maxTransfers: values.maxTransfers ?? 1,
-          flightType,
-        });
+        const resp = await exploreDestinations(exploreParams);
         if (isStale()) return;
         setExploreResults(resp.destinations);
+        setSnapshotAge(null);
+        writeSnapshot(cacheKey, resp.destinations);
         if (resp.destinations.length === 0) {
           message.warning('未找到可往返的目的地，请换个日期试试');
-        } else {
+        } else if (!snap) {
           message.success(`发现 ${resp.destinations.length} 个可往返目的地`);
         }
       } catch {
-        if (!isStale()) message.error('查询失败，请稍后重试');
+        if (!isStale()) {
+          if (snap) message.warning('刷新失败，当前展示的是本地缓存结果');
+          else message.error('查询失败，请稍后重试');
+        }
       } finally {
         finish();
       }
@@ -553,9 +598,10 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     }
 
     // 目的地填了 → 规划：具体怎么去
+    let showedSnapshot = false;
     try {
       if (returnDate) {
-        const resp = await planRoundTrip({
+        const planParams = {
           origin: values.origin,
           destination,
           departureDate,
@@ -566,14 +612,26 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           minLayoverHours: 2,
           maxLayoverHours: 24,
           flightType,
-          sortBy: sortBy as 'leave' | 'stay' | 'departure' | 'duration',
+          sortBy,
           maxStayDays: values.maxStayDays ?? DEFAULT_MAX_STAY_DAYS,
-        });
+        };
+        const cacheKey = snapshotKey('plan-round-trip', planParams);
+        const snap = readSnapshot<RoundTripResult[]>(cacheKey, SNAPSHOT_TTL_MS);
+        if (snap && snap.data.length > 0) {
+          setRoundTripRoutes(snap.data);
+          setSnapshotAge(snap.ageMs);
+          showedSnapshot = true;
+          if (!isStale()) setLoading(false);
+        }
+
+        const resp = await planRoundTrip(planParams as Parameters<typeof planRoundTrip>[0]);
         if (isStale()) return;
 
         if (resp.routes.length > 0) {
           setRoundTripRoutes(resp.routes);
-          message.success(`找到 ${resp.routes.length} 个往返方案`);
+          setSnapshotAge(null);
+          writeSnapshot(cacheKey, resp.routes);
+          if (!snap) message.success(`找到 ${resp.routes.length} 个往返方案`);
         } else {
           // 往返为空时自动降级查单程：单程可达的城市（如北京→伊犁伊宁）
           // 否则会卡在"没有往返方案"的死胡同里
@@ -590,6 +648,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           });
           if (isStale()) return;
           setOneWayRoutes(oneWay.routes);
+          setSnapshotAge(null);
           if (oneWay.routes.length > 0) {
             message.info('该日期区间没有往返方案，已改为展示单程方案');
           } else {
@@ -617,7 +676,10 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
         }
       }
     } catch {
-      if (!isStale()) message.error('查询失败，请稍后重试');
+      if (!isStale()) {
+        if (showedSnapshot) message.warning('刷新失败，当前展示的是本地缓存结果');
+        else message.error('查询失败，请稍后重试');
+      }
     } finally {
       finish();
     }
@@ -727,6 +789,11 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
       {loading && (
         <div style={{ textAlign: 'center', padding: 40 }}>
           <CuteLoader text={mode === 'explore' ? '正在发现可往返目的地...' : '正在规划路线...'} />
+          {slowHint && (
+            <div style={{ marginTop: 12, color: '#999', fontSize: 13 }}>
+              连接有点慢，正在唤醒后端服务（免费实例休眠后首个请求约需 15~40 秒），请稍候…
+            </div>
+          )}
         </div>
       )}
 
@@ -735,6 +802,11 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
         <>
           <div style={{ marginBottom: 12, color: '#666' }}>
             共找到 <strong>{exploreResults.length}</strong> 个可往返目的地（按请假成本优先排序）
+            {snapshotAge !== null && (
+              <Tag color="default" style={{ marginLeft: 8 }}>
+                本地快照 · {formatAge(snapshotAge)} · 正在刷新
+              </Tag>
+            )}
           </div>
           <Row gutter={[12, 12]}>
             {exploreResults.map((dest) => (
@@ -756,6 +828,11 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
             <span>
               共 {isRoundTrip ? roundTripRoutes.length : oneWayRoutes.length} 个方案
               {isRoundTrip ? `（往返，已按${SORT_LABELS[sortBy] || '请假成本优先'}排序）` : '（单程）'}
+              {snapshotAge !== null && (
+                <Tag color="default" style={{ marginLeft: 8 }}>
+                  本地快照 · {formatAge(snapshotAge)} · 正在刷新
+                </Tag>
+              )}
             </span>
             <Space size={8}>
               <Space size={4}>
@@ -859,14 +936,28 @@ function RoutePlanner() {
   };
 
   useEffect(() => {
+    type CitiesWindow = { all: string[]; minDate: string | null; maxDate: string | null };
+    const CITIES_KEY = snapshotKey('cities-window', {});
+
+    const apply = (all: string[], minDate: string | null, maxDate: string | null) => {
+      if (all.length) setCities(prev => mergeOriginOptions(prev, all));
+      // minDate 决定"去程/返程"默认区间，进而决定探索查询的缓存键——
+      // 后端冷启动时先用手上的窗口把日期定下来，才能命中上一次的结果快照
+      if (minDate && maxDate) setDateRange({ minDate, maxDate });
+    };
+
+    // 先用本地快照把城市和日期窗口定下来，接口回来后再覆盖
+    const cached = readSnapshot<CitiesWindow>(CITIES_KEY, SNAPSHOT_TTL_MS);
+    if (cached) apply(cached.data.all, cached.data.minDate, cached.data.maxDate);
+
     getAvailableCities()
       .then(({ cityList, origins, destinations, minDate, maxDate }) => {
         // 优先使用城市维度列表（北京/上海各出现一次），兼容旧接口
         const all = cityList?.length
           ? cityList
           : Array.from(new Set([...origins, ...destinations])).sort();
-        setCities(prev => mergeOriginOptions(prev, all));
-        setDateRange({ minDate, maxDate });
+        apply(all, minDate, maxDate);
+        writeSnapshot(CITIES_KEY, { all, minDate, maxDate });
       })
       .catch(() => {});
   }, []);

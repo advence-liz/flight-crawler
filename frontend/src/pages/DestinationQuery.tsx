@@ -45,9 +45,13 @@ import {
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
 import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
 import { formatFlightTime } from '@/utils/datetime';
+import { readSnapshot, writeSnapshot, snapshotKey, formatAge } from '@/utils/snapshot-cache';
 import CuteLoader from '@/components/CuteLoader';
 
 const { RangePicker } = DatePicker;
+
+/** 结果快照有效期：航班数据每天更新一次，12 小时内复用没问题（命中后仍会后台刷新） */
+const SNAPSHOT_TTL_MS = 12 * 60 * 60 * 1000;
 const { useBreakpoint } = Grid;
 
 // ─── 类型定义 ────────────────────────────────────────────────
@@ -232,6 +236,8 @@ function DestinationQuery() {
   const isMobile = !screens.md; // < 768px
   const [loading, setLoading] = useState(false);
   const [destinations, setDestinations] = useState<DestinationResult[]>([]);
+  /** 当前展示的是本地快照时的年龄，真实结果回来后清空 */
+  const [snapshotAge, setSnapshotAge] = useState<number | null>(null);
   /** 首屏先出"仅去程"结果，返程信息在后台补——补齐前明确告知用户，避免误以为没有往返 */
   const [enrichingReturn, setEnrichingReturn] = useState(false);
   const [availableOrigins, setAvailableOrigins] = useState<string[]>([]);
@@ -335,17 +341,33 @@ function DestinationQuery() {
     setTransferOneWay([]);
     setTransferDiscovered(false);
     setEnrichingReturn(false);
+    setSnapshotAge(null);
     setLoading(true);
+
+    // 先上本地快照：命中就立刻可见，不用干等后端（可能是 15~40 秒的冷启动）。
+    // 真实请求照常发出，回来后再覆盖——允许短暂不一致。
+    const snapshotK = snapshotKey('destinations', queryParams);
+    const snapshot = readSnapshot<DestinationResult[]>(snapshotK, SNAPSHOT_TTL_MS);
+    if (snapshot && snapshot.data.length > 0) {
+      setDestinations(snapshot.data);
+      setSnapshotAge(snapshot.ageMs);
+      setLoading(false);
+    }
 
     // 第一步：仅查去程，立即渲染（无缓存，速度快）
     try {
       const fastResult = await queryDestinations({ ...queryParams, includeReturn: false });
-      setDestinations(fastResult.destinations);
+      if (!snapshot) {
+        setDestinations(fastResult.destinations);
+      }
       setOriginCookie(values.origin);
     } catch {
-      message.error('查询失败，请稍后重试');
-      setLoading(false);
-      return;
+      if (!snapshot) {
+        message.error('查询失败，请稍后重试');
+        setLoading(false);
+        return;
+      }
+      // 有快照就先继续展示，后面补返程那一步还会再试
     }
 
     // 第二步：补充返程信息（有缓存命中时很快，无缓存时稍慢但不阻塞首屏）
@@ -353,11 +375,13 @@ function DestinationQuery() {
     queryDestinations({ ...queryParams, includeReturn: true })
       .then(fullResult => {
         setDestinations(fullResult.destinations);
-        message.success(`查询成功，共 ${fullResult.totalCount} 个目的地`);
+        setSnapshotAge(null);
+        writeSnapshot(snapshotK, fullResult.destinations);
+        if (!snapshot) message.success(`查询成功，共 ${fullResult.totalCount} 个目的地`);
       })
       .catch(() => {
         // 返程查询失败不影响已展示的去程数据
-        message.warning('返程信息加载失败，仅显示去程数据');
+        if (!snapshot) message.warning('返程信息加载失败，仅显示去程数据');
       })
       .finally(() => {
         setEnrichingReturn(false);
@@ -809,6 +833,15 @@ function DestinationQuery() {
             </Row>
           }
         >
+          {snapshotAge !== null && (
+            <div style={{ padding: '8px 16px 0' }}>
+              <Alert
+                type="warning"
+                showIcon
+                message={`当前展示的是 ${formatAge(snapshotAge)}的本地快照，正在向后端刷新最新数据`}
+              />
+            </div>
+          )}
           {enrichingReturn && (
             <div style={{ padding: '8px 16px 0' }}>
               <Alert
