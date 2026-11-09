@@ -33,6 +33,8 @@ import {
   ExploreDestination,
   getRouteDateWindow,
   RouteDateWindow,
+  getTravelWindows,
+  TravelWindow,
 } from '@/api/route';
 import { getAvailableCities } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
@@ -332,6 +334,13 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const [exploreTotal, setExploreTotal] = useState<number | null>(null);
   /** 请求超过阈值仍未返回 → 提示后端可能在冷启动 */
   const [slowHint, setSlowHint] = useState(false);
+  /** 出行窗口（周末/节假日）快捷筛选 */
+  const [windows, setWindows] = useState<TravelWindow[]>([]);
+  const [activeWindow, setActiveWindow] = useState<string | null>(null);
+  /** 用户手动选定的原始日期区间，点「全部」时恢复 */
+  const baseRangesRef = useRef<{ dep: [string, string]; ret: [string, string] } | null>(null);
+  /** 正在套用窗口的区间，这次提交不要覆盖 baseRanges */
+  const applyingWindowRef = useRef(false);
   /** 移动端：查过一次后把筛选表单收成一行摘要，别让用户一屏只看到输入框 */
   const [formCollapsed, setFormCollapsed] = useState(false);
   const [searchSummary, setSearchSummary] = useState<string>('');
@@ -590,6 +599,25 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     );
     if (isMobile) setFormCollapsed(true);
     setMode(destination ? 'plan' : 'explore');
+
+    // 探索模式：记住用户自己选的区间，并算出这个区间里的周末/节假日窗口
+    if (!destination) {
+      const isApplyingWindow = applyingWindowRef.current;
+      applyingWindowRef.current = false;
+      if (!isApplyingWindow) {
+        baseRangesRef.current = {
+          dep: [departureDate, departureDateEnd],
+          ret: [returnDate ?? departureDate, returnDateEnd ?? departureDate],
+        };
+        setActiveWindow(null);
+        getTravelWindows({ startDate: departureDate, endDate: departureDateEnd })
+          .then(r => setWindows(r.windows ?? []))
+          .catch(() => setWindows([]));
+      }
+    } else {
+      setWindows([]);
+      setActiveWindow(null);
+    }
     setExploreResults([]);
     setOneWayRoutes([]);
     setRoundTripRoutes([]);
@@ -731,6 +759,41 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     }
   };
 
+  /** 套用/取消某个出行窗口：等价于把去返程区间换成那个周末或假期的范围再查 */
+  const applyWindow = (w: TravelWindow | null) => {
+    const toStr = (d: any) => (d ? dayjs(d).format('YYYY-MM-DD') : '');
+    if (!w) {
+      const base = baseRangesRef.current;
+      if (!base) return;
+      form.setFieldValue('departureRange', [dayjs(base.dep[0]), dayjs(base.dep[1])]);
+      form.setFieldValue('returnRange', [dayjs(base.ret[0]), dayjs(base.ret[1])]);
+      setActiveWindow(null);
+      applyingWindowRef.current = true;
+      form.submit();
+      return;
+    }
+    if (!baseRangesRef.current) {
+      const v = form.getFieldsValue();
+      baseRangesRef.current = {
+        dep: [toStr(v.departureRange?.[0]), toStr(v.departureRange?.[1])],
+        ret: [toStr(v.returnRange?.[0]), toStr(v.returnRange?.[1])],
+      };
+    }
+    form.setFieldValue('departureRange', [dayjs(w.departStart), dayjs(w.departEnd)]);
+    form.setFieldValue('returnRange', [dayjs(w.returnStart), dayjs(w.returnEnd)]);
+    setActiveWindow(w.key);
+    applyingWindowRef.current = true;
+    form.submit();
+  };
+
+  const windowChipLabel = (w: TravelWindow): string => {
+    if (w.type === 'holiday') return w.label;
+    const rel = relativeWeekLabel(w.startDate);
+    if (rel === '本周') return '本周末';
+    if (rel === '下周') return '下周末';
+    return rel ? `${rel}的周末` : `${w.startDate.slice(5)} 周末`;
+  };
+
   const isRoundTrip = roundTripRoutes.length > 0;
   const hasPlanResults = oneWayRoutes.length > 0 || roundTripRoutes.length > 0;
   const hasResults = mode === 'explore' ? exploreResults.length > 0 : hasPlanResults;
@@ -858,6 +921,22 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
       {/* 探索结果：能去哪 */}
       {!loading && mode === 'explore' && exploreResults.length > 0 && (
         <>
+          {windows.length > 0 && (
+            <Space size={6} wrap style={{ marginBottom: 10 }}>
+              <Tag.CheckableTag checked={activeWindow === null} onChange={() => applyWindow(null)}>
+                全部
+              </Tag.CheckableTag>
+              {windows.map(w => (
+                <Tag.CheckableTag
+                  key={w.key}
+                  checked={activeWindow === w.key}
+                  onChange={() => applyWindow(w)}
+                >
+                  {windowChipLabel(w)}
+                </Tag.CheckableTag>
+              ))}
+            </Space>
+          )}
           <div style={{ marginBottom: 12, color: '#666' }}>
             共找到 <strong>{exploreTotal ?? exploreResults.length}</strong> 个可往返目的地
             {exploreTotal && exploreTotal > exploreResults.length

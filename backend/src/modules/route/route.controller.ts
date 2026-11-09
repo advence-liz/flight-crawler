@@ -5,6 +5,8 @@ import { PlanRouteDto } from './dto/plan-route.dto';
 import { PlanRoundTripDto } from './dto/plan-round-trip.dto';
 import { ExploreRouteDto } from './dto/explore-route.dto';
 import { RouteDateWindowDto } from './dto/route-date-window.dto';
+import { TravelWindowsDto } from './dto/travel-windows.dto';
+import { findTravelWindows } from './utils/travel-windows';
 import { AdminGuard } from '../../admin.guard';
 
 @Controller('routes')
@@ -77,6 +79,16 @@ export class RouteController {
       throw new BadRequestException('origin 和 departureDate 为必填项');
     }
     return this.routeService.discoverTransferDestinations(body);
+  }
+
+  /**
+   * 出行窗口：区间内的周末 / 法定节假日，供前端做「中秋去哪 / 本周末去哪」快捷筛选
+   * GET /api/routes/travel-windows?startDate=2026-09-01&endDate=2026-10-31
+   */
+  @Get('travel-windows')
+  @HttpCode(HttpStatus.OK)
+  getTravelWindows(@Query() dto: TravelWindowsDto) {
+    return { windows: findTravelWindows(dto.startDate, dto.endDate) };
   }
 
   /**

@@ -42,6 +42,9 @@ const DEFAULT_RESULT_LIMIT = 5;
 /** 探索模式最多返回多少个目的地：再多就是噪声，用户挑不过来 */
 const EXPLORE_RESULT_LIMIT = 12;
 
+/** 探索结果里同一个出发日最多出现几个城市，避免 12 个名额被一个周末占满 */
+const EXPLORE_MAX_PER_DEPART_DATE = 3;
+
 /**
  * 往返组合在目的地的最短停留时间。
  * 不做这个约束时，会出现"20:20 落地、21:10 就返程"的假往返——它总耗时最短、
@@ -597,7 +600,12 @@ export class RoundTripService {
     // 只给最优的若干个：一次列 30 个目的地，用户根本挑不过来，
     // 排在后面的既不是最省假也不是最舒服，等于噪声
     const totalDestinations = mergedDestinations.length;
-    const topDestinations = mergedDestinations.slice(0, EXPLORE_RESULT_LIMIT);
+    // 先保证不同周末都有代表，再拿剩下的补满名额
+    const topDestinations = diversifyByDepartDate(
+      mergedDestinations,
+      EXPLORE_RESULT_LIMIT,
+      EXPLORE_MAX_PER_DEPART_DATE,
+    );
 
     this.logger.log(
       `✅ 探索完成，共 ${totalDestinations} 个可往返目的地，返回前 ${topDestinations.length} 个`,
@@ -620,4 +628,26 @@ export class RoundTripService {
 
     return result;
   }
+}
+
+/**
+ * 探索结果按出发日打散：同一个出发日最多出现 perDate 个城市，
+ * 剩下的名额用被挤掉的补满——否则 12 个名额会被"最近的这个周末"全占掉，
+ * 用户看不到下个周末、下下个周末能去哪。
+ */
+export function diversifyByDepartDate<T extends { departDate: string }>(
+  items: T[],
+  limit: number,
+  perDate: number,
+): T[] {
+  const counts = new Map<string, number>();
+  const primary: T[] = [];
+  const overflow: T[] = [];
+  for (const item of items) {
+    const seen = counts.get(item.departDate) ?? 0;
+    counts.set(item.departDate, seen + 1);
+    if (seen < perDate) primary.push(item);
+    else overflow.push(item);
+  }
+  return [...primary, ...overflow].slice(0, limit);
 }

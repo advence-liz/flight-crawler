@@ -125,3 +125,20 @@ describe('keepBestPerDatePair', () => {
     expect(keepBestPerDatePair(routes, 2).length).toBe(2);
   });
 });
+
+describe('diversifyByDepartDate（探索结果按出发日打散）', () => {
+  it('同一个出发日最多出现 perDate 个', () => {
+    const items = [
+      { departDate: '2026-11-13', city: 'a' },
+      { departDate: '2026-11-13', city: 'b' },
+      { departDate: '2026-11-13', city: 'c' },
+      { departDate: '2026-11-13', city: 'd' },
+      { departDate: '2026-11-20', city: 'e' },
+    ];
+    // 用 service 里的实现验证：3 个 11-13 + 1 个 11-20 优先，溢出的补后面
+    const { diversifyByDepartDate } = require('../round-trip.service');
+    const out = diversifyByDepartDate(items, 5, 3).map((x: any) => x.city);
+    expect(out.slice(0, 4)).toEqual(['a', 'b', 'c', 'e']);
+    expect(out).toHaveLength(5);
+  });
+});

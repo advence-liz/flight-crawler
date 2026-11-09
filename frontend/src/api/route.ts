@@ -201,3 +201,24 @@ export const getRouteDateWindow = (params: {
 }): Promise<RouteDateWindow> => {
   return api.get('/routes/date-window', { params, timeout: 120000 });
 };
+
+
+// ── 出行窗口（周末 / 法定节假日），用于「中秋去哪 / 本周末去哪」快捷筛选 ──
+export interface TravelWindow {
+  key: string;
+  type: 'holiday' | 'weekend';
+  label: string;
+  startDate: string;
+  endDate: string;
+  departStart: string;
+  departEnd: string;
+  returnStart: string;
+  returnEnd: string;
+}
+
+export const getTravelWindows = (params: {
+  startDate: string;
+  endDate: string;
+}): Promise<{ windows: TravelWindow[] }> => {
+  return api.get('/routes/travel-windows', { params });
+};
