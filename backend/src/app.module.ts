@@ -1,4 +1,4 @@
-import { Module, NestModule, MiddlewareConsumer, OnModuleInit } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer, OnModuleInit, Logger } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { AppController } from './app.controller';
@@ -50,6 +50,42 @@ export class AppModule implements NestModule, OnModuleInit {
   async onModuleInit() {
     await this.dataSource.query('PRAGMA journal_mode = WAL;');
     await this.dataSource.query('PRAGMA synchronous = NORMAL;');
+    await this.warnIfDataStale();
+  }
+
+  /**
+   * 启动时检查航班数据是否过期。
+   *
+   * 本地开发库只到"上次本地爬取"的时间点，而页面默认查"今天 ~ +30 天"，
+   * 库太旧就会处处查不到数据，看起来像功能坏了。这里提前说清楚。
+   * 线上（Render）数据由每日爬虫更新，且没有 pull 脚本，不做这个提示。
+   */
+  private async warnIfDataStale(): Promise<void> {
+    if (process.env.RENDER) return; // 线上跳过
+    const logger = new Logger('DataFreshness');
+    try {
+      const rows = await this.dataSource.query(
+        'SELECT MAX(DATE(departureTime)) AS maxDate, COUNT(*) AS total FROM flights',
+      );
+      const maxDate: string | null = rows?.[0]?.maxDate ?? null;
+      const total = Number(rows?.[0]?.total ?? 0);
+      const today = new Date().toISOString().slice(0, 10);
+
+      if (!maxDate) {
+        logger.warn('⚠️ 本地库里没有任何航班数据，页面会查不到结果');
+        logger.warn('   可执行 ./pull-prod-db.sh 拉取线上数据（先停后端）');
+        return;
+      }
+      if (maxDate < today) {
+        logger.warn(
+          `⚠️ 本地航班数据只到 ${maxDate}（今天 ${today}，共 ${total} 条），` +
+          '页面默认查"今天~+30天"会查不到结果',
+        );
+        logger.warn('   可执行 ./pull-prod-db.sh 拉取线上最新数据（先停后端）');
+      }
+    } catch {
+      // 空库 / 首次启动表还没建好时忽略
+    }
   }
 
   configure(consumer: MiddlewareConsumer) {
