@@ -41,4 +41,10 @@ export class PlanRouteDto {
   @Max(48)
   @IsOptional()
   maxLayoverHours?: number = 24;
+
+  /** 排序方式：score（默认）/ duration（总耗时最短）/ departure（出发最早） */
+  @IsString()
+  @IsIn(['score', 'duration', 'departure'])
+  @IsOptional()
+  sortBy?: string = 'score';
 }

@@ -10,6 +10,8 @@ export interface PlanRouteParams {
   minLayoverHours?: number;
   maxLayoverHours?: number;
   flightType?: '666权益卡航班' | '2666权益卡航班';
+  /** 排序：score（默认）/ duration（总耗时最短）/ departure（出发最早） */
+  sortBy?: 'score' | 'duration' | 'departure';
 }
 
 // 往返行程参数
@@ -25,6 +27,10 @@ export interface PlanRoundTripParams {
   maxLayoverHours?: number;
   autoDiscover?: boolean;
   flightType?: '666权益卡航班' | '2666权益卡航班';
+  /** 排序：leave（默认，请假最少）/ stay（停留最久）/ departure（出发最早）/ duration（总耗时最短） */
+  sortBy?: 'leave' | 'stay' | 'departure' | 'duration';
+  /** 返回条数上限，默认 10 */
+  limit?: number;
 }
 
 export interface FlightSegment {
@@ -66,6 +72,8 @@ export interface RoundTripResult {
   totalDuration: number;
   totalTransferCount: number;
   score: number;
+  /** 在目的地停留时长（分钟）= 返程起飞 - 去程落地 */
+  stayDuration: number;
   /** 需要请几天假（0 = 不占用工作日，周末/节假日走完） */
   leaveDays: number;
   departDate: string;

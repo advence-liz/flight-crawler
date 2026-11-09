@@ -57,6 +57,20 @@ function formatDate(dt: string): string {
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
+/** 往返方案排序方式与展示名 */
+const SORT_OPTIONS = [
+  { value: 'leave', label: '请假最少' },
+  { value: 'stay', label: '停留最久' },
+  { value: 'departure', label: '出发最早' },
+  { value: 'duration', label: '总耗时最短' },
+];
+const SORT_LABELS: Record<string, string> = {
+  leave: '请假成本优先',
+  stay: '停留时长优先',
+  departure: '出发时间优先',
+  duration: '总耗时优先',
+};
+
 /** YYYY-MM-DD -> "09-25（周五）"。日期口径与后端一致，按 UTC 读取北京墙钟日期 */
 function formatDayWithWeekday(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -132,14 +146,8 @@ function RoundTripCard({ result, index }: RoundTripCardProps) {
     </Space>
   );
 
-  // 在目的地实际停留多久（去程落地 → 返程起飞）。只给“总时长”会被误读成整天在路上。
-  const lastOutbound = result.outbound.segments[result.outbound.segments.length - 1];
-  const stayMinutes = lastOutbound
-    ? Math.max(0, Math.round(
-        (new Date(result.return.segments[0].departureTime).getTime()
-          - new Date(lastOutbound.arrivalTime).getTime()) / 60000,
-      ))
-    : 0;
+  // 在目的地实际停留多久（后端按 返程起飞 - 去程落地 算好，避免前后端口径分叉）
+  const stayMinutes = result.stayDuration ?? 0;
 
   return (
     <Card size="small" style={{ height: '100%' }} title={header}>
@@ -266,6 +274,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const [roundTripRoutes, setRoundTripRoutes] = useState<RoundTripResult[]>([]);
   const [mode, setMode] = useState<'explore' | 'plan'>('explore');
   const [searched, setSearched] = useState(false);
+  const sortBy = Form.useWatch('sortBy', form) ?? 'leave';
   const triggeredRef = useRef(false);
   /** 表单字段只在挂载时初始化一次，避免 cities 接口返回后二次执行覆盖用户改动 */
   const initializedRef = useRef(false);
@@ -534,6 +543,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           minLayoverHours: 2,
           maxLayoverHours: 24,
           flightType,
+          sortBy: sortBy as 'leave' | 'stay' | 'departure' | 'duration',
         });
         if (isStale()) return;
 
@@ -552,6 +562,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
             minLayoverHours: 2,
             maxLayoverHours: 24,
             flightType,
+            sortBy: sortBy === 'duration' ? 'duration' : sortBy === 'departure' ? 'departure' : 'score',
           });
           if (isStale()) return;
           setOneWayRoutes(oneWay.routes);
@@ -571,6 +582,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           minLayoverHours: 2,
           maxLayoverHours: 24,
           flightType,
+          sortBy: sortBy === 'duration' ? 'duration' : sortBy === 'departure' ? 'departure' : 'score',
         });
         if (isStale()) return;
         setOneWayRoutes(resp.routes);
@@ -616,7 +628,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           layout="vertical"
           onFinish={handleSearch}
           onFinishFailed={() => setLoading(false)}
-          initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
+          initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班', sortBy: 'leave' }}
         >
           <Row gutter={[12, 12]} style={{ width: '100%' }}>
             <Col xs={12} md={6} lg={5}>
@@ -657,6 +669,9 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           </Row>
           {/* 次要选项和查询按钮单独一行，按钮靠右——避免在窄一点的屏幕上被挤到
               下一行单独占一行、左对齐地挂在字段下面 */}
+          <Form.Item name="sortBy" hidden>
+            <input type="hidden" />
+          </Form.Item>
           <Row gutter={[12, 12]} justify="end" style={{ width: '100%', marginTop: 12 }}>
             <Col xs={12} md={3} lg={2}>
               <Form.Item name="maxTransfers" label="中转">
@@ -707,9 +722,27 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
       {/* 规划结果：怎么去 */}
       {!loading && mode === 'plan' && hasPlanResults && (
         <div>
-          <div style={{ marginBottom: 12, color: '#666' }}>
-            共 {isRoundTrip ? roundTripRoutes.length : oneWayRoutes.length} 个方案
-            {isRoundTrip ? '（往返，已按请假成本优先排序）' : '（单程）'}
+          <div style={{
+            marginBottom: 12, color: '#666', display: 'flex',
+            justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}>
+            <span>
+              共 {isRoundTrip ? roundTripRoutes.length : oneWayRoutes.length} 个方案
+              {isRoundTrip ? `（往返，已按${SORT_LABELS[sortBy] || '请假成本优先'}排序）` : '（单程）'}
+            </span>
+            <Space size={4}>
+              <span style={{ fontSize: 12 }}>排序</span>
+              <Select
+                size="small"
+                style={{ width: 132 }}
+                value={sortBy}
+                options={SORT_OPTIONS}
+                onChange={(v) => {
+                  form.setFieldValue('sortBy', v);
+                  form.submit();
+                }}
+              />
+            </Space>
           </div>
           <Row gutter={[12, 12]}>
             {isRoundTrip

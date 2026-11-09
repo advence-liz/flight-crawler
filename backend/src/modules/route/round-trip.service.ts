@@ -16,6 +16,11 @@ import {
 } from './dto/explore-result.dto';
 import { QueryCache } from './entities/query-cache.entity';
 import { calcLeaveDays } from './utils/leave-days';
+import {
+  pickCandidatesPerDate,
+  outboundBucket,
+  returnBucket,
+} from './utils/route-candidates';
 
 // 探索查询缓存 TTL：6 小时
 const EXPLORE_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 6 * 60 * 60 * 1000;
@@ -38,26 +43,6 @@ const MIN_STAY_MS = 4 * 60 * 60 * 1000;
 function sortByLeaveThenScore(a: RoundTripResultDto, b: RoundTripResultDto): number {
   if (a.leaveDays !== b.leaveDays) return a.leaveDays - b.leaveDays;
   return b.score - a.score;
-}
-
-/**
- * 候选分桶：请假成本取决于"去程是不是下班后走""返程是不是早上落地"，
- * 而这两个维度评分完全不感知。若只按评分取每天前 N，晚班/早班会被整批淘汰，
- * 再准的排序也救不回来——所以按这两个维度分桶，每个桶各取最优几条。
- */
-const EVENING_DEPARTURE_HOUR = 18;
-const MORNING_ARRIVAL_HOUR = 8;
-
-function outboundBucket(route: RouteResultDto): string {
-  const first = route.segments[0];
-  const hour = first ? new Date(first.departureTime).getUTCHours() : 12;
-  return hour >= EVENING_DEPARTURE_HOUR ? 'evening' : 'day';
-}
-
-function returnBucket(route: RouteResultDto): string {
-  const last = route.segments[route.segments.length - 1];
-  const hour = last ? new Date(last.arrivalTime).getUTCHours() : 12;
-  return hour < MORNING_ARRIVAL_HOUR ? 'early' : 'late';
 }
 
 async function pLimit<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
@@ -136,8 +121,8 @@ export class RoundTripService {
     // 3. 组合去程和返程
     //    候选按"每个出发日取最优的几条"来挑，而不是全局取前 5——否则周末/假期
     //    那几天的航班可能因为耗时不占优，压根进不了候选池，也就永远排不到前面。
-    const outboundCandidates = this.pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
-    const returnCandidates = this.pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
+    const outboundCandidates = pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
+    const returnCandidates = pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
 
     const roundTripRoutes: RoundTripResultDto[] = [];
     for (const outbound of outboundCandidates) {
@@ -153,12 +138,26 @@ export class RoundTripService {
     }
 
     // 4. 排序：先按请假成本（越少越好），再按综合评分
-    roundTripRoutes.sort(sortByLeaveThenScore);
+    // 排序：默认请假最少优先；用户想看长行程时可按停留时长/出发日/总耗时排
+    const sortBy = dto.sortBy || 'leave';
+    const limit = dto.limit ?? 10;
+    roundTripRoutes.sort((a, b) => {
+      switch (sortBy) {
+        case 'stay':
+          return b.stayDuration - a.stayDuration || a.leaveDays - b.leaveDays;
+        case 'departure':
+          return a.departDate.localeCompare(b.departDate) || a.leaveDays - b.leaveDays;
+        case 'duration':
+          return a.totalDuration - b.totalDuration || a.leaveDays - b.leaveDays;
+        default:
+          return sortByLeaveThenScore(a, b);
+      }
+    });
 
-    this.logger.log(`✅ 找到 ${roundTripRoutes.length} 个往返方案`);
+    this.logger.log(`✅ 找到 ${roundTripRoutes.length} 个往返方案（排序: ${sortBy}）`);
 
     return {
-      routes: roundTripRoutes.slice(0, 10),
+      routes: roundTripRoutes.slice(0, limit),
       searchParams: {
         origin: dto.origin,
         destination: dto.destination,
@@ -255,33 +254,6 @@ export class RoundTripService {
   }
 
   /**
-   * 按出发日期分组，每组取评分最高的前 N 条。
-   * 用于组合往返时给每个日期都保留候选，避免周末航班被整体淘汰。
-   */
-  private pickCandidatesPerDate(
-    routes: RouteResultDto[],
-    perDate: number,
-    bucketOf: (route: RouteResultDto) => string,
-  ): RouteResultDto[] {
-    // 按「出发日 + 请假相关维度」分桶，每桶各取评分最高的几条
-    const byKey = new Map<string, RouteResultDto[]>();
-    for (const route of routes) {
-      const first = route.segments[0];
-      if (!first) continue;
-      const date = new Date(first.departureTime).toISOString().slice(0, 10);
-      const key = `${date}|${bucketOf(route)}`;
-      if (!byKey.has(key)) byKey.set(key, []);
-      byKey.get(key)!.push(route);
-    }
-    const picked: RouteResultDto[] = [];
-    for (const list of byKey.values()) {
-      list.sort((a, b) => b.score - a.score);
-      picked.push(...list.slice(0, perDate));
-    }
-    return picked;
-  }
-
-  /**
    * 为一个目的地挑出「请假最少、其次评分最高」的去返组合。
    * 探索模式下每个目的地只展示一组代表行程，这组必须是时间上成立、且最省假的。
    */
@@ -296,8 +268,8 @@ export class RoundTripService {
     departDate: string;
     returnDate: string;
   } | null {
-    const outCandidates = this.pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
-    const retCandidates = this.pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
+    const outCandidates = pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
+    const retCandidates = pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
 
     let best: {
       outbound: RouteResultDto;
@@ -360,6 +332,17 @@ export class RoundTripService {
       totalTransferCount,
     );
 
+    // 在目的地停留时长 = 返程起飞 - 去程落地
+    const lastOutboundSegment = outbound.segments[outbound.segments.length - 1];
+    const firstReturnSegment = returnRoute.segments[0];
+    const stayDuration = Math.max(
+      0,
+      Math.round(
+        (new Date(firstReturnSegment.departureTime).getTime()
+          - new Date(lastOutboundSegment.arrivalTime).getTime()) / 60000,
+      ),
+    );
+
     // 请假成本：首段起飞 → 末段落地
     const leave = calcLeaveDays(
       new Date(outbound.segments[0].departureTime),
@@ -382,6 +365,7 @@ export class RoundTripService {
       totalDuration,
       totalTransferCount,
       score,
+      stayDuration,
       leaveDays: leave.leaveDays,
       departDate: leave.departDate,
       returnDate: leave.returnDate,

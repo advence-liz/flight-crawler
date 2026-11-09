@@ -52,4 +52,23 @@ export class PlanRoundTripDto {
   @IsBoolean()
   @IsOptional()
   autoDiscover?: boolean = false; // 是否自动发现所有往返方案
+
+  /**
+   * 排序方式：
+   * - leave（默认）请假最少优先，其次综合评分
+   * - stay    在目的地停留最久优先（想看长行程/年假行程时用）
+   * - departure 出发最早优先
+   * - duration  总耗时最短优先
+   */
+  @IsString()
+  @IsIn(['leave', 'stay', 'departure', 'duration'])
+  @IsOptional()
+  sortBy?: string = 'leave';
+
+  /** 返回条数上限（默认 10） */
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  @IsOptional()
+  limit?: number = 10;
 }

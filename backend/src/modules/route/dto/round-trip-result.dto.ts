@@ -30,6 +30,8 @@ export class RoundTripResultDto {
   totalDuration: number;
   totalTransferCount: number;
   score: number; // 综合评分
+  /** 在目的地的停留时长（分钟）= 返程起飞 - 去程落地 */
+  stayDuration: number;
 
   // ── 请假成本（用于把周末/节假日友好行程排到前面）──
   /** 需要请几天假（0 = 完全不占用工作日） */

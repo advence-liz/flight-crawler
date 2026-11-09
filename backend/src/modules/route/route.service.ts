@@ -125,7 +125,16 @@ export class RouteService implements OnApplicationBootstrap {
 
     // 4. 计算评分并排序
     const scoredRoutes = routes.map((route) => this.calculateScore(route));
-    scoredRoutes.sort((a, b) => b.score - a.score);
+    const sortBy = dto.sortBy || 'score';
+    scoredRoutes.sort((a, b) => {
+      if (sortBy === 'duration') return a.totalDuration - b.totalDuration;
+      if (sortBy === 'departure') {
+        const da = a.segments[0]?.departureTime;
+        const db = b.segments[0]?.departureTime;
+        return new Date(da).getTime() - new Date(db).getTime();
+      }
+      return b.score - a.score;
+    });
 
     // 5. 返回 Top 10
     return {
