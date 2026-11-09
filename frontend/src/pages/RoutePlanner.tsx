@@ -37,6 +37,7 @@ import {
 import { getAvailableCities } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
 import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
+import { formatFlightTime } from '@/utils/datetime';
 import CuteLoader from '@/components/CuteLoader';
 
 const { useBreakpoint } = Grid;
@@ -49,8 +50,9 @@ function formatDuration(minutes: number): string {
   return m > 0 ? `${h}h${m}m` : `${h}h`;
 }
 
+/** 航班时刻按北京墙钟时间存储，统一用 UTC 口径展示，避免 +8 时区偏移 8 小时 */
 function formatDate(dt: string): string {
-  return dayjs(dt).format('MM-DD HH:mm');
+  return formatFlightTime(dt);
 }
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -130,10 +132,20 @@ function RoundTripCard({ result, index }: RoundTripCardProps) {
     </Space>
   );
 
+  // 在目的地实际停留多久（去程落地 → 返程起飞）。只给“总时长”会被误读成整天在路上。
+  const lastOutbound = result.outbound.segments[result.outbound.segments.length - 1];
+  const stayMinutes = lastOutbound
+    ? Math.max(0, Math.round(
+        (new Date(result.return.segments[0].departureTime).getTime()
+          - new Date(lastOutbound.arrivalTime).getTime()) / 60000,
+      ))
+    : 0;
+
   return (
     <Card size="small" style={{ height: '100%' }} title={header}>
       <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
         {formatDayWithWeekday(result.departDate)} 出发 · {formatDayWithWeekday(result.returnDate)} 返回
+        {stayMinutes > 0 && ` · 在目的地 ${formatDuration(stayMinutes)}`}
       </div>
       <div style={{ marginBottom: 4 }}>
         <Tag color="blue">✈ 去程</Tag>
@@ -255,8 +267,44 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const [mode, setMode] = useState<'explore' | 'plan'>('explore');
   const [searched, setSearched] = useState(false);
   const triggeredRef = useRef(false);
+  /** 表单字段只在挂载时初始化一次，避免 cities 接口返回后二次执行覆盖用户改动 */
+  const initializedRef = useRef(false);
+  /** 初始化时写入的去程区间，用来判断用户后来有没有手动改过 */
+  const initialDepartureStrRef = useRef<{ start: string | null; end: string | null } | null>(null);
+  const dbWindowAppliedRef = useRef(false);
+  /** 请求序号：只有最后一次查询的响应能落地，避免乱序返回覆盖 */
+  const reqIdRef = useRef(0);
   const screens = useBreakpoint();
   const isMobile = !screens.md;
+
+  /**
+   * 把日期区间吸附到"离用户区间最近的可飞窗口"，而不是直接换成整库首尾。
+   * 直接换首尾会把用户选的 12 月行程改成 11 月，跨度还可能拉成几个月。
+   * 吸附时保留用户原本的行程长度（去程/返程区间各自的天数）。
+   */
+  const snapToWindow = (
+    dates: string[],
+    userStart: string | null,
+    userEnd: string | null,
+  ): [string, string] | null => {
+    if (!dates.length) return null;
+    const first = dates[0];
+    const last = dates[dates.length - 1];
+    const userSpan = userStart && userEnd
+      ? Math.max(dayjs(userEnd).diff(dayjs(userStart), 'day'), 0)
+      : 0;
+
+    // 用户区间整体在可飞窗口之后 → 往回吸附到最后可飞日；否则吸附到最早可飞日
+    const snapBackward = !!userStart && userStart > last;
+    if (snapBackward) {
+      const end = last;
+      const start = dayjs(end).subtract(Math.min(userSpan, dayjs(end).diff(first, 'day')), 'day').format('YYYY-MM-DD');
+      return [start, end];
+    }
+    const start = first;
+    const end = dayjs(start).add(Math.min(userSpan, dayjs(last).diff(start, 'day')), 'day').format('YYYY-MM-DD');
+    return [start, end];
+  };
 
   const applyDateWindow = (win: RouteDateWindow): string[] => {
     const notes: string[] = [];
@@ -265,27 +313,32 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     const overlaps = (dates: string[], s: string | null, e: string | null) =>
       !!s && !!e && dates.some(d => d >= s && d <= e);
 
-    // 去程：当前区间内一天都没有航班时才改
+    // 去程：当前区间内一天都没有航班时，吸附到最近的可飞窗口
     const [depStartDay, depEndDay] = values.departureRange || [];
     const depStart = toStr(depStartDay);
     const depEnd = toStr(depEndDay);
-    if (win.outbound.first && win.outbound.last && !overlaps(win.outbound.dates, depStart, depEnd)) {
-      form.setFieldValue('departureRange', [dayjs(win.outbound.first), dayjs(win.outbound.last)]);
-      notes.push(`去程 ${win.outbound.first} ~ ${win.outbound.last}`);
+    if (!overlaps(win.outbound.dates, depStart, depEnd)) {
+      const snapped = snapToWindow(win.outbound.dates, depStart, depEnd);
+      if (snapped) {
+        form.setFieldValue('departureRange', [dayjs(snapped[0]), dayjs(snapped[1])]);
+        notes.push(`去程 ${snapped[0]} ~ ${snapped[1]}`);
+      }
     }
 
     // 返程：用户本来就选的单程（区间为空）就不动；有返程区间但该航线没有返程航班，则退回单程
-    const [retStartDay] = values.returnRange || [];
-    const retStart = toStr(retStartDay);
+    const retStart = toStr((values.returnRange || [])[0]);
     const retEnd = toStr((values.returnRange || [])[1]);
     if (!retStart) {
       // 单程意图，保持
     } else if (!win.hasReturn) {
       form.setFieldValue('returnRange', [null, null]);
       notes.push('该航线没有返程航班，已切换为单程');
-    } else if (win.return.first && win.return.last && !overlaps(win.return.dates, retStart, retEnd)) {
-      form.setFieldValue('returnRange', [dayjs(win.return.first), dayjs(win.return.last)]);
-      notes.push(`返程 ${win.return.first} ~ ${win.return.last}`);
+    } else if (!overlaps(win.return.dates, retStart, retEnd)) {
+      const snapped = snapToWindow(win.return.dates, retStart, retEnd);
+      if (snapped) {
+        form.setFieldValue('returnRange', [dayjs(snapped[0]), dayjs(snapped[1])]);
+        notes.push(`返程 ${snapped[0]} ~ ${snapped[1]}`);
+      }
     }
 
     return notes;
@@ -304,6 +357,13 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           maxTransfers: values.maxTransfers ?? 1,
           flightType: values.flightType === '666权益卡航班' ? '666权益卡航班' : undefined,
         });
+        // 对齐请求可能跑了很久，期间用户可能已经把航线改成别的了，
+        // 这时旧航线的窗口不能套到新航线上
+        const latest = form.getFieldsValue();
+        if (latest.origin !== origin || latest.destination !== destination) {
+          setLoading(false);
+          return;
+        }
         const notes = applyDateWindow(win);
         if (notes.length) {
           message.info(`已按该航线可飞日期自动调整：${notes.join('；')}`);
@@ -316,51 +376,70 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   };
 
   useEffect(() => {
-    // URL params 优先，否则用 cookie 默认值
-    form.setFieldValue('origin', urlParams?.origin || getDefaultOrigin());
-    if (urlParams?.destination) {
-      form.setFieldValue('destination', urlParams.destination);
-    }
+    // 字段初始化只做一次。dateRange.minDate 从 null 变成真实值时 effect 会再跑一遍，
+    // 若无条件重写，会把用户在这期间手动改的日期静默覆盖掉。
+    if (!initializedRef.current) {
+      initializedRef.current = true;
 
-    // 去程：URL 参数 > 默认今天~一个月后
-    if (urlParams?.departureDate) {
-      const dep = dayjs(urlParams.departureDate);
-      const depEnd = urlParams.departureDateEnd ? dayjs(urlParams.departureDateEnd) : dep.add(2, 'day');
-      form.setFieldValue('departureRange', [dep, depEnd]);
-    } else {
-      const [defStart, defEnd] = getDefaultDateRange();
-      form.setFieldValue('departureRange', [dayjs(defStart), dayjs(defEnd)]);
-    }
+      // URL params 优先，否则用 cookie 默认值
+      form.setFieldValue('origin', urlParams?.origin || getDefaultOrigin());
+      if (urlParams?.destination) {
+        form.setFieldValue('destination', urlParams.destination);
+      }
 
-    // 返程：URL 参数有就设；带目的地跳进来的视为单程；否则默认今天~一个月后
-    if (urlParams?.returnDate) {
-      const ret = dayjs(urlParams.returnDate);
-      const retEnd = urlParams.returnDateEnd ? dayjs(urlParams.returnDateEnd) : ret.add(2, 'day');
-      form.setFieldValue('returnRange', [ret, retEnd]);
-    } else if (urlParams?.destination) {
-      form.setFieldValue('returnRange', [null, null]);
-    } else {
-      const [defStart, defEnd] = getDefaultDateRange();
-      form.setFieldValue('returnRange', [dayjs(defStart), dayjs(defEnd)]);
-    }
+      // 去程：URL 参数 > 默认今天~一个月后
+      if (urlParams?.departureDate) {
+        const dep = dayjs(urlParams.departureDate);
+        const depEnd = urlParams.departureDateEnd ? dayjs(urlParams.departureDateEnd) : dep.add(2, 'day');
+        form.setFieldValue('departureRange', [dep, depEnd]);
+      } else {
+        const [defStart, defEnd] = getDefaultDateRange();
+        form.setFieldValue('departureRange', [dayjs(defStart), dayjs(defEnd)]);
+      }
 
-    if (urlParams?.maxTransfers !== undefined) {
-      form.setFieldValue('maxTransfers', parseInt(urlParams.maxTransfers, 10));
+      // 返程：URL 参数有就设；带目的地跳进来的视为单程；否则默认今天~一个月后
+      if (urlParams?.returnDate) {
+        const ret = dayjs(urlParams.returnDate);
+        const retEnd = urlParams.returnDateEnd ? dayjs(urlParams.returnDateEnd) : ret.add(2, 'day');
+        form.setFieldValue('returnRange', [ret, retEnd]);
+      } else if (urlParams?.destination) {
+        form.setFieldValue('returnRange', [null, null]);
+      } else {
+        const [defStart, defEnd] = getDefaultDateRange();
+        form.setFieldValue('returnRange', [dayjs(defStart), dayjs(defEnd)]);
+      }
+
+      if (urlParams?.maxTransfers !== undefined) {
+        const parsed = parseInt(urlParams.maxTransfers, 10);
+        if (Number.isFinite(parsed)) form.setFieldValue('maxTransfers', parsed);
+      }
+
+      const [initDepStart, initDepEnd] = form.getFieldValue('departureRange') || [];
+      initialDepartureStrRef.current = {
+        start: initDepStart ? dayjs(initDepStart).format('YYYY-MM-DD') : null,
+        end: initDepEnd ? dayjs(initDepEnd).format('YYYY-MM-DD') : null,
+      };
     }
 
     // 没有 URL 日期时，"今天~+30 天"有可能和库里实际数据窗口完全不重叠
     // （本地库陈旧、爬虫停更时常见），结果就是永远空。这时改用数据窗口。
+    // 只在用户还没动过去程日期时兜底一次。
     const hasUrlDates = !!(urlParams?.departureDate || urlParams?.returnDate);
-    if (!hasUrlDates && dateRange.minDate && dateRange.maxDate) {
+    if (!hasUrlDates && !dbWindowAppliedRef.current && dateRange.minDate && dateRange.maxDate) {
       const dbStart = dayjs(dateRange.minDate);
       const dbEnd = dayjs(dateRange.maxDate);
       const [curStart, curEnd] = form.getFieldValue('departureRange') || [];
+      const curStartStr = curStart ? dayjs(curStart).format('YYYY-MM-DD') : null;
+      const curEndStr = curEnd ? dayjs(curEnd).format('YYYY-MM-DD') : null;
+      const init = initialDepartureStrRef.current;
+      const untouched = !!init && init.start === curStartStr && init.end === curEndStr;
       const overlaps = !!curStart && !!curEnd &&
         !curEnd.isBefore(dbStart, 'day') && !curStart.isAfter(dbEnd, 'day');
-      if (!overlaps) {
+      if (untouched && !overlaps) {
         form.setFieldValue('departureRange', [dbStart, dbEnd]);
         form.setFieldValue('returnRange', [dbStart, dbEnd]);
       }
+      dbWindowAppliedRef.current = true;
     }
 
     // 表单字段已填好（cities 由预设兜底，下拉框首屏可用），
@@ -388,6 +467,11 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     const [depStart, depEnd] = values.departureRange || [];
     if (!depStart) return;
 
+    // 请求序号：并发/重复提交时，只有最后一次的响应能落地
+    const reqId = ++reqIdRef.current;
+    const isStale = () => reqId !== reqIdRef.current;
+    const finish = () => { if (!isStale()) setLoading(false); };
+
     const departureDate = depStart.format('YYYY-MM-DD');
     const departureDateEnd = depEnd ? depEnd.format('YYYY-MM-DD') : departureDate;
     const [retStart, retEnd] = values.returnRange || [];
@@ -398,6 +482,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
 
     setLoading(true);
     setSearched(true);
+    setMode(destination ? 'plan' : 'explore');
     setExploreResults([]);
     setOneWayRoutes([]);
     setRoundTripRoutes([]);
@@ -405,7 +490,6 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
 
     // 目的地留空 → 探索：从这里出发能去哪
     if (!destination) {
-      setMode('explore');
       try {
         const resp = await exploreDestinations({
           origin: values.origin,
@@ -413,9 +497,10 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           departureDateEnd,
           returnDate: returnDate!,
           returnDateEnd: returnDateEnd!,
-          maxTransfers: 1,
+          maxTransfers: values.maxTransfers ?? 1,
           flightType,
         });
+        if (isStale()) return;
         setExploreResults(resp.destinations);
         if (resp.destinations.length === 0) {
           message.warning('未找到可往返的目的地，请换个日期试试');
@@ -423,15 +508,14 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           message.success(`发现 ${resp.destinations.length} 个可往返目的地`);
         }
       } catch {
-        message.error('查询失败，请稍后重试');
+        if (!isStale()) message.error('查询失败，请稍后重试');
       } finally {
-        setLoading(false);
+        finish();
       }
       return;
     }
 
     // 目的地填了 → 规划：具体怎么去
-    setMode('plan');
     try {
       if (returnDate) {
         const resp = await planRoundTrip({
@@ -446,11 +530,31 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           maxLayoverHours: 24,
           flightType,
         });
-        setRoundTripRoutes(resp.routes);
-        if (resp.routes.length === 0) {
-          message.warning('未找到合适的往返方案');
-        } else {
+        if (isStale()) return;
+
+        if (resp.routes.length > 0) {
+          setRoundTripRoutes(resp.routes);
           message.success(`找到 ${resp.routes.length} 个往返方案`);
+        } else {
+          // 往返为空时自动降级查单程：单程可达的城市（如北京→伊犁伊宁）
+          // 否则会卡在"没有往返方案"的死胡同里
+          const oneWay = await planRoute({
+            origin: values.origin,
+            destination,
+            departureDate,
+            endDate: departureDateEnd !== departureDate ? departureDateEnd : undefined,
+            maxTransfers: values.maxTransfers ?? 2,
+            minLayoverHours: 2,
+            maxLayoverHours: 24,
+            flightType,
+          });
+          if (isStale()) return;
+          setOneWayRoutes(oneWay.routes);
+          if (oneWay.routes.length > 0) {
+            message.info('该日期区间没有往返方案，已改为展示单程方案');
+          } else {
+            message.warning('未找到合适的往返或单程方案');
+          }
         }
       } else {
         const resp = await planRoute({
@@ -463,6 +567,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           maxLayoverHours: 24,
           flightType,
         });
+        if (isStale()) return;
         setOneWayRoutes(resp.routes);
         if (resp.routes.length === 0) {
           message.warning('未找到合适的单程方案');
@@ -471,9 +576,9 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
         }
       }
     } catch {
-      message.error('查询失败，请稍后重试');
+      if (!isStale()) message.error('查询失败，请稍后重试');
     } finally {
-      setLoading(false);
+      finish();
     }
   };
 
@@ -505,6 +610,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           form={form}
           layout="vertical"
           onFinish={handleSearch}
+          onFinishFailed={() => setLoading(false)}
           initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
         >
           <Row gutter={[12, 12]} style={{ width: '100%' }}>
@@ -638,9 +744,11 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
         <Card>
           <Empty
             description={
-              mode === 'explore' || !searched
+              !searched
                 ? '选择出发地和日期，看看能飞去哪儿（目的地留空）'
-                : '换个日期或目的地再试试'
+                : mode === 'explore'
+                  ? '这个日期区间没有找到可往返的目的地，换个日期试试'
+                  : '没找到方案：换个日期或目的地，或把目的地留空看看能去哪'
             }
           />
         </Card>

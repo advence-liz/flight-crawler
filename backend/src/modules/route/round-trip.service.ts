@@ -27,6 +27,13 @@ const EXPLORE_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 6 * 60 *
  */
 const CANDIDATES_PER_DATE = 2;
 
+/**
+ * 往返组合在目的地的最短停留时间。
+ * 不做这个约束时，会出现"20:20 落地、21:10 就返程"的假往返——它总耗时最短、
+ * 在 0 请假日里评分最高，会被排到第一位，用户点进去发现根本没时间玩。
+ */
+const MIN_STAY_MS = 4 * 60 * 60 * 1000;
+
 /** 排序：先比请假天数（越少越靠前），再比综合评分 */
 function sortByLeaveThenScore(a: RoundTripResultDto, b: RoundTripResultDto): number {
   if (a.leaveDays !== b.leaveDays) return a.leaveDays - b.leaveDays;
@@ -117,9 +124,10 @@ export class RoundTripService {
       const lastOutbound = outbound.segments[outbound.segments.length - 1];
       const outboundArrival = new Date(lastOutbound.arrivalTime).getTime();
       for (const returnRoute of returnCandidates) {
-        // 返程必须晚于去程落地，否则组合出来的行程时间线是倒的
+        // 返程必须晚于去程落地，且留出足够的停留时间：
+        // 否则会组合出"落地 5 分钟就返程"的假往返，还会因为总耗时最短排到第一
         const returnDeparture = new Date(returnRoute.segments[0].departureTime).getTime();
-        if (returnDeparture <= outboundArrival) continue;
+        if (returnDeparture - outboundArrival < MIN_STAY_MS) continue;
         roundTripRoutes.push(this.combineRoutes(outbound, returnRoute));
       }
     }
@@ -269,7 +277,7 @@ export class RoundTripService {
 
       for (const returnRoute of retCandidates) {
         const returnDeparture = new Date(returnRoute.segments[0].departureTime).getTime();
-        if (returnDeparture <= outboundArrival) continue;
+        if (returnDeparture - outboundArrival < MIN_STAY_MS) continue;
 
         const leave = calcLeaveDays(
           new Date(outbound.segments[0].departureTime),

@@ -37,6 +37,7 @@ import {
   type Flight,
 } from '@/api/flight';
 import { getOriginCookie, setOriginCookie } from '@/utils/cookie';
+import { formatFlightTime } from '@/utils/datetime';
 
 const { Title, Paragraph } = Typography;
 const { RangePicker } = DatePicker;
@@ -345,8 +346,8 @@ function FlightManagement() {
       航班号: flight.flightNo,
       出发地: flight.origin,
       目的地: flight.destination,
-      起飞时间: dayjs(flight.departureTime).format('YYYY-MM-DD HH:mm'),
-      到达时间: dayjs(flight.arrivalTime).format('YYYY-MM-DD HH:mm'),
+      起飞时间: formatFlightTime(flight.departureTime, 'YYYY-MM-DD HH:mm'),
+      到达时间: formatFlightTime(flight.arrivalTime, 'YYYY-MM-DD HH:mm'),
       权益卡类型: flight.cardType,
       可用座位: flight.availableSeats || '-',
       机型: flight.aircraftType || '-',
@@ -388,7 +389,7 @@ function FlightManagement() {
       key: 'departureTime',
       width: 160,
       sorter: true,
-      render: (time) => dayjs(time).format('YYYY-MM-DD HH:mm'),
+      render: (time) => formatFlightTime(time, 'YYYY-MM-DD HH:mm'),
     },
     {
       title: '到达时间',
@@ -396,7 +397,7 @@ function FlightManagement() {
       key: 'arrivalTime',
       width: 160,
       sorter: true,
-      render: (time) => dayjs(time).format('YYYY-MM-DD HH:mm'),
+      render: (time) => formatFlightTime(time, 'YYYY-MM-DD HH:mm'),
     },
     {
       title: '权益卡类型',

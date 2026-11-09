@@ -43,6 +43,7 @@ import {
 } from '@/api/flight';
 import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
 import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
+import { formatFlightTime } from '@/utils/datetime';
 import CuteLoader from '@/components/CuteLoader';
 
 const { RangePicker } = DatePicker;
@@ -423,14 +424,14 @@ function DestinationQuery() {
       dataIndex: 'departureTime',
       key: 'departureTime',
       width: 120,
-      render: (t: string) => dayjs(t).format('MM-DD HH:mm'),
+      render: (t: string) => formatFlightTime(t),
     },
     {
       title: '到达时间',
       dataIndex: 'arrivalTime',
       key: 'arrivalTime',
       width: 120,
-      render: (t: string) => dayjs(t).format('MM-DD HH:mm'),
+      render: (t: string) => formatFlightTime(t),
     },
     {
       title: '权益卡',
