@@ -420,3 +420,9 @@ export const discoverTransferDestinations = (params: {
 }): Promise<DiscoverTransferResponse> => {
   return api.post('/routes/discover-transfer', params, { timeout: 120000 }); // 中转搜索最多等 2 分钟
 };
+
+
+// 数据新鲜度：最新一次爬取时间（UTC ISO）+ 总条数
+export const getDataFreshness = (): Promise<{ crawledAt: string | null; total: number }> => {
+  return api.get('/flights/data-freshness');
+};

@@ -2,6 +2,7 @@ const ORIGIN_COOKIE_KEY = 'flight_origin';
 const DATE_RANGE_KEY = 'flight_date_range';       // DestinationQuery 日期区间
 const DEPART_RANGE_KEY = 'flight_depart_range';   // RoutePlanner 去程区间
 const RETURN_RANGE_KEY = 'flight_return_range';   // RoutePlanner 返程区间
+const FLIGHT_TYPE_KEY = 'flight_card_type';       // 权益卡类型（666 / 2666 / 全部）
 const COOKIE_DAYS = 90;
 
 export function getOriginCookie(): string {
@@ -92,4 +93,16 @@ export function getDefaultDateRange(): [string, string] {
   nextMonth.setMonth(nextMonth.getMonth() + 1);
   const fmt = (d: Date) => d.toISOString().split('T')[0];
   return [fmt(today), fmt(nextMonth)];
+}
+
+// ─── 权益卡类型持久化 ─────────────────────────────────────────
+// 用户手里的卡是固定的（要么 666 要么 2666），默认给他自己的卡种，
+// 否则"全部"会把两种产品的航班混在一起，看到买不了的班次。
+
+export function getDefaultFlightType(fallback = '全部'): string {
+  return getCookie(FLIGHT_TYPE_KEY) || fallback;
+}
+
+export function setFlightTypeCookie(value: string): void {
+  setCookie(FLIGHT_TYPE_KEY, value || '全部');
 }

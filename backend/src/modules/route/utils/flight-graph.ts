@@ -78,6 +78,7 @@ export function buildRouteResult(flights: Flight[]): RouteResultDto {
     departureTime: flight.departureTime,
     arrivalTime: flight.arrivalTime,
     duration: calculateDuration(flight.departureTime, flight.arrivalTime),
+    cardType: flight.cardType,
   }));
 
   const layovers = [];

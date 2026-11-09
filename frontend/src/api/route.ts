@@ -37,6 +37,8 @@ export interface PlanRoundTripParams {
 
 export interface FlightSegment {
   flightNo: string;
+  /** 可用权益卡，如 "666权益卡航班,2666权益卡航班" */
+  cardType?: string;
   origin: string;
   destination: string;
   departureTime: string;

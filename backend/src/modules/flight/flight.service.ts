@@ -501,6 +501,24 @@ export class FlightService {
   /**
    * 数据库中已有航班的日期范围（用于给"自动对齐日期区间"提供默认搜索窗口）
    */
+  /**
+   * 数据新鲜度：库里最新一次爬取时间。
+   *
+   * 海航随心飞页面给的是"航班计划时刻"，不是实时余票——座位随时可能被兑完。
+   * 前端要把爬取时间显示出来，否则用户会拿一个几小时前的快照当实时结果。
+   */
+  async getDataFreshness(): Promise<{ crawledAt: string | null; total: number }> {
+    const row = await this.flightRepository
+      .createQueryBuilder('flight')
+      .select('MAX(flight.crawledAt)', 'crawledAt')
+      .addSelect('COUNT(*)', 'total')
+      .getRawOne<{ crawledAt: string | null; total: number }>();
+    return {
+      crawledAt: row?.crawledAt ? new Date(row.crawledAt).toISOString() : null,
+      total: Number(row?.total ?? 0),
+    };
+  }
+
   async getFlightDateRange(): Promise<{ minDate: string | null; maxDate: string | null }> {
     const dateRange = await this.flightRepository
       .createQueryBuilder('flight')

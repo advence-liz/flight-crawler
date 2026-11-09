@@ -55,6 +55,19 @@ export class FlightController {
   }
 
   /**
+   * 数据新鲜度：最新一次爬取时间 + 总条数
+   * GET /api/flights/data-freshness
+   *
+   * 海航页面给的是"航班计划时刻"而非实时余票，前端要把它亮出来，
+   * 免得用户把几小时前的快照当实时结果。
+   */
+  @Get('data-freshness')
+  @HttpCode(HttpStatus.OK)
+  async getDataFreshness() {
+    return this.flightService.getDataFreshness();
+  }
+
+  /**
    * 查询往返航班详情
    * GET /api/flights/round-trip
    */

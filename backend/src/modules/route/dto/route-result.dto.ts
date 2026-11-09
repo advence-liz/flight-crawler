@@ -5,6 +5,8 @@ export class FlightSegmentDto {
   departureTime: Date;
   arrivalTime: Date;
   duration: number; // 分钟
+  /** 该航班可用的权益卡（"666权益卡航班,2666权益卡航班"），前端用来标 666/2666 */
+  cardType?: string;
 }
 
 export class RouteResultDto {

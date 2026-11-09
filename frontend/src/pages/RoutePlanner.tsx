@@ -36,8 +36,8 @@ import {
   getTravelWindows,
   TravelWindow,
 } from '@/api/route';
-import { getAvailableCities } from '@/api/flight';
-import { getDefaultOrigin, setOriginCookie, getDefaultDateRange } from '@/utils/cookie';
+import { getAvailableCities, getDataFreshness } from '@/api/flight';
+import { getDefaultOrigin, setOriginCookie, getDefaultDateRange, getDefaultFlightType, setFlightTypeCookie } from '@/utils/cookie';
 import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
 import { formatFlightTime } from '@/utils/datetime';
 import { readSnapshot, writeSnapshot, snapshotKey, formatAge } from '@/utils/snapshot-cache';
@@ -121,6 +121,27 @@ function formatDayWithWeekday(dateStr: string): string {
   return `${dateStr.slice(5)}（${WEEKDAY_LABELS[d.getUTCDay()]}）`;
 }
 
+/** ISO UTC -> "11-09 13:50"（北京时间），数据新鲜度展示用 */
+function freshnessLabel(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const bj = new Date(t + 8 * 3600 * 1000); // 展示成北京墙钟时间
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(bj.getUTCMonth() + 1)}-${p(bj.getUTCDate())} ${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}`;
+}
+
+/** "666权益卡航班,2666权益卡航班" -> "666·2666"；单卡则只显示一种 */
+function cardLabelOf(cardType?: string): string {
+  if (!cardType) return '';
+  const parts = cardType.split(',').map(t => t.trim());
+  const has666 = parts.includes('666权益卡航班');
+  const has2666 = parts.includes('2666权益卡航班');
+  if (has666 && has2666) return '666·2666';
+  if (has666) return '666';
+  if (has2666) return '2666';
+  return '';
+}
+
 // ─── 单程方案时间线 ─────────────────────────────────────────
 
 interface RouteTimelineProps {
@@ -138,6 +159,9 @@ function RouteTimeline({ route, color = 'blue' }: RouteTimelineProps) {
         <div>
           <Space size={4}>
             <Tag style={{ fontFamily: 'monospace', fontSize: 11 }}>{seg.flightNo}</Tag>
+            {cardLabelOf(seg.cardType) && (
+              <Tag color="purple" style={{ fontSize: 10 }}>{cardLabelOf(seg.cardType)}</Tag>
+            )}
             <span style={{ fontWeight: 500 }}>{seg.origin}</span>
             <ArrowRightOutlined style={{ fontSize: 10, color: '#999' }} />
             <span style={{ fontWeight: 500 }}>{seg.destination}</span>
@@ -312,6 +336,7 @@ interface TripTabProps {
   cities: string[];
   urlParams?: UrlParams;
   dateRange: { minDate: string | null; maxDate: string | null };
+  dataFreshness?: string | null;
 }
 
 /**
@@ -319,7 +344,7 @@ interface TripTabProps {
  * 唯一区别是目的地填不填——留空就从这里出发找"能去哪"，填了就查"怎么去"。
  * 所以合成一个表单、一套日期语义，结果区按模式渲染。
  */
-function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
+function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   // explore：to=null，展示可往返目的地；plan：展示具体方案
@@ -624,6 +649,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     setSnapshotAge(null);
     setExploreTotal(null);
     setOriginCookie(values.origin);
+    setFlightTypeCookie(values.flightType || '全部');
 
     // 目的地留空 → 探索：从这里出发能去哪
     if (!destination) {
@@ -834,7 +860,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           layout="vertical"
           onFinish={handleSearch}
           onFinishFailed={() => setLoading(false)}
-          initialValues={{ maxTransfers: 1, flightType: '全部', sortBy: 'leave', maxStayDays: DEFAULT_MAX_STAY_DAYS }}
+          initialValues={{ maxTransfers: 1, flightType: getDefaultFlightType(), sortBy: 'leave', maxStayDays: DEFAULT_MAX_STAY_DAYS }}
         >
           <Form.Item name="sortBy" hidden>
             <input type="hidden" />
@@ -1062,6 +1088,13 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           />
         </Card>
       )}
+
+      {/* 数据说明：海航给的是计划时刻，座位随时可能没了 */}
+      {searched && dataFreshness && (
+        <div style={{ marginTop: 20, paddingTop: 10, borderTop: '1px solid #f0f0f0', color: '#bbb', fontSize: 11, lineHeight: 1.8 }}>
+          航班数据更新于 {freshnessLabel(dataFreshness)}，为海航「随心飞」公开班表快照；实际余票请以海航 App 实时查询为准。
+        </div>
+      )}
     </div>
   );
 }
@@ -1072,6 +1105,8 @@ function RoutePlanner() {
   // 预设兜底：出发地/目的地下拉框不必等接口返回，冷启动期间也能选
   const [cities, setCities] = useState<string[]>(PRESET_CITIES);
   const [dateRange, setDateRange] = useState<{ minDate: string | null; maxDate: string | null }>({ minDate: null, maxDate: null });
+  /** 库里最新爬取时间：海航给的是计划时刻，不是实时余票，得让用户知道数据有多旧 */
+  const [freshness, setFreshness] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
 
   // 从 URL params 解析初始参数
@@ -1102,6 +1137,10 @@ function RoutePlanner() {
     const cached = readSnapshot<CitiesWindow>(CITIES_KEY, SNAPSHOT_TTL_MS);
     if (cached) apply(cached.data.all, cached.data.minDate, cached.data.maxDate);
 
+    getDataFreshness()
+      .then(r => setFreshness(r.crawledAt))
+      .catch(() => {});
+
     getAvailableCities()
       .then(({ cityList, origins, destinations, minDate, maxDate }) => {
         // 优先使用城市维度列表（北京/上海各出现一次），兼容旧接口
@@ -1116,7 +1155,7 @@ function RoutePlanner() {
 
   return (
     <div style={{ padding: '0 4px' }}>
-      <TripTab cities={cities} urlParams={urlParams} dateRange={dateRange} />
+      <TripTab cities={cities} urlParams={urlParams} dateRange={dateRange} dataFreshness={freshness} />
     </div>
   );
 }
