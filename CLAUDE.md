@@ -49,6 +49,9 @@ npm run lint         # ESLint 检查
 
 ### 数据库
 - 开发环境使用 SQLite，数据库文件位于 `backend/data/flight-crawler.db`
+- **本地库容易过期**（只到上次本地爬取的时间点），而页面默认查"今天 ~ +30 天"，
+  本地打开经常是空的。线上数据由每日爬虫推到 `data` 分支，先停后端再执行
+  `./pull-prod-db.sh` 即可把线上库拉到本地（该文件在 git 中受跟踪，提交时注意排除）
 - TypeORM 自动同步模式已启用 (synchronize: true)，实体变更会自动更新数据库结构
 - 生产环境需切换到 PostgreSQL 并关闭 synchronize
 - **重要**: 修改 Entity 后无需手动创建迁移，TypeORM 会自动同步表结构
