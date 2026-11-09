@@ -105,6 +105,11 @@ export interface ExploreDestination {
   outboundCount: number;
   returnCount: number;
   score: number;
+  /** 请假成本：0 = 周末/假期走完 */
+  leaveDays: number;
+  departDate: string;
+  returnDate: string;
+  noLeaveNeeded: boolean;
 }
 
 export interface ExplorePlanResponse {

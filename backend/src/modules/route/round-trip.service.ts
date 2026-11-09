@@ -237,6 +237,69 @@ export class RoundTripService {
   }
 
   /**
+   * 为一个目的地挑出「请假最少、其次评分最高」的去返组合。
+   * 探索模式下每个目的地只展示一组代表行程，这组必须是时间上成立、且最省假的。
+   */
+  private pickBestLeavePair(
+    outboundRoutes: RouteResultDto[],
+    returnRoutes: RouteResultDto[],
+  ): {
+    outbound: RouteResultDto;
+    return: RouteResultDto;
+    score: number;
+    leaveDays: number;
+    departDate: string;
+    returnDate: string;
+  } | null {
+    const outCandidates = this.pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE);
+    const retCandidates = this.pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE);
+
+    let best: {
+      outbound: RouteResultDto;
+      return: RouteResultDto;
+      score: number;
+      leaveDays: number;
+      departDate: string;
+      returnDate: string;
+    } | null = null;
+
+    for (const outbound of outCandidates) {
+      const lastOutbound = outbound.segments[outbound.segments.length - 1];
+      const outboundArrival = new Date(lastOutbound.arrivalTime).getTime();
+
+      for (const returnRoute of retCandidates) {
+        const returnDeparture = new Date(returnRoute.segments[0].departureTime).getTime();
+        if (returnDeparture <= outboundArrival) continue;
+
+        const leave = calcLeaveDays(
+          new Date(outbound.segments[0].departureTime),
+          new Date(returnRoute.segments[returnRoute.segments.length - 1].arrivalTime),
+        );
+        // 已经找到更省假的组合，这个就不必再算评分了
+        if (best && leave.leaveDays > best.leaveDays) continue;
+
+        const score = this.calculateRoundTripScore(
+          outbound.totalDuration + returnRoute.totalDuration,
+          outbound.transferCount + returnRoute.transferCount,
+        );
+
+        if (!best || leave.leaveDays < best.leaveDays || score > best.score) {
+          best = {
+            outbound,
+            return: returnRoute,
+            score,
+            leaveDays: leave.leaveDays,
+            departDate: leave.departDate,
+            returnDate: leave.returnDate,
+          };
+        }
+      }
+    }
+
+    return best;
+  }
+
+  /**
    * 组合去程和返程，生成往返方案
    */
   private combineRoutes(
@@ -315,7 +378,8 @@ export class RoundTripService {
     const returnDateEnd = dto.returnDateEnd || dto.returnDate;
 
     // 检查 DB 缓存
-    const cacheKey = `explore|${dto.origin}|${dto.departureDate}|${departureDateEnd}|${dto.returnDate}|${returnDateEnd}|${maxTransfers}`;
+    // v2：结果里新增了请假成本字段，旧缓存（无这些字段）不能复用
+    const cacheKey = `explore-v2|${dto.origin}|${dto.departureDate}|${departureDateEnd}|${dto.returnDate}|${returnDateEnd}|${maxTransfers}|${dto.flightType || 'all'}`;
     const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
     if (cached && cached.expireAt > new Date()) {
       this.logger.log(`探索查询命中缓存: ${cacheKey}`);
@@ -373,16 +437,31 @@ export class RoundTripService {
 
       const scoredOut = outboundRoutes.map(r => this.routeService.calculateScorePublic(r)).sort((a, b) => b.score - a.score);
       const scoredRet = returnRoutes.map(r => this.routeService.calculateScorePublic(r)).sort((a, b) => b.score - a.score);
-      const bestOutbound = scoredOut[0];
-      const bestReturn = scoredRet[0];
-      const score = this.calculateRoundTripScore(
-        bestOutbound.totalDuration + bestReturn.totalDuration,
-        bestOutbound.transferCount + bestReturn.transferCount,
-      );
-      destinations_result.push({ city, bestOutbound, bestReturn, outboundCount: scoredOut.length, returnCount: scoredRet.length, score });
+
+      // 去程/返程不能各挑各的最优：那样时间线可能倒置（返程早于去程落地），
+      // 也算不出真实的请假成本。这里按日期组合挑出「请假最少、其次评分最高」的一对。
+      const bestPair = this.pickBestLeavePair(scoredOut, scoredRet);
+      if (!bestPair) continue;
+
+      destinations_result.push({
+        city,
+        bestOutbound: bestPair.outbound,
+        bestReturn: bestPair.return,
+        outboundCount: scoredOut.length,
+        returnCount: scoredRet.length,
+        score: bestPair.score,
+        leaveDays: bestPair.leaveDays,
+        departDate: bestPair.departDate,
+        returnDate: bestPair.returnDate,
+        noLeaveNeeded: bestPair.leaveDays === 0,
+      });
     }
 
-    destinations_result.sort((a, b) => b.score - a.score);
+    // 先看请假成本，再按评分——"周末能去哪"应该排在最前面
+    destinations_result.sort((a, b) => {
+      if (a.leaveDays !== b.leaveDays) return a.leaveDays - b.leaveDays;
+      return b.score - a.score;
+    });
     const top30 = destinations_result.slice(0, 30);
 
     this.logger.log(`✅ 探索完成，找到 ${top30.length} 个可往返目的地`);

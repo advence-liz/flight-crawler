@@ -23,17 +23,35 @@ const MORNING_ARRIVAL_HOUR = 8;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * 日期 -> 是否工作日的缓存。
+ * 探索模式要对几十个目的地 × 上千种日期组合算请假成本，同一天会被反复问到，
+ * 不缓存的话光 getDayDetail 就是百万级调用。
+ */
+const workdayCache = new Map<string, boolean>();
+
 /** YYYY-MM-DD -> 是否工作日（含法定节假日与调休判断） */
 export function isWorkday(dateStr: string): boolean {
+  const cached = workdayCache.get(dateStr);
+  if (cached !== undefined) return cached;
+
+  let result: boolean;
   try {
     const detail = getDayDetail(dateStr);
-    if (detail && typeof detail.work === 'boolean') return detail.work;
+    if (detail && typeof detail.work === 'boolean') {
+      result = detail.work;
+    } else {
+      const w = new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+      result = w >= 1 && w <= 5;
+    }
   } catch {
     // 超出节假日数据覆盖年份，退回"周一~周五"
+    const w = new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+    result = w >= 1 && w <= 5;
   }
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  const w = d.getUTCDay();
-  return w >= 1 && w <= 5;
+
+  workdayCache.set(dateStr, result);
+  return result;
 }
 
 function toDateStr(d: Date): string {

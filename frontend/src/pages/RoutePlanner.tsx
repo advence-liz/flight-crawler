@@ -173,11 +173,15 @@ function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
       size="small"
       style={{ height: '100%' }}
       title={
-        <Space>
+        <Space wrap>
           <span style={{ fontSize: 15, fontWeight: 600 }}>{dest.city}</span>
           {isDirect
             ? <Tag color="green" style={{ fontSize: 11 }}>直飞往返</Tag>
             : <Tag color="orange" style={{ fontSize: 11 }}>含中转</Tag>
+          }
+          {dest.noLeaveNeeded
+            ? <Tag color="success" style={{ fontSize: 11 }}>不请假</Tag>
+            : <Tag color="warning" style={{ fontSize: 11 }}>请 {dest.leaveDays} 天</Tag>
           }
         </Space>
       }
@@ -187,6 +191,9 @@ function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
         </Button>
       }
     >
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+        {formatDayWithWeekday(dest.departDate)} 出发 · {formatDayWithWeekday(dest.returnDate)} 返回
+      </div>
       <div style={{ marginBottom: 4 }}>
         <Tag color="blue">✈ 去程</Tag>
         <span style={{ color: '#888', fontSize: 12, marginLeft: 4 }}>
@@ -475,17 +482,17 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const hasResults = mode === 'explore' ? exploreResults.length > 0 : hasPlanResults;
 
   const originSelect = (
-    <Select placeholder="出发地" showSearch style={{ width: isMobile ? '100%' : 110 }}
+    <Select placeholder="出发地" showSearch style={{ width: '100%' }}
       filterOption={(input, option) => (option?.value?.toString() || '').includes(input)}
       options={cities.map(c => ({ value: c, label: c }))} />
   );
 
   const destinationSelect = (
     <Select
-      placeholder="留空则探索所有可往返目的地"
+      placeholder="留空则探索全部"
       allowClear
       showSearch
-      style={{ width: isMobile ? '100%' : 210 }}
+      style={{ width: '100%' }}
       filterOption={(input, option) => (option?.value?.toString() || '').includes(input)}
       options={cities.map(c => ({ value: c, label: c }))}
     />
@@ -496,83 +503,35 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
       <Card style={{ marginBottom: 16 }}>
         <Form
           form={form}
-          layout={isMobile ? 'vertical' : 'inline'}
+          layout="vertical"
           onFinish={handleSearch}
           initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班' }}
         >
-          {isMobile ? (
-            <Row gutter={[8, 8]}>
-              <Col xs={12}>
-                <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
-                  {originSelect}
-                </Form.Item>
-              </Col>
-              <Col xs={12}>
-                <Form.Item name="destination" label="目的地">
-                  {destinationSelect}
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <Form.Item name="departureRange" label="去程日期" rules={[{ required: true, message: '请选择去程日期' }]}>
-                  <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: '100%' }}
-                    getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <Form.Item
-                  name="returnRange"
-                  label="返程日期"
-                  dependencies={['destination']}
-                  rules={[({ getFieldValue }) => ({
-                    validator(_, value) {
-                      // 留空目的地（探索模式）必须给返程区间；规划模式可以只查单程
-                      if (!getFieldValue('destination') && (!value || !value[0] || !value[1])) {
-                        return Promise.reject(new Error('探索模式请选择返程日期'));
-                      }
-                      return Promise.resolve();
-                    },
-                  })]}
-                >
-                  <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: '100%' }} allowEmpty={[true, true]}
-                    getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <Form.Item name="maxTransfers" label="最大中转次数">
-                  <InputNumber min={0} max={2} style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <Form.Item name="flightType" label="权益卡类型">
-                  <Select style={{ width: '100%' }}>
-                    <Select.Option value="666权益卡航班">666</Select.Option>
-                    <Select.Option value="2666权益卡航班">2666</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <Form.Item>
-                  <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block>查询</Button>
-                </Form.Item>
-              </Col>
-            </Row>
-          ) : (
-            <>
+          <Row gutter={[12, 12]} style={{ width: '100%' }}>
+            <Col xs={12} md={6} lg={5}>
               <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
                 {originSelect}
               </Form.Item>
+            </Col>
+            <Col xs={12} md={6} lg={7}>
               <Form.Item name="destination" label="目的地">
                 {destinationSelect}
               </Form.Item>
+            </Col>
+            <Col xs={24} md={6} lg={6}>
               <Form.Item name="departureRange" label="去程" rules={[{ required: true, message: '请选择去程日期' }]}>
-                <DatePicker.RangePicker placeholder={['最早', '最晚']} />
+                <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: '100%' }}
+                  getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
               </Form.Item>
+            </Col>
+            <Col xs={24} md={6} lg={6}>
               <Form.Item
                 name="returnRange"
                 label="返程"
                 dependencies={['destination']}
                 rules={[({ getFieldValue }) => ({
                   validator(_, value) {
+                    // 留空目的地（探索模式）必须给返程区间；规划模式可以只查单程
                     if (!getFieldValue('destination') && (!value || !value[0] || !value[1])) {
                       return Promise.reject(new Error('探索模式请选择返程日期'));
                     }
@@ -580,22 +539,35 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
                   },
                 })]}
               >
-                <DatePicker.RangePicker placeholder={['最早', '最晚']} allowEmpty={[true, true]} />
+                <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: '100%' }} allowEmpty={[true, true]}
+                  getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
               </Form.Item>
+            </Col>
+          </Row>
+          {/* 次要选项和查询按钮单独一行，按钮靠右——避免在窄一点的屏幕上被挤到
+              下一行单独占一行、左对齐地挂在字段下面 */}
+          <Row gutter={[12, 12]} justify="end" style={{ width: '100%', marginTop: 12 }}>
+            <Col xs={12} md={3} lg={2}>
               <Form.Item name="maxTransfers" label="中转">
-                <InputNumber min={0} max={2} style={{ width: 60 }} />
+                <InputNumber min={0} max={2} style={{ width: '100%' }} />
               </Form.Item>
+            </Col>
+            <Col xs={12} md={3} lg={3}>
               <Form.Item name="flightType" label="权益卡">
-                <Select style={{ width: 80 }}>
+                <Select style={{ width: '100%' }}>
                   <Select.Option value="666权益卡航班">666</Select.Option>
                   <Select.Option value="2666权益卡航班">2666</Select.Option>
                 </Select>
               </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading}>查询</Button>
+            </Col>
+            <Col xs={24} md={6} lg={5} style={{ textAlign: 'right' }}>
+              <Form.Item label=" " colon={false} style={{ marginBottom: 0 }}>
+                <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block={isMobile}>
+                  查询
+                </Button>
               </Form.Item>
-            </>
-          )}
+            </Col>
+          </Row>
         </Form>
       </Card>
 
@@ -609,7 +581,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
       {!loading && mode === 'explore' && exploreResults.length > 0 && (
         <>
           <div style={{ marginBottom: 12, color: '#666' }}>
-            共找到 <strong>{exploreResults.length}</strong> 个可往返目的地（按综合评分排序）
+            共找到 <strong>{exploreResults.length}</strong> 个可往返目的地（按请假成本优先排序）
           </div>
           <Row gutter={[12, 12]}>
             {exploreResults.map((dest) => (
