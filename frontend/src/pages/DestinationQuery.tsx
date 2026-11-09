@@ -17,6 +17,7 @@ import {
   Spin,
   Tabs,
   Badge,
+  Alert,
   Grid,
 } from 'antd';
 import {
@@ -231,6 +232,8 @@ function DestinationQuery() {
   const isMobile = !screens.md; // < 768px
   const [loading, setLoading] = useState(false);
   const [destinations, setDestinations] = useState<DestinationResult[]>([]);
+  /** 首屏先出"仅去程"结果，返程信息在后台补——补齐前明确告知用户，避免误以为没有往返 */
+  const [enrichingReturn, setEnrichingReturn] = useState(false);
   const [availableOrigins, setAvailableOrigins] = useState<string[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<DestinationResult | null>(null);
   const [roundTripFlights, setRoundTripFlights] = useState<RoundTripFlights | null>(null);
@@ -331,6 +334,7 @@ function DestinationQuery() {
     setTransferRoundTrip([]);
     setTransferOneWay([]);
     setTransferDiscovered(false);
+    setEnrichingReturn(false);
     setLoading(true);
 
     // 第一步：仅查去程，立即渲染（无缓存，速度快）
@@ -345,6 +349,7 @@ function DestinationQuery() {
     }
 
     // 第二步：补充返程信息（有缓存命中时很快，无缓存时稍慢但不阻塞首屏）
+    setEnrichingReturn(true);
     queryDestinations({ ...queryParams, includeReturn: true })
       .then(fullResult => {
         setDestinations(fullResult.destinations);
@@ -355,6 +360,7 @@ function DestinationQuery() {
         message.warning('返程信息加载失败，仅显示去程数据');
       })
       .finally(() => {
+        setEnrichingReturn(false);
         setLoading(false);
       });
 
@@ -765,8 +771,18 @@ function DestinationQuery() {
           title={
             <Row gutter={isMobile ? [8, 8] : [16, 16]} align="middle">
               <Col xs={12} sm={8} md={6}>
-                <Statistic title="直飞往返" value={returnCount} suffix="个"
-                  valueStyle={{ color: '#52c41a', fontSize: isMobile ? 16 : 22 }} prefix={<SwapOutlined />} />
+                {enrichingReturn ? (
+                  <div>
+                    <div style={{ color: 'rgba(0,0,0,0.45)', fontSize: 14, marginBottom: 4 }}>直飞往返</div>
+                    <Space size={6}>
+                      <Spin size="small" />
+                      <span style={{ color: '#52c41a', fontSize: isMobile ? 12 : 14 }}>统计中…</span>
+                    </Space>
+                  </div>
+                ) : (
+                  <Statistic title="直飞往返" value={returnCount} suffix="个"
+                    valueStyle={{ color: '#52c41a', fontSize: isMobile ? 16 : 22 }} prefix={<SwapOutlined />} />
+                )}
               </Col>
               <Col xs={12} sm={8} md={6}>
                 <Statistic title="直飞单程" value={oneWayCount} suffix="个"
@@ -793,6 +809,15 @@ function DestinationQuery() {
             </Row>
           }
         >
+          {enrichingReturn && (
+            <div style={{ padding: '8px 16px 0' }}>
+              <Alert
+                type="info"
+                showIcon
+                message="正在补充返程信息：往返标记和返程班次稍后更新，可先看去程结果"
+              />
+            </div>
+          )}
           <Tabs
             activeKey={activeTab}
             onChange={setActiveTab}
