@@ -363,7 +363,7 @@ export class FlightService {
     }
 
     const startOfDay = new Date(dates[0]);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
 
     const endOfDay = new Date(dates[dates.length - 1]);
     endOfDay.setUTCHours(23, 59, 59, 999);
@@ -401,7 +401,7 @@ export class FlightService {
    */
   async deleteFlightsByOriginAndDate(origin: string, date: string): Promise<number> {
     const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
 
     const endOfDay = new Date(date);
     endOfDay.setUTCHours(23, 59, 59, 999);
@@ -425,7 +425,7 @@ export class FlightService {
    */
   async deleteFlightsByDate(date: string): Promise<number> {
     const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
 
     const endOfDay = new Date(date);
     endOfDay.setUTCHours(23, 59, 59, 999);

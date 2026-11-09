@@ -240,6 +240,20 @@ export class RoundTripService {
     };
   }
 
+  /** YYYY-MM-DD 加一天（UTC 口径，不受进程时区影响） */
+  private addOneDay(dateStr: string): string {
+    const d = new Date(`${dateStr}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+
+  /** 某个时刻的日期（UTC 口径）是否落在 [start, end] 内 */
+  private withinWindow(value: Date | string | undefined, start: string, end: string): boolean {
+    if (!value) return false;
+    const day = new Date(value).toISOString().slice(0, 10);
+    return day >= start && day <= end;
+  }
+
   /**
    * 按出发日期分组，每组取评分最高的前 N 条。
    * 用于组合往返时给每个日期都保留候选，避免周末航班被整体淘汰。
@@ -421,9 +435,11 @@ export class RoundTripService {
     const originAirports = await this.flightService.expandCityToAirports(dto.origin);
     const originSet = new Set(originAirports);
 
+    // 多载一天：最后一天晚班起飞、次日转机的跨天中转需要次日的航班。
+    // 这些次日的航班只作为"中转腿"使用，最终结果会按首段起飞日期过滤回用户区间。
     const [outboundAllFlights, returnAllFlights] = await Promise.all([
-      this.flightService.queryAllFlightsInRange(dto.departureDate, departureDateEnd, dto.flightType),
-      this.flightService.queryAllFlightsInRange(dto.returnDate, returnDateEnd, dto.flightType),
+      this.flightService.queryAllFlightsInRange(dto.departureDate, this.addOneDay(departureDateEnd), dto.flightType),
+      this.flightService.queryAllFlightsInRange(dto.returnDate, this.addOneDay(returnDateEnd), dto.flightType),
     ]);
 
     // 2. 内存建去程图（出发机场 + 按 maxTransfers 层数展开可达城市）
@@ -436,7 +452,14 @@ export class RoundTripService {
       outboundGraph, originAirports, originSet, maxTransfers, 2, 24,
     );
 
-    const candidateCities = Array.from(outboundByDest.keys());
+    // 多载的次日航班只用于中转腿，出发日期必须落在用户区间内
+    const filterOutboundWindow = (routes: RouteResultDto[] | undefined) =>
+      (routes ?? []).filter(r => this.withinWindow(r.segments[0]?.departureTime, dto.departureDate, departureDateEnd));
+    for (const [dest, routes] of outboundByDest) {
+      outboundByDest.set(dest, filterOutboundWindow(routes));
+    }
+
+    const candidateCities = Array.from(outboundByDest.keys()).filter(city => (outboundByDest.get(city) ?? []).length > 0);
     this.logger.log(`发现 ${candidateCities.length} 个可达目的地，开始返程搜索`);
 
     // 4. 内存建返程图（候选目的地 + 按 maxTransfers 层数展开可达城市，出发机场只当返程终点）
@@ -452,6 +475,8 @@ export class RoundTripService {
     for (const [dest, routes] of returnByDest) {
       if (originAirports.includes(dest)) {
         for (const route of routes) {
+          // 返程同样只保留用户区间内出发的
+          if (!this.withinWindow(route.segments[0]?.departureTime, dto.returnDate, returnDateEnd)) continue;
           const src = route.segments[0].origin;
           if (!returnBySrc.has(src)) returnBySrc.set(src, []);
           returnBySrc.get(src)!.push(route);
