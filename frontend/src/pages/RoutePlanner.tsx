@@ -332,6 +332,9 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const [exploreTotal, setExploreTotal] = useState<number | null>(null);
   /** 请求超过阈值仍未返回 → 提示后端可能在冷启动 */
   const [slowHint, setSlowHint] = useState(false);
+  /** 移动端：查过一次后把筛选表单收成一行摘要，别让用户一屏只看到输入框 */
+  const [formCollapsed, setFormCollapsed] = useState(false);
+  const [searchSummary, setSearchSummary] = useState<string>('');
   const sortBy = Form.useWatch('sortBy', form) ?? 'leave';
   const maxStayDays = Form.useWatch('maxStayDays', form) ?? DEFAULT_MAX_STAY_DAYS;
   const triggeredRef = useRef(false);
@@ -575,6 +578,17 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
 
     setLoading(true);
     setSearched(true);
+    // 移动端一屏放不下"表单 + 结果"，查完就把条件收成一行摘要
+    setSearchSummary(
+      [
+        `${values.origin} → ${destination || '随便去哪'}`,
+        `${departureDate.slice(5)} ~ ${departureDateEnd.slice(5)}`,
+        returnDate ? `返 ${returnDate.slice(5)}~${returnDateEnd!.slice(5)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    );
+    if (isMobile) setFormCollapsed(true);
     setMode(destination ? 'plan' : 'explore');
     setExploreResults([]);
     setOneWayRoutes([]);
@@ -737,6 +751,17 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   return (
     <div>
       <Card style={{ marginBottom: 16 }}>
+        {isMobile && formCollapsed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ flex: 1, fontSize: 13, color: '#333', lineHeight: 1.5 }}>
+              {searchSummary}
+            </span>
+            <Button size="small" onClick={() => setFormCollapsed(false)}>
+              修改
+            </Button>
+          </div>
+        )}
+        <div style={{ display: isMobile && formCollapsed ? 'none' : 'block' }}>
         <Form
           form={form}
           layout="vertical"
@@ -812,6 +837,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
             </Col>
           </Row>
         </Form>
+        </div>
       </Card>
 
       {loading && (
