@@ -2,10 +2,10 @@ name: daily-crawl
 
 "on":
   schedule:
-    # 18:00 UTC = 次日 02:00 北京时间：全量爬 30 天
-    - cron: '0 18 * * *'
-    # 每 4 小时增量刷未来 7 天：随心飞的座位随时被兑走、班表也会调整，
-    # 只靠每天一次会出现"早上还能查到、晚上点进去没了"的滞后
+    # 每 4 小时全量刷未来 30 天（00/04/08/12/16/20 UTC），
+    # 对应北京时间 08:00 / 12:00 / 16:00 / 20:00 / 次日 00:00 / 04:00。
+    # 随心飞的座位随时被兑走、班表也会临时调整，只靠每天一次会出现
+    # "早上还能查到、晚上点进去没了"的滞后
     - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
@@ -124,8 +124,8 @@ jobs:
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
         id: trigger
         run: |
-          # 手动触发用输入值；定时任务里 18:00 那次爬 30 天，其余每 4 小时的只刷未来 7 天
-          DAYS="${{ github.event.inputs.days || (github.event.schedule == '0 18 * * *' && '30' || '7') }}"
+          # 手动触发用输入值；定时任务统一刷未来 30 天
+          DAYS="${{ github.event.inputs.days || '30' }}"
           START=$(date -u +%F)
           END=$(date -u -d "+${DAYS} days" +%F)
           echo "爬取窗口：$START ~ $END"
