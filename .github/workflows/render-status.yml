@@ -1,8 +1,14 @@
 name: render-status
 
-# 临时排查用：查看 Render 上各服务最近一次部署的状态（不会输出 API Key）
+# 临时排查用：查看 / 触发 Render 部署（不会输出 API Key）
 "on":
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: '要触发部署的服务（留空只查看状态）'
+        type: choice
+        options: ['', 'flight-crawler-frontend', 'flight-crawler']
+        default: ''
 
 permissions:
   contents: read
@@ -18,7 +24,7 @@ jobs:
         run: |
           curl -sf "https://api.render.com/v1/services?limit=50" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
-            | jq -r '.[] | "\(.service.id)  \(.service.name)  type=\(.service.type)  branch=\(.service.branch)  autoDeploy=\(.service.autoDeploy)  repo=\(.service.repo // "-")  suspended=\(.service.suspended)"'
+            | jq -r '.[] | "\(.service.id)  \(.service.name)  type=\(.service.type)  branch=\(.service.branch)  autoDeploy=\(.service.autoDeploy)  suspended=\(.service.suspended)"'
       - name: Latest deploys
         run: |
           for id in $(curl -sf "https://api.render.com/v1/services?limit=50" -H "Authorization: Bearer ${RENDER_API_KEY}" | jq -r '.[].service.id'); do
@@ -27,3 +33,13 @@ jobs:
               -H "Authorization: Bearer ${RENDER_API_KEY}" \
               | jq -r '.[] | "\(.deploy.createdAt)  status=\(.deploy.status)  commit=\(.deploy.commit.id[0:7])  \(.deploy.commit.message | split("\n")[0])"'
           done
+      - name: Trigger deploy
+        if: ${{ inputs.deploy != '' }}
+        run: |
+          id=$(curl -sf "https://api.render.com/v1/services?limit=50" -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            | jq -r --arg n "${{ inputs.deploy }}" '.[] | select(.service.name==$n) | .service.id')
+          echo "triggering deploy for ${{ inputs.deploy }} ($id)"
+          curl -sf -X POST "https://api.render.com/v1/services/$id/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' | jq -r '.id // .'
