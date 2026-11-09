@@ -588,7 +588,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
         }
       } catch {
         if (!isStale()) {
-          if (snap) message.warning('刷新失败，当前展示的是本地缓存结果');
+          if (snap) message.warning('最新数据暂时没取到，先显示上次的结果');
           else message.error('查询失败，请稍后重试');
         }
       } finally {
@@ -677,7 +677,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
       }
     } catch {
       if (!isStale()) {
-        if (showedSnapshot) message.warning('刷新失败，当前展示的是本地缓存结果');
+        if (showedSnapshot) message.warning('最新数据暂时没取到，先显示上次的结果');
         else message.error('查询失败，请稍后重试');
       }
     } finally {
@@ -791,7 +791,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           <CuteLoader text={mode === 'explore' ? '正在发现可往返目的地...' : '正在规划路线...'} />
           {slowHint && (
             <div style={{ marginTop: 12, color: '#999', fontSize: 13 }}>
-              连接有点慢，正在唤醒后端服务（免费实例休眠后首个请求约需 15~40 秒），请稍候…
+              数据正在加载，首次打开会稍慢一些，请稍候…
             </div>
           )}
         </div>
@@ -804,7 +804,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
             共找到 <strong>{exploreResults.length}</strong> 个可往返目的地（按请假成本优先排序）
             {snapshotAge !== null && (
               <Tag color="default" style={{ marginLeft: 8 }}>
-                本地快照 · {formatAge(snapshotAge)} · 正在刷新
+                {formatAge(snapshotAge)}前的数据 · 更新中
               </Tag>
             )}
           </div>
@@ -830,7 +830,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
               {isRoundTrip ? `（往返，已按${SORT_LABELS[sortBy] || '请假成本优先'}排序）` : '（单程）'}
               {snapshotAge !== null && (
                 <Tag color="default" style={{ marginLeft: 8 }}>
-                  本地快照 · {formatAge(snapshotAge)} · 正在刷新
+                  {formatAge(snapshotAge)}前的数据 · 更新中
                 </Tag>
               )}
             </span>

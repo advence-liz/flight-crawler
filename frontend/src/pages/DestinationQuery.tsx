@@ -838,7 +838,7 @@ function DestinationQuery() {
               <Alert
                 type="warning"
                 showIcon
-                message={`当前展示的是 ${formatAge(snapshotAge)}的本地快照，正在向后端刷新最新数据`}
+                message={`正在更新为最新数据（当前显示的是 ${formatAge(snapshotAge)}的结果）`}
               />
             </div>
           )}
@@ -865,7 +865,7 @@ function DestinationQuery() {
                 <div style={{ padding: '12px 0' }}>
                   {loading && t.data.length === 0 ? (
                     <div style={{ padding: '40px 0' }}>
-                      <CuteLoader text="正在爬取最新航班..." />
+                      <CuteLoader text="正在获取航班数据..." />
                     </div>
                   ) : t.data.length > 0 ? (
                     t.data.map(row => (
