@@ -289,10 +289,6 @@ function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
         </span>
       </div>
       <RouteTimeline route={ret} color="orange" />
-
-      <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid #f0f0f0', color: '#aaa', fontSize: 11 }}>
-        去程 {dest.outboundCount} 个方案 · 返程 {dest.returnCount} 个方案
-      </div>
     </Card>
   );
 }
