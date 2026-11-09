@@ -15,9 +15,23 @@ import {
   ExplorePlanResponseDto,
 } from './dto/explore-result.dto';
 import { QueryCache } from './entities/query-cache.entity';
+import { calcLeaveDays } from './utils/leave-days';
 
 // 探索查询缓存 TTL：6 小时
 const EXPLORE_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 6 * 60 * 60 * 1000;
+
+/**
+ * 组合往返时，每个出发日保留几条候选。
+ * 按日期分组而不是全局取前 N，保证周末/节假日那几天的航班能进入候选池，
+ * 否则它们可能因为耗时不占优而被直接淘汰，"周末友好"就无从谈起。
+ */
+const CANDIDATES_PER_DATE = 2;
+
+/** 排序：先比请假天数（越少越靠前），再比综合评分 */
+function sortByLeaveThenScore(a: RoundTripResultDto, b: RoundTripResultDto): number {
+  if (a.leaveDays !== b.leaveDays) return a.leaveDays - b.leaveDays;
+  return b.score - a.score;
+}
 
 async function pLimit<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
   const results: T[] = [];
@@ -93,17 +107,25 @@ export class RoundTripService {
     });
 
     // 3. 组合去程和返程
-    const roundTripRoutes: RoundTripResultDto[] = [];
+    //    候选按"每个出发日取最优的几条"来挑，而不是全局取前 5——否则周末/假期
+    //    那几天的航班可能因为耗时不占优，压根进不了候选池，也就永远排不到前面。
+    const outboundCandidates = this.pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE);
+    const returnCandidates = this.pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE);
 
-    for (const outbound of outboundRoutes.slice(0, 5)) {
-      for (const returnRoute of returnRoutes.slice(0, 5)) {
-        const roundTrip = this.combineRoutes(outbound, returnRoute);
-        roundTripRoutes.push(roundTrip);
+    const roundTripRoutes: RoundTripResultDto[] = [];
+    for (const outbound of outboundCandidates) {
+      const lastOutbound = outbound.segments[outbound.segments.length - 1];
+      const outboundArrival = new Date(lastOutbound.arrivalTime).getTime();
+      for (const returnRoute of returnCandidates) {
+        // 返程必须晚于去程落地，否则组合出来的行程时间线是倒的
+        const returnDeparture = new Date(returnRoute.segments[0].departureTime).getTime();
+        if (returnDeparture <= outboundArrival) continue;
+        roundTripRoutes.push(this.combineRoutes(outbound, returnRoute));
       }
     }
 
-    // 4. 按评分排序
-    roundTripRoutes.sort((a, b) => b.score - a.score);
+    // 4. 排序：先按请假成本（越少越好），再按综合评分
+    roundTripRoutes.sort(sortByLeaveThenScore);
 
     this.logger.log(`✅ 找到 ${roundTripRoutes.length} 个往返方案`);
 
@@ -165,8 +187,8 @@ export class RoundTripService {
       }
     });
 
-    // 5. 按评分排序，返回 Top 20
-    allRoundTripRoutes.sort((a, b) => b.score - a.score);
+    // 5. 排序：先请假成本、再评分，返回 Top 20
+    allRoundTripRoutes.sort(sortByLeaveThenScore);
 
     this.logger.log(
       `✅ 自动发现完成，共 ${allRoundTripRoutes.length} 个方案，返回 Top 20`,
@@ -186,6 +208,30 @@ export class RoundTripService {
   }
 
   /**
+   * 按出发日期分组，每组取评分最高的前 N 条。
+   * 用于组合往返时给每个日期都保留候选，避免周末航班被整体淘汰。
+   */
+  private pickCandidatesPerDate(
+    routes: RouteResultDto[],
+    perDate: number,
+  ): RouteResultDto[] {
+    const byDate = new Map<string, RouteResultDto[]>();
+    for (const route of routes) {
+      const first = route.segments[0];
+      if (!first) continue;
+      const date = new Date(first.departureTime).toISOString().slice(0, 10);
+      if (!byDate.has(date)) byDate.set(date, []);
+      byDate.get(date)!.push(route);
+    }
+    const picked: RouteResultDto[] = [];
+    for (const list of byDate.values()) {
+      list.sort((a, b) => b.score - a.score);
+      picked.push(...list.slice(0, perDate));
+    }
+    return picked;
+  }
+
+  /**
    * 组合去程和返程，生成往返方案
    */
   private combineRoutes(
@@ -199,6 +245,12 @@ export class RoundTripService {
     const score = this.calculateRoundTripScore(
       totalDuration,
       totalTransferCount,
+    );
+
+    // 请假成本：首段起飞 → 末段落地
+    const leave = calcLeaveDays(
+      new Date(outbound.segments[0].departureTime),
+      new Date(returnRoute.segments[returnRoute.segments.length - 1].arrivalTime),
     );
 
     return {
@@ -217,6 +269,10 @@ export class RoundTripService {
       totalDuration,
       totalTransferCount,
       score,
+      leaveDays: leave.leaveDays,
+      departDate: leave.departDate,
+      returnDate: leave.returnDate,
+      noLeaveNeeded: leave.noLeaveNeeded,
     };
   }
 

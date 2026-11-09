@@ -30,6 +30,16 @@ export class RoundTripResultDto {
   totalDuration: number;
   totalTransferCount: number;
   score: number; // 综合评分
+
+  // ── 请假成本（用于把周末/节假日友好行程排到前面）──
+  /** 需要请几天假（0 = 完全不占用工作日） */
+  leaveDays: number;
+  /** 出发日 YYYY-MM-DD */
+  departDate: string;
+  /** 返程落地日 YYYY-MM-DD */
+  returnDate: string;
+  /** 是否无需请假（完整落在周末或法定节假日里） */
+  noLeaveNeeded: boolean;
 }
 
 /**

@@ -53,6 +53,14 @@ function formatDate(dt: string): string {
   return dayjs(dt).format('MM-DD HH:mm');
 }
 
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/** YYYY-MM-DD -> "09-25（周五）"。日期口径与后端一致，按 UTC 读取北京墙钟日期 */
+function formatDayWithWeekday(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return `${dateStr.slice(5)}（${WEEKDAY_LABELS[d.getUTCDay()]}）`;
+}
+
 // ─── 单程方案时间线 ─────────────────────────────────────────
 
 interface RouteTimelineProps {
@@ -111,8 +119,12 @@ function RoundTripCard({ result, index }: RoundTripCardProps) {
   const isDirectBoth = result.outbound.transferCount === 0 && result.return.transferCount === 0;
 
   const header = (
-    <Space size={4}>
+    <Space size={4} wrap>
       <span style={{ color: '#666', fontSize: 12 }}>#{index}</span>
+      {result.noLeaveNeeded
+        ? <Tag color="success" style={{ margin: 0 }}>不请假</Tag>
+        : <Tag color="warning" style={{ margin: 0 }}>请 {result.leaveDays} 天</Tag>
+      }
       {isDirectBoth ? <Tag color="green" style={{ margin: 0 }}>双直飞</Tag> : <Tag color="blue" style={{ margin: 0 }}>含中转</Tag>}
       <Tag icon={<ClockCircleOutlined />} color="default" style={{ margin: 0 }}>总 {formatDuration(result.totalDuration)}</Tag>
     </Space>
@@ -120,6 +132,9 @@ function RoundTripCard({ result, index }: RoundTripCardProps) {
 
   return (
     <Card size="small" style={{ height: '100%' }} title={header}>
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+        {formatDayWithWeekday(result.departDate)} 出发 · {formatDayWithWeekday(result.returnDate)} 返回
+      </div>
       <div style={{ marginBottom: 4 }}>
         <Tag color="blue">✈ 去程</Tag>
         <span style={{ color: '#888', fontSize: 12, marginLeft: 4 }}>
@@ -611,7 +626,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
         <div>
           <div style={{ marginBottom: 12, color: '#666' }}>
             共 {isRoundTrip ? roundTripRoutes.length : oneWayRoutes.length} 个方案
-            {isRoundTrip ? '（往返）' : '（单程）'}
+            {isRoundTrip ? '（往返，已按请假成本优先排序）' : '（单程）'}
           </div>
           <Row gutter={[12, 12]}>
             {isRoundTrip

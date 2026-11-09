@@ -66,6 +66,12 @@ export interface RoundTripResult {
   totalDuration: number;
   totalTransferCount: number;
   score: number;
+  /** 需要请几天假（0 = 不占用工作日，周末/节假日走完） */
+  leaveDays: number;
+  departDate: string;
+  returnDate: string;
+  /** 是否无需请假 */
+  noLeaveNeeded: boolean;
 }
 
 // 往返行程响应
