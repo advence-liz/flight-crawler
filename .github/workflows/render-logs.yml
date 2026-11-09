@@ -11,6 +11,11 @@ name: render-logs
       text:
         description: '只保留包含该文本的日志（留空=全部）'
         default: ''
+      service:
+        description: '查哪个服务'
+        type: choice
+        options: ['web_service', 'static_site']
+        default: 'web_service'
 
 permissions:
   contents: read
@@ -32,8 +37,8 @@ jobs:
           echo "ownerId=$OWNER"
 
           SVC=$(curl -sf "https://api.render.com/v1/services?limit=50" -H "Authorization: Bearer ${RENDER_API_KEY}" \
-            | jq -r '.[] | select(.service.type=="web_service") | .service.id')
-          echo "webService=$SVC"
+            | jq -r --arg t "${{ inputs.service || 'web_service' }}" '.[] | select(.service.type==$t) | .service.id')
+          echo "service=${{ inputs.service || 'web_service' }} id=$SVC"
 
           START=$(date -u -d "${HOURS} hours ago" +%Y-%m-%dT%H:%M:%SZ)
           END=$(date -u +%Y-%m-%dT%H:%M:%SZ)
