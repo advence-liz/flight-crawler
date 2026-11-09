@@ -349,6 +349,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     const values = form.getFieldsValue();
     const { origin, destination } = values;
     setLoading(true);
+    setMode('plan');
     if (origin && destination && origin !== destination) {
       try {
         const win = await getRouteDateWindow({
@@ -380,6 +381,10 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     // 若无条件重写，会把用户在这期间手动改的日期静默覆盖掉。
     if (!initializedRef.current) {
       initializedRef.current = true;
+
+      // 先按"有没有目的地"定好模式，否则带目的地跳进来时，
+      // 日期对齐那几秒的加载文案会错误地显示成"正在发现可往返目的地"
+      setMode(urlParams?.destination ? 'plan' : 'explore');
 
       // URL params 优先，否则用 cookie 默认值
       form.setFieldValue('origin', urlParams?.origin || getDefaultOrigin());
