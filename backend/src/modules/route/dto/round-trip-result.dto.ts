@@ -50,6 +50,8 @@ export class RoundTripResultDto {
   weekendScore: number;
   /** 人类可读标签，如「周五走 · 周日回」 */
   patternLabel: string;
+  /** 行程命中的法定节假日（如「中秋」「国庆节」），没有则为空 */
+  holiday?: string;
 }
 
 /**

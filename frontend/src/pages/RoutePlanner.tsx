@@ -99,6 +99,20 @@ const SORT_LABELS: Record<string, string> = {
   duration: '总耗时优先',
 };
 
+/**
+ * 相对时间标签：本周 / 下周 / N 周后。
+ * 用户扫一眼列表时最想知道的是"这是最近的周末还是一个月以后"，
+ * 光看 11-13 这种绝对日期要在脑子里换算。
+ */
+function relativeWeekLabel(dateStr: string): string {
+  const days = dayjs(dateStr).startOf('day').diff(dayjs().startOf('day'), 'day');
+  if (!Number.isFinite(days) || days < 0) return '';
+  const weeks = Math.floor(days / 7);
+  if (weeks === 0) return '本周';
+  if (weeks === 1) return '下周';
+  return `${weeks} 周后`;
+}
+
 /** YYYY-MM-DD -> "09-25（周五）"。日期口径与后端一致，按 UTC 读取北京墙钟日期 */
 function formatDayWithWeekday(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -170,6 +184,7 @@ function RoundTripCard({ result, index }: RoundTripCardProps) {
         : <Tag color="warning" style={{ margin: 0 }}>请 {result.leaveDays} 天</Tag>
       }
       {isDirectBoth ? <Tag color="green" style={{ margin: 0 }}>双直飞</Tag> : <Tag color="blue" style={{ margin: 0 }}>含中转</Tag>}
+      {result.holiday && <Tag color="magenta" style={{ margin: 0 }}>{result.holiday}</Tag>}
       <Tag icon={<ClockCircleOutlined />} color="default" style={{ margin: 0 }}>总 {formatDuration(result.totalDuration)}</Tag>
     </Space>
   );
@@ -180,6 +195,9 @@ function RoundTripCard({ result, index }: RoundTripCardProps) {
   return (
     <Card size="small" style={{ height: '100%' }} title={header}>
       <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+        {relativeWeekLabel(result.departDate) && (
+          <span style={{ color: '#1677ff', marginRight: 6 }}>{relativeWeekLabel(result.departDate)}</span>
+        )}
         {formatDayWithWeekday(result.departDate)} 出发 · {formatDayWithWeekday(result.returnDate)} 返回
         {typeof result.nights === 'number' && (
           result.nights > 0
@@ -236,6 +254,7 @@ function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
             ? <Tag color="success" style={{ fontSize: 11 }}>不请假</Tag>
             : <Tag color="warning" style={{ fontSize: 11 }}>请 {dest.leaveDays} 天</Tag>
           }
+          {dest.holiday && <Tag color="magenta" style={{ fontSize: 11 }}>{dest.holiday}</Tag>}
         </Space>
       }
       extra={
@@ -245,6 +264,9 @@ function ExploreCard({ dest, onViewAll }: ExploreCardProps) {
       }
     >
       <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+        {relativeWeekLabel(dest.departDate) && (
+          <span style={{ color: '#1677ff', marginRight: 6 }}>{relativeWeekLabel(dest.departDate)}</span>
+        )}
         {formatDayWithWeekday(dest.departDate)} 出发 · {formatDayWithWeekday(dest.returnDate)} 返回
         {typeof dest.nights === 'number' && (dest.nights > 0 ? ` · 住 ${dest.nights} 晚` : ' · 当天往返')}
       </div>

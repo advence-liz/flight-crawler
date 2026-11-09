@@ -115,3 +115,23 @@ export function calcLeaveDays(departureTime: Date, arrivalTime: Date): LeaveInfo
     noLeaveNeeded: leaveDays === 0,
   };
 }
+
+/**
+ * 行程区间命中的法定节假日名（如「中秋」「国庆节」）。
+ * chinese-days 的 name 形如 "National Day,国庆节,3"，周末则是 "Saturday"。
+ * 这里只取带中文名的，最多返回 2 个，用于在结果卡片上标「覆盖中秋」。
+ */
+export function holidaysInRange(startStr: string, endStr: string): string[] {
+  const names: string[] = [];
+  for (const date of eachDate(startStr, endStr)) {
+    try {
+      const detail = getDayDetail(date) as { name?: string } | undefined;
+      const cn = detail?.name?.split(',')[1];
+      if (cn && !names.includes(cn)) names.push(cn);
+    } catch {
+      // 超出数据覆盖范围，忽略
+    }
+    if (names.length >= 2) break;
+  }
+  return names;
+}

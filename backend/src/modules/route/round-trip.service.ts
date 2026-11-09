@@ -15,7 +15,7 @@ import {
   ExplorePlanResponseDto,
 } from './dto/explore-result.dto';
 import { QueryCache } from './entities/query-cache.entity';
-import { calcLeaveDays } from './utils/leave-days';
+import { calcLeaveDays, holidaysInRange } from './utils/leave-days';
 import { evaluateTripPattern } from './utils/trip-pattern';
 import { readCache, writeCache } from './utils/query-cache';
 import { pLimit } from './utils/p-limit';
@@ -63,6 +63,8 @@ function sortByLeaveThenScore(a: RoundTripResultDto, b: RoundTripResultDto): num
   if ((a.weekendScore ?? 0) !== (b.weekendScore ?? 0)) {
     return (b.weekendScore ?? 0) - (a.weekendScore ?? 0);
   }
+  // 同分时近的优先——用户先想知道"最近的周末能去哪"
+  if (a.departDate !== b.departDate) return a.departDate.localeCompare(b.departDate);
   return b.score - a.score;
 }
 
@@ -282,6 +284,7 @@ export class RoundTripService {
     nights: number;
     weekendScore: number;
     label: string;
+    holiday?: string;
   } | null {
     const outCandidates = pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
     const retCandidates = pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
@@ -296,6 +299,7 @@ export class RoundTripService {
       nights: number;
       weekendScore: number;
       label: string;
+      holiday?: string;
     } | null = null;
 
     for (const outbound of outCandidates) {
@@ -346,6 +350,7 @@ export class RoundTripService {
             nights: pattern.nights,
             weekendScore: pattern.weekendScore,
             label: pattern.label,
+            holiday: holidaysInRange(leave.departDate, leave.returnDate)[0],
           };
         }
       }
@@ -417,6 +422,7 @@ export class RoundTripService {
       nights: pattern.nights,
       weekendScore: pattern.weekendScore,
       patternLabel: pattern.label,
+      holiday: holidaysInRange(leave.departDate, leave.returnDate)[0],
     };
   }
 
@@ -544,6 +550,7 @@ export class RoundTripService {
         nights: bestPair.nights,
         weekendScore: bestPair.weekendScore,
         patternLabel: bestPair.label,
+        holiday: bestPair.holiday,
       });
     }
 
@@ -583,6 +590,7 @@ export class RoundTripService {
     mergedDestinations.sort((a, b) => {
       if (a.leaveDays !== b.leaveDays) return a.leaveDays - b.leaveDays;
       if (a.weekendScore !== b.weekendScore) return b.weekendScore - a.weekendScore;
+      if (a.departDate !== b.departDate) return a.departDate.localeCompare(b.departDate);
       return b.score - a.score;
     });
 

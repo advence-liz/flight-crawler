@@ -88,6 +88,8 @@ export interface RoundTripResult {
   weekendScore: number;
   /** 如「周五走 · 周日回」 */
   patternLabel: string;
+  /** 命中的法定节假日，如「中秋」 */
+  holiday?: string;
 }
 
 // 往返行程响应
@@ -132,6 +134,8 @@ export interface ExploreDestination {
   weekendScore: number;
   /** 如「周五走 · 周日回」 */
   patternLabel: string;
+  /** 命中的法定节假日，如「中秋」 */
+  holiday?: string;
 }
 
 export interface ExplorePlanResponse {
