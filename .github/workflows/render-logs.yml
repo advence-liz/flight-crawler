@@ -62,3 +62,10 @@ jobs:
           echo "=== 请求路径统计 ==="
           jq -r '.logs[].message' /tmp/logs.json \
             | grep -oE '(GET|POST) /api/[^ ]*' | sort | uniq -c | sort -rn | head -20 || echo '(无 HTTP 请求日志)'
+
+          echo "=== UA 统计（区分真人 / 保活探针） ==="
+          jq -r '.logs[].message' /tmp/logs.json \
+            | grep -oE 'ua="[^"]*"' | sort | uniq -c | sort -rn | head -20 || echo '(日志里还没有 UA 字段)'
+
+          echo "=== 第一条日志的完整结构（看 labels 里有没有 IP 等字段） ==="
+          jq '.logs[0]' /tmp/logs.json
