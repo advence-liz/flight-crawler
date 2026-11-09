@@ -29,7 +29,8 @@ jobs:
           URL="https://flight-crawler.onrender.com/api/health"
           # 实例可能在冷启动，单次最多等 60 秒；失败重试 3 次
           for i in 1 2 3; do
-            code=$(curl -s -o /dev/null -m 60 -w '%{http_code}' "$URL" || echo 000)
+            code=$(curl -s -o /dev/null -m 60 -w '%{http_code}' "$URL" || true)
+            code=${code:-000}
             echo "attempt $i -> HTTP $code"
             if [ "$code" = "200" ]; then
               exit 0
