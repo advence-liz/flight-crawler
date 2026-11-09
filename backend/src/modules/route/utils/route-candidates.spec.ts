@@ -3,6 +3,7 @@ import {
   outboundBucket,
   returnBucket,
   pickCandidatesPerDate,
+  keepBestPerDatePair,
 } from './route-candidates';
 
 function makeRoute(departureIso: string, arrivalIso: string, score: number): RouteResultDto {
@@ -92,5 +93,35 @@ describe('pickCandidatesPerDate', () => {
     const broken = { segments: [], totalDuration: 0, transferCount: 0, layovers: [], score: 1 } as unknown as RouteResultDto;
     expect(() => pickCandidatesPerDate([broken], 2, outboundBucket)).not.toThrow();
     expect(pickCandidatesPerDate([broken], 2, outboundBucket)).toHaveLength(0);
+  });
+});
+
+describe('keepBestPerDatePair', () => {
+  const r = (departDate: string, returnDate: string) => ({ departDate, returnDate });
+
+  it('同一对日期只留排名最高的那条', () => {
+    const routes = [
+      r('2026-11-13', '2026-11-15'),
+      r('2026-11-13', '2026-11-15'),
+      r('2026-11-20', '2026-11-22'),
+    ];
+    expect(keepBestPerDatePair(routes, 5)).toEqual([
+      r('2026-11-13', '2026-11-15'),
+      r('2026-11-20', '2026-11-22'),
+    ]);
+  });
+
+  it('不拿重复组合凑数', () => {
+    const routes = Array.from({ length: 10 }, () => r('2026-11-13', '2026-11-15'));
+    expect(keepBestPerDatePair(routes, 5).length).toBe(1);
+  });
+
+  it('limit 生效', () => {
+    const routes = [
+      r('2026-11-13', '2026-11-15'),
+      r('2026-11-20', '2026-11-22'),
+      r('2026-11-27', '2026-11-29'),
+    ];
+    expect(keepBestPerDatePair(routes, 2).length).toBe(2);
   });
 });

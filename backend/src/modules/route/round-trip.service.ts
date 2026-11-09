@@ -16,13 +16,14 @@ import {
 } from './dto/explore-result.dto';
 import { QueryCache } from './entities/query-cache.entity';
 import { calcLeaveDays } from './utils/leave-days';
-import { evaluateTripPattern, TripPattern } from './utils/trip-pattern';
+import { evaluateTripPattern } from './utils/trip-pattern';
 import { readCache, writeCache } from './utils/query-cache';
 import { pLimit } from './utils/p-limit';
 import {
   pickCandidatesPerDate,
   outboundBucket,
   returnBucket,
+  keepBestPerDatePair,
 } from './utils/route-candidates';
 
 // 探索查询缓存 TTL：6 小时
@@ -34,6 +35,9 @@ const EXPLORE_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 6 * 60 *
  * 否则它们可能因为耗时不占优而被直接淘汰，"周末友好"就无从谈起。
  */
 const CANDIDATES_PER_DATE = 2;
+
+/** 默认返回多少个方案：每个周末只给最优的一条，5 条足够覆盖近期可选出行 */
+const DEFAULT_RESULT_LIMIT = 5;
 
 /**
  * 往返组合在目的地的最短停留时间。
@@ -140,7 +144,7 @@ export class RoundTripService {
 
     // 排序：默认请假最少优先；用户想看长行程时可按停留时长/出发日/总耗时排
     const sortBy = dto.sortBy || 'leave';
-    const limit = dto.limit ?? 10;
+    const limit = dto.limit ?? DEFAULT_RESULT_LIMIT;
     const limitedRoutes = roundTripRoutes.filter(withinStayLimit);
     limitedRoutes.sort((a, b) => {
       switch (sortBy) {
@@ -157,8 +161,12 @@ export class RoundTripService {
 
     this.logger.log(`✅ 找到 ${limitedRoutes.length} 个往返方案（排序: ${sortBy}）`);
 
+    // 每对日期只留最优的一条：列表里每张卡都是不同的出行时间，
+    // 而不是「同一个周末换个航班号」凑数
+    const picked = keepBestPerDatePair(limitedRoutes, limit);
+
     return {
-      routes: limitedRoutes.slice(0, limit),
+      routes: picked,
       searchParams: {
         origin: dto.origin,
         destination: dto.destination,

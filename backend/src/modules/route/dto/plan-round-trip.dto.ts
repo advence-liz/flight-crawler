@@ -80,5 +80,6 @@ export class PlanRoundTripDto {
   @Min(1)
   @Max(50)
   @IsOptional()
-  limit?: number = 10;
+  /** 返回方案数上限。列表按"每个周末只留最优的一条"精简，5 条已能覆盖近期可选出行 */
+  limit?: number = 5;
 }

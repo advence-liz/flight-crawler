@@ -73,3 +73,26 @@ export function pickCandidatesPerDate(
   }
   return picked;
 }
+
+/**
+ * 结果精简：同一对「去程日 + 返程日」只保留排名最高的那一条。
+ *
+ * 排序按请假/周末契合度排完后，前 N 名常常是「同一批周末 × 不同的航班组合」——
+ * 对用户来说这不算更多选择，只是同一趟行程换个航班号。与其堆数量，
+ * 不如每个周末只给最优的那一条，让列表里的每张卡都是不同的出行时间。
+ */
+export function keepBestPerDatePair<T extends { departDate: string; returnDate: string }>(
+  routes: T[],
+  limit: number,
+): T[] {
+  const seen = new Set<string>();
+  const picked: T[] = [];
+  for (const route of routes) {
+    const key = `${route.departDate}|${route.returnDate}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    picked.push(route);
+    if (picked.length >= limit) break;
+  }
+  return picked;
+}
