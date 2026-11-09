@@ -446,26 +446,41 @@ function FlightMap() {
     };
   }, [origin, visibleDests, showTransfer, transferRoundTrip, transferOneWay, isMobile]);
 
+  /**
+   * 该目的地是否具备返程能力。
+   * 只有直飞可返或存在中转往返时才传 returnDate，否则规划页会被迫按往返查，
+   * 对"仅单程可达"的城市（如北京→伊犁伊宁）必然查不到任何方案。
+   */
+  const isRoundTripDest = (city: string): boolean => {
+    const direct = destinations.find(d => d.destination === city);
+    if (direct) return direct.hasReturn;
+    return transferRoundTrip.some(item => item.city === city);
+  };
+
+  const buildPlanUrl = (destination: string): string => {
+    const values = form.getFieldsValue();
+    const [startDate, endDate] = values.dateRange || [];
+    const start = startDate ? startDate.format('YYYY-MM-DD') : '';
+    const end = endDate ? endDate.format('YYYY-MM-DD') : '';
+    const roundTrip = isRoundTripDest(destination);
+    const p = new URLSearchParams({
+      tab: 'plan',
+      origin,
+      destination,
+      departureDate: start,
+      departureDateEnd: end,
+      ...(roundTrip ? { returnDate: start, returnDateEnd: end } : {}),
+    });
+    return `/route-planner?${p.toString()}`;
+  };
+
   // 每次 render 更新 ref，确保点击时读到最新的 isMobile/origin
   clickHandlerRef.current = (params: any) => {
     if (params.dataType !== 'node' || params.data?.id === origin) return;
     if (isMobile) {
       setNodeDrawer({ open: true, node: params.data });
     } else {
-      const values = form.getFieldsValue();
-      const [startDate, endDate] = values.dateRange || [];
-      const start = startDate ? startDate.format('YYYY-MM-DD') : '';
-      const end = endDate ? endDate.format('YYYY-MM-DD') : '';
-      const p = new URLSearchParams({
-        tab: 'plan',
-        origin,
-        destination: params.data.id,
-        departureDate: start,
-        departureDateEnd: end,
-        returnDate: start,
-        returnDateEnd: end,
-      });
-      navigate(`/route-planner?${p.toString()}`);
+      navigate(buildPlanUrl(params.data.id));
     }
   };
 
@@ -696,21 +711,8 @@ function FlightMap() {
                 size="large"
                 icon={<SearchOutlined />}
                 onClick={() => {
-                  const values = form.getFieldsValue();
-                  const [startDate, endDate] = values.dateRange || [];
-                  const start = startDate ? startDate.format('YYYY-MM-DD') : '';
-                  const end = endDate ? endDate.format('YYYY-MM-DD') : '';
-                  const p = new URLSearchParams({
-                    tab: 'plan',
-                    origin,
-                    destination: n.id,
-                    departureDate: start,
-                    departureDateEnd: end,
-                    returnDate: start,
-                    returnDateEnd: end,
-                  });
                   setNodeDrawer({ open: false, node: null });
-                  navigate(`/route-planner?${p.toString()}`);
+                  navigate(buildPlanUrl(n.id));
                 }}
               >
                 规划 {origin} → {nodeDrawer.node.name} 行程

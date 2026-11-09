@@ -125,3 +125,40 @@ export const planRoundTrip = (params: PlanRoundTripParams): Promise<RoundTripPla
 export const exploreDestinations = (params: ExploreParams): Promise<ExplorePlanResponse> => {
   return api.post('/routes/explore', params, { timeout: 120000 });
 };
+
+// ─── 航线可飞日期窗口 ────────────────────────────────────────
+
+export interface DirectionWindow {
+  /** 该方向所有可飞日期（升序） */
+  dates: string[];
+  first: string | null;
+  last: string | null;
+}
+
+export interface RouteDateWindow {
+  origin: string;
+  destination: string;
+  /** 实际参与计算的搜索窗口 */
+  window: { start: string | null; end: string | null };
+  maxTransfers: number;
+  outbound: DirectionWindow;
+  return: DirectionWindow;
+  /** 是否存在任一返程方案（直飞或中转） */
+  hasReturn: boolean;
+}
+
+/**
+ * 查询某条航线（含中转）真实可飞的日期窗口。
+ * 规划页用它把去程/返程区间对齐到真实有航班的日期，
+ * 避免"默认一个月区间但一条数据都没有"。
+ */
+export const getRouteDateWindow = (params: {
+  origin: string;
+  destination: string;
+  startDate?: string;
+  endDate?: string;
+  maxTransfers?: number;
+  flightType?: '666权益卡航班' | '2666权益卡航班';
+}): Promise<RouteDateWindow> => {
+  return api.get('/routes/date-window', { params, timeout: 120000 });
+};

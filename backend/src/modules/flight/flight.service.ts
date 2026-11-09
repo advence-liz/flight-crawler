@@ -475,20 +475,13 @@ export class FlightService {
    */
   async getAvailableCities(): Promise<{ origins: string[]; destinations: string[]; cityList: string[]; minDate: string | null; maxDate: string | null }> {
     // 查询数据库中航班的日期范围
-    const dateRange = await this.flightRepository
-      .createQueryBuilder('flight')
-      .select('MIN(DATE(flight.departureTime))', 'minDate')
-      .addSelect('MAX(DATE(flight.departureTime))', 'maxDate')
-      .getRawOne<{ minDate: string | null; maxDate: string | null }>();
+    const { minDate, maxDate } = await this.getFlightDateRange();
 
     // 优先从 airports 表获取已发现的机场
     const airports = await this.airportRepository.find({
       where: { enableCrawl: true },
       order: { city: 'ASC', name: 'ASC' },
     });
-
-    const minDate = dateRange?.minDate ?? null;
-    const maxDate = dateRange?.maxDate ?? null;
 
     if (airports.length > 0) {
       const airportNames = airports.map(a => a.name);
@@ -502,6 +495,21 @@ export class FlightService {
     const destinations = await this.getAvailableDestinations();
     const cityList = [...new Set([...origins, ...destinations])].sort();
     return { origins, destinations, cityList, minDate, maxDate };
+  }
+
+  /**
+   * 数据库中已有航班的日期范围（用于给"自动对齐日期区间"提供默认搜索窗口）
+   */
+  async getFlightDateRange(): Promise<{ minDate: string | null; maxDate: string | null }> {
+    const dateRange = await this.flightRepository
+      .createQueryBuilder('flight')
+      .select('MIN(DATE(flight.departureTime))', 'minDate')
+      .addSelect('MAX(DATE(flight.departureTime))', 'maxDate')
+      .getRawOne<{ minDate: string | null; maxDate: string | null }>();
+    return {
+      minDate: dateRange?.minDate ?? null,
+      maxDate: dateRange?.maxDate ?? null,
+    };
   }
 
   /**

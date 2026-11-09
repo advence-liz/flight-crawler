@@ -1,9 +1,10 @@
-import { Controller, Post, Get, Body, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
 import { RouteService } from './route.service';
 import { RoundTripService } from './round-trip.service';
 import { PlanRouteDto } from './dto/plan-route.dto';
 import { PlanRoundTripDto } from './dto/plan-round-trip.dto';
 import { ExploreRouteDto } from './dto/explore-route.dto';
+import { RouteDateWindowDto } from './dto/route-date-window.dto';
 
 @Controller('routes')
 export class RouteController {
@@ -43,6 +44,20 @@ export class RouteController {
   @HttpCode(HttpStatus.OK)
   async explore(@Body() dto: ExploreRouteDto) {
     return this.roundTripService.exploreDestinations(dto);
+  }
+
+  /**
+   * 查询某条航线（含中转）真实可飞的日期窗口
+   * GET /api/routes/date-window?origin=北京&destination=伊犁伊宁&maxTransfers=1
+   *
+   * 规划页用它把去程/返程区间对齐到真实有航班的日期
+   */
+  @Get('date-window')
+  async getDateWindow(@Query() dto: RouteDateWindowDto) {
+    if (dto.origin === dto.destination) {
+      throw new BadRequestException('出发地和目的地不能相同');
+    }
+    return this.routeService.getDateWindow(dto);
   }
 
   /**

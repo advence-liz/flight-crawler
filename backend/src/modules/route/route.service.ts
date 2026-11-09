@@ -4,6 +4,11 @@ import { Repository, LessThan } from 'typeorm';
 import { FlightService } from '../flight/flight.service';
 import { PlanRouteDto } from './dto/plan-route.dto';
 import {
+  RouteDateWindowDto,
+  RouteDateWindowResult,
+  DirectionWindow,
+} from './dto/route-date-window.dto';
+import {
   RouteResultDto,
   RoutePlanResponseDto,
   FlightSegmentDto,
@@ -123,6 +128,108 @@ export class RouteService implements OnApplicationBootstrap {
         endDate: dto.endDate,
         maxTransfers,
       },
+    };
+  }
+
+  /**
+   * 查询某条航线（含中转）真实可飞的日期窗口。
+   *
+   * 用途：规划页从目的地列表/航线图跳进来时，携带的是来源页的筛选区间
+   * （默认今天~+30 天），但这条航线可能只在其中某几天有航班，甚至完全没有。
+   * 前端拿到本接口的结果后，就能把去程/返程区间对齐到真实日期，而不是
+   * 摆一个"有区间但查不到数据"的死局。
+   *
+   * 去程/返程共用同一张图（一次建图，两次 DFS），返程方向只额外加载目标城市
+   * 出发的航班，避免跑两遍 loadFlightsByHops。
+   */
+  async getDateWindow(dto: RouteDateWindowDto): Promise<RouteDateWindowResult> {
+    const maxTransfers = dto.maxTransfers ?? 1;
+    const cacheKey = `date-window|${dto.origin}|${dto.destination}|${maxTransfers}|${dto.flightType || 'all'}|${dto.startDate || 'auto'}|${dto.endDate || 'auto'}`;
+
+    if (TRANSFER_CACHE_TTL_MS > 0) {
+      const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
+      if (cached && cached.expireAt > new Date()) {
+        return JSON.parse(cached.data) as RouteDateWindowResult;
+      }
+    }
+
+    // 未指定窗口时，用数据库里实际存在的航班日期范围，避免"今天~+30 天"落在数据之外
+    let startDate = dto.startDate;
+    let endDate = dto.endDate;
+    if (!startDate || !endDate) {
+      const range = await this.flightService.getFlightDateRange();
+      startDate = startDate || range.minDate || undefined;
+      endDate = endDate || range.maxDate || undefined;
+    }
+
+    const emptyResult: RouteDateWindowResult = {
+      origin: dto.origin,
+      destination: dto.destination,
+      window: { start: startDate ?? null, end: endDate ?? null },
+      maxTransfers,
+      outbound: { dates: [], first: null, last: null },
+      return: { dates: [], first: null, last: null },
+      hasReturn: false,
+    };
+
+    if (!startDate || !endDate || startDate > endDate) {
+      return emptyResult;
+    }
+
+    const originAirports = await this.flightService.expandCityToAirports(dto.origin);
+    const destAirports = await this.flightService.expandCityToAirports(dto.destination);
+
+    // 起点和终点都作为第一层加载，这样一张图就能同时支撑去程和返程两个方向
+    const firstLegOrigins = Array.from(new Set([...originAirports, ...destAirports]));
+    const allFlights = await this.loadFlightsByHops(
+      firstLegOrigins,
+      startDate,
+      endDate,
+      maxTransfers,
+      dto.flightType,
+    );
+
+    const graph = this.buildGraph(allFlights);
+    // 与规划页保持同一组中转停留约束，保证这里说"有航班"的日期，规划页确实查得出来
+    const outboundRoutes = this.findAllRoutesMulti(graph, originAirports, destAirports, maxTransfers, 2, 24);
+    const returnRoutes = this.findAllRoutesMulti(graph, destAirports, originAirports, maxTransfers, 2, 24);
+
+    const result: RouteDateWindowResult = {
+      ...emptyResult,
+      outbound: this.collectFirstLegDates(outboundRoutes),
+      return: this.collectFirstLegDates(returnRoutes),
+      hasReturn: returnRoutes.length > 0,
+    };
+
+    this.logger.log(
+      `日期窗口 ${dto.origin} -> ${dto.destination}: 去程 ${result.outbound.dates.length} 天，返程 ${result.return.dates.length} 天`,
+    );
+
+    if (TRANSFER_CACHE_TTL_MS > 0) {
+      await this.queryCacheRepository.save({
+        cacheKey,
+        data: JSON.stringify(result),
+        expireAt: new Date(Date.now() + TRANSFER_CACHE_TTL_MS),
+        createdAt: new Date(),
+      });
+    }
+
+    return result;
+  }
+
+  /** 从若干路线里收集首段航班的出发日期（去重升序） */
+  private collectFirstLegDates(routes: RouteResultDto[]): DirectionWindow {
+    const dates = new Set<string>();
+    for (const route of routes) {
+      const firstSegment = route.segments[0];
+      if (!firstSegment) continue;
+      dates.add(new Date(firstSegment.departureTime).toISOString().split('T')[0]);
+    }
+    const sorted = Array.from(dates).sort();
+    return {
+      dates: sorted,
+      first: sorted[0] ?? null,
+      last: sorted[sorted.length - 1] ?? null,
     };
   }
 
