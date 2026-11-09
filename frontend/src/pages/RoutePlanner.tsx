@@ -654,28 +654,37 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           onFinishFailed={() => setLoading(false)}
           initialValues={{ maxTransfers: 1, flightType: '全部', sortBy: 'leave', maxStayDays: DEFAULT_MAX_STAY_DAYS }}
         >
+          <Form.Item name="sortBy" hidden>
+            <input type="hidden" />
+          </Form.Item>
+          <Form.Item name="maxStayDays" hidden>
+            <input type="hidden" />
+          </Form.Item>
+          {/* 所有筛选项排在同一行：出发地 → 目的地 → 去程 → 返程 → 中转 → 权益卡 → 查询。
+              宽屏（xl）一屏排满，不再让次要选项单独占一行、左边空出一大片 */}
           <Row gutter={[12, 12]} style={{ width: '100%' }}>
-            <Col xs={12} md={6} lg={5}>
-              <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]}>
+            <Col xs={12} md={12} xl={4}>
+              <Form.Item name="origin" label="出发地" rules={[{ required: true, message: '请选择出发地' }]} style={{ marginBottom: 0 }}>
                 {originSelect}
               </Form.Item>
             </Col>
-            <Col xs={12} md={6} lg={7}>
-              <Form.Item name="destination" label="目的地">
+            <Col xs={12} md={12} xl={4}>
+              <Form.Item name="destination" label="目的地" style={{ marginBottom: 0 }}>
                 {destinationSelect}
               </Form.Item>
             </Col>
-            <Col xs={24} md={6} lg={6}>
-              <Form.Item name="departureRange" label="去程" rules={[{ required: true, message: '请选择去程日期' }]}>
+            <Col xs={24} md={12} xl={5}>
+              <Form.Item name="departureRange" label="去程" rules={[{ required: true, message: '请选择去程日期' }]} style={{ marginBottom: 0 }}>
                 <DatePicker.RangePicker placeholder={['最早', '最晚']} style={{ width: '100%' }}
                   getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
               </Form.Item>
             </Col>
-            <Col xs={24} md={6} lg={6}>
+            <Col xs={24} md={12} xl={5}>
               <Form.Item
                 name="returnRange"
                 label="返程"
                 dependencies={['destination']}
+                style={{ marginBottom: 0 }}
                 rules={[({ getFieldValue }) => ({
                   validator(_, value) {
                     // 留空目的地（探索模式）必须给返程区间；规划模式可以只查单程
@@ -690,23 +699,13 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
                   getPopupContainer={(trigger) => trigger.parentElement || document.body} placement="bottomLeft" />
               </Form.Item>
             </Col>
-          </Row>
-          {/* 次要选项和查询按钮单独一行，按钮靠右——避免在窄一点的屏幕上被挤到
-              下一行单独占一行、左对齐地挂在字段下面 */}
-          <Form.Item name="sortBy" hidden>
-            <input type="hidden" />
-          </Form.Item>
-          <Form.Item name="maxStayDays" hidden>
-            <input type="hidden" />
-          </Form.Item>
-          <Row gutter={[12, 12]} justify="end" style={{ width: '100%', marginTop: 12 }}>
-            <Col xs={12} md={3} lg={2}>
-              <Form.Item name="maxTransfers" label="中转">
+            <Col xs={12} md={6} xl={2}>
+              <Form.Item name="maxTransfers" label="中转" style={{ marginBottom: 0 }}>
                 <InputNumber min={0} max={2} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
-            <Col xs={12} md={3} lg={3}>
-              <Form.Item name="flightType" label="权益卡">
+            <Col xs={12} md={6} xl={2}>
+              <Form.Item name="flightType" label="权益卡" style={{ marginBottom: 0 }}>
                 <Select style={{ width: '100%' }}>
                   <Select.Option value="全部">全部</Select.Option>
                   <Select.Option value="666权益卡航班">666</Select.Option>
@@ -714,7 +713,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
                 </Select>
               </Form.Item>
             </Col>
-            <Col xs={24} md={6} lg={5} style={{ textAlign: 'right' }}>
+            <Col xs={24} md={12} xl={2} style={{ textAlign: 'right' }}>
               <Form.Item label=" " colon={false} style={{ marginBottom: 0 }}>
                 <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={loading} block={isMobile}>
                   查询
