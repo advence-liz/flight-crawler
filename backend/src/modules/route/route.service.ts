@@ -15,25 +15,16 @@ import {
 } from './dto/route-result.dto';
 import { Flight } from '../flight/entities/flight.entity';
 import { QueryCache } from './entities/query-cache.entity';
-
-/** 限制并发度的 Promise.all，每次最多同时执行 limit 个 */
-async function pLimit<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
-  const results: T[] = [];
-  let i = 0;
-  const run = async (): Promise<void> => {
-    while (i < tasks.length) {
-      const idx = i++;
-      results[idx] = await tasks[idx]();
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, run));
-  return results;
-}
-
-interface GraphNode {
-  city: string;
-  flights: Flight[];
-}
+import { pLimit } from './utils/p-limit';
+import {
+  GraphNode,
+  buildGraph,
+  expandReachableOrigins,
+  buildRouteResult,
+  calculateDuration,
+  calculateLayover,
+} from './utils/flight-graph';
+import { readCache, writeCache } from './utils/query-cache';
 
 const TRANSFER_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 24 * 60 * 60 * 1000;
 
@@ -97,7 +88,7 @@ export class RouteService implements OnApplicationBootstrap {
       this.logger.log(`目的地为空，返回所有 ${allFlights.length} 条航班`);
       const directRoutes = allFlights
         .filter(flight => inUserWindow(flight.departureTime))
-        .map(flight => this.buildRouteResult([flight]));
+        .map(flight => buildRouteResult([flight]));
       return {
         routes: directRoutes,
         searchParams: {
@@ -111,7 +102,7 @@ export class RouteService implements OnApplicationBootstrap {
     }
 
     // 2. 构建图
-    const graph = this.buildGraph(allFlights);
+    const graph = buildGraph(allFlights);
 
     // 3. 使用 DFS 查找所有可行路径（多起点 × 多终点）
     const routes = this.findAllRoutesMulti(
@@ -165,10 +156,8 @@ export class RouteService implements OnApplicationBootstrap {
     const cacheKey = `date-window|${dto.origin}|${dto.destination}|${maxTransfers}|${dto.flightType || 'all'}|${dto.startDate || 'auto'}|${dto.endDate || 'auto'}`;
 
     if (TRANSFER_CACHE_TTL_MS > 0) {
-      const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
-      if (cached && cached.expireAt > new Date()) {
-        return JSON.parse(cached.data) as RouteDateWindowResult;
-      }
+      const cached = await readCache<RouteDateWindowResult>(this.queryCacheRepository, cacheKey);
+      if (cached) return cached;
     }
 
     // 未指定窗口时，用数据库里实际存在的航班日期范围，避免"今天~+30 天"落在数据之外
@@ -208,7 +197,7 @@ export class RouteService implements OnApplicationBootstrap {
       dto.flightType,
     );
 
-    const graph = this.buildGraph(allFlights);
+    const graph = buildGraph(allFlights);
     // 与规划页保持同一组中转停留约束，保证这里说"有航班"的日期，规划页确实查得出来
     const outboundRoutes = this.findAllRoutesMulti(graph, originAirports, destAirports, maxTransfers, 2, 24);
     const returnRoutes = this.findAllRoutesMulti(graph, destAirports, originAirports, maxTransfers, 2, 24);
@@ -234,14 +223,7 @@ export class RouteService implements OnApplicationBootstrap {
       `日期窗口 ${dto.origin} -> ${dto.destination}: 去程 ${result.outbound.dates.length} 天，返程 ${result.return.dates.length} 天`,
     );
 
-    if (TRANSFER_CACHE_TTL_MS > 0) {
-      await this.queryCacheRepository.save({
-        cacheKey,
-        data: JSON.stringify(result),
-        expireAt: new Date(Date.now() + TRANSFER_CACHE_TTL_MS),
-        createdAt: new Date(),
-      });
-    }
+    await writeCache(this.queryCacheRepository, cacheKey, result, TRANSFER_CACHE_TTL_MS);
 
     return result;
   }
@@ -298,7 +280,7 @@ export class RouteService implements OnApplicationBootstrap {
       flightType,
     );
 
-    const graph = this.buildGraph(allFlights);
+    const graph = buildGraph(allFlights);
     // 建图多载了一天，这里把"首段起飞日期"落在用户区间外的路线滤掉
     const routes = this.findAllRoutesMulti(
       graph,
@@ -412,66 +394,23 @@ export class RouteService implements OnApplicationBootstrap {
   }
 
   /** 供 RoundTripService 调用的 public 代理 */
-  buildGraphPublic(flights: Flight[]) { return this.buildGraph(flights); }
+  buildGraphPublic(flights: Flight[]) { return buildGraph(flights); }
   findAllRoutesGroupedByDestPublic(...args: Parameters<typeof RouteService.prototype['findAllRoutesGroupedByDest']>) {
     return this.findAllRoutesGroupedByDest(...args);
   }
   calculateScorePublic(route: RouteResultDto) { return this.calculateScore(route); }
-  expandReachableOriginsPublic(...args: Parameters<typeof RouteService.prototype['expandReachableOrigins']>) {
-    return this.expandReachableOrigins(...args);
-  }
-
-  /**
-   * 从若干起始城市出发，在已加载的航班列表里按跳数逐层展开"自身出发航班需要
-   * 被纳入子图的城市集合"，用于从全量航班中筛出建图所需的子集。
-   * excludeFromExpansion 里的城市只会作为到达终点，不会被当成继续展开的
-   * 中转枢纽（比如返程图里不该把出发机场自己的出发航班当成中转段）。
-   */
-  private expandReachableOrigins(
+  expandReachableOriginsPublic(
     allFlights: Flight[],
     startCities: string[],
     maxTransfers: number,
     excludeFromExpansion?: Set<string>,
-  ): Set<string> {
-    const byOrigin = new Map<string, Flight[]>();
-    for (const f of allFlights) {
-      const list = byOrigin.get(f.origin);
-      if (list) list.push(f); else byOrigin.set(f.origin, [f]);
-    }
-
-    const reachable = new Set<string>(startCities);
-    let frontier = startCities;
-    for (let level = 0; level < maxTransfers; level++) {
-      const next = new Set<string>();
-      for (const city of frontier) {
-        for (const f of byOrigin.get(city) ?? []) {
-          if (!reachable.has(f.destination) && !excludeFromExpansion?.has(f.destination)) {
-            next.add(f.destination);
-          }
-        }
-      }
-      if (next.size === 0) break;
-      next.forEach((c) => reachable.add(c));
-      frontier = Array.from(next);
-    }
-    return reachable;
+  ) {
+    return expandReachableOrigins(allFlights, startCities, maxTransfers, excludeFromExpansion);
   }
 
-  /**
-   * 构建航班图
-   */
-  private buildGraph(flights: Flight[]): Map<string, GraphNode> {
-    const graph = new Map<string, GraphNode>();
 
-    flights.forEach((flight) => {
-      if (!graph.has(flight.origin)) {
-        graph.set(flight.origin, { city: flight.origin, flights: [] });
-      }
-      graph.get(flight.origin)!.flights.push(flight);
-    });
 
-    return graph;
-  }
+
 
   /**
    * 查找所有可行路径（DFS）
@@ -492,7 +431,7 @@ export class RouteService implements OnApplicationBootstrap {
 
     const dfs = (current: string) => {
       if (current === destination && path.length > 0) {
-        routes.push(this.buildRouteResult([...path]));
+        routes.push(buildRouteResult([...path]));
         return;
       }
       if (path.length > maxTransfers + 1) return;
@@ -540,7 +479,7 @@ export class RouteService implements OnApplicationBootstrap {
       if (path.length > 0 && !excludeOrigins.has(current)) {
         // 到达一个非起点城市，记录路径
         if (!result.has(current)) result.set(current, []);
-        result.get(current)!.push(this.buildRouteResult([...path]));
+        result.get(current)!.push(buildRouteResult([...path]));
       }
       if (path.length >= maxTransfers + 1) return; // 已达最大段数
       if (visited.has(current)) return;
@@ -589,7 +528,7 @@ export class RouteService implements OnApplicationBootstrap {
 
     const dfs = (current: string) => {
       if (destSet.has(current) && path.length > 0) {
-        routes.push(this.buildRouteResult([...path]));
+        routes.push(buildRouteResult([...path]));
         return;
       }
       if (path.length >= maxTransfers + 1) return;
@@ -619,43 +558,7 @@ export class RouteService implements OnApplicationBootstrap {
     return routes;
   }
 
-  /**
-   * 构建路线结果
-   */
-  private buildRouteResult(flights: Flight[]): RouteResultDto {
-    const segments: FlightSegmentDto[] = flights.map((flight) => ({
-      flightNo: flight.flightNo,
-      origin: flight.origin,
-      destination: flight.destination,
-      departureTime: flight.departureTime,
-      arrivalTime: flight.arrivalTime,
-      duration: this.calculateDuration(
-        flight.departureTime,
-        flight.arrivalTime,
-      ),
-    }));
 
-    const layovers = [];
-    for (let i = 0; i < flights.length - 1; i++) {
-      layovers.push({
-        city: flights[i].destination,
-        duration: this.calculateLayover(flights[i], flights[i + 1]),
-      });
-    }
-
-    const totalDuration = this.calculateDuration(
-      flights[0].departureTime,
-      flights[flights.length - 1].arrivalTime,
-    );
-
-    return {
-      segments,
-      totalDuration,
-      transferCount: flights.length - 1,
-      layovers,
-      score: 0, // 稍后计算
-    };
-  }
 
   /**
    * 计算评分
@@ -673,24 +576,14 @@ export class RouteService implements OnApplicationBootstrap {
     return route;
   }
 
-  /**
-   * 计算航班时长（分钟）
-   */
-  private calculateDuration(start: Date, end: Date): number {
-    return Math.floor((end.getTime() - start.getTime()) / 1000 / 60);
-  }
 
-  /**
-   * 计算中转时间（分钟）
-   */
-  private calculateLayover(flight1: Flight, flight2: Flight): number {
-    return this.calculateDuration(flight1.arrivalTime, flight2.departureTime);
-  }
+
+
 
   /** 日期字符串（YYYY-MM-DD）加 1 天 */
   private addOneDay(dateStr: string): string {
-    const d = new Date(dateStr);
-    d.setDate(d.getDate() + 1);
+    const d = new Date(`${dateStr}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
     return d.toISOString().split('T')[0];
   }
 
@@ -717,10 +610,10 @@ export class RouteService implements OnApplicationBootstrap {
 
     // 缓存命中检查（DB）
     const cacheKey = `transfer|${params.origin}|${params.departureDate}|${endDate}|${maxTransfers}|${minLayoverHours}|${maxLayoverHours}`;
-    const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
-    if (cached && cached.expireAt > new Date()) {
+    const cached = await readCache<any>(this.queryCacheRepository, cacheKey);
+    if (cached) {
       this.logger.log(`中转搜索命中 DB 缓存: ${cacheKey}`);
-      return JSON.parse(cached.data);
+      return cached;
     }
 
     // 1. 一次性加载日期范围内所有航班，内存建图（消除 N+1）
@@ -730,9 +623,9 @@ export class RouteService implements OnApplicationBootstrap {
 
     // 去程图：出发城市机场 + 按 maxTransfers 层数展开可达的城市出发的航班
     const originSet = new Set(originAirports);
-    const outboundReachableOrigins = this.expandReachableOrigins(allFlights, originAirports, maxTransfers);
+    const outboundReachableOrigins = expandReachableOrigins(allFlights, originAirports, maxTransfers);
     const outboundFlights = allFlights.filter(f => outboundReachableOrigins.has(f.origin));
-    const outboundGraph = this.buildGraph(outboundFlights);
+    const outboundGraph = buildGraph(outboundFlights);
 
     // 2. 收集去程可达的所有目的地（排除出发城市的所有机场）
     const outboundReachable = new Set<string>();
@@ -746,9 +639,9 @@ export class RouteService implements OnApplicationBootstrap {
 
     // 3. 返程图：候选目的地 + 按 maxTransfers 层数展开可达的城市出发的航班
     //    （出发机场只作为返程终点，不当成继续展开的中转枢纽，全量数据已在内存，直接过滤）
-    const returnReachableOrigins = this.expandReachableOrigins(allFlights, candidateCities, maxTransfers, originSet);
+    const returnReachableOrigins = expandReachableOrigins(allFlights, candidateCities, maxTransfers, originSet);
     const returnFlights = allFlights.filter(f => returnReachableOrigins.has(f.origin));
-    const returnGraph = this.buildGraph(returnFlights);
+    const returnGraph = buildGraph(returnFlights);
 
     // 4. 一次 DFS 收集所有目的地路径，按目的地分组
 
@@ -809,15 +702,9 @@ export class RouteService implements OnApplicationBootstrap {
       total: roundTripResults.length + oneWayResults.length,
     };
 
-    // 写入 DB 缓存（upsert）
-    const expireAt = new Date(Date.now() + TRANSFER_CACHE_TTL_MS);
-    await this.queryCacheRepository.save({
-      cacheKey,
-      data: JSON.stringify(result),
-      expireAt,
-      createdAt: new Date(),
-    });
-    this.logger.log(`中转搜索结果已写入 DB 缓存: ${cacheKey}，TTL 10 分钟`);
+    // 写入 DB 缓存（upsert，失败只丢日志）
+    await writeCache(this.queryCacheRepository, cacheKey, result, TRANSFER_CACHE_TTL_MS);
+    this.logger.log(`中转搜索结果已写入 DB 缓存: ${cacheKey}`);
 
     return result;
   }
@@ -905,8 +792,8 @@ export class RouteService implements OnApplicationBootstrap {
     for (const origin of origins) {
       this.warmupStatus.current = origin;
       const cacheKey = `transfer|${origin}|${minDate}|${maxDate}|1|2|24`;
-      const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
-      if (cached && cached.expireAt > new Date()) {
+      const cached = await readCache<any>(this.queryCacheRepository, cacheKey);
+      if (cached) {
         this.warmupStatus.skipped++;
         continue;
       }

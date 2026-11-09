@@ -2234,6 +2234,8 @@ export class CrawlerService implements OnApplicationBootstrap {
           : undefined,
       });
 
+      await this.clearPlanCaches();
+
       return {
         success: failedCount === 0,
         executionPlan,
@@ -2527,6 +2529,8 @@ export class CrawlerService implements OnApplicationBootstrap {
           ? `${failedCount} 天完全没抓到数据：${taskResults.filter(t => !t.success).map(t => t.date).join(', ')}`
           : undefined,
       });
+
+      await this.clearPlanCaches();
     } catch (error) {
       this.logger.error(`❌ 后台执行异常`, error);
 
@@ -2541,6 +2545,22 @@ export class CrawlerService implements OnApplicationBootstrap {
       this.isCrawlerRunning = false;
       this.runningTaskId = null;
       this.logger.log('🔓 后台执行：爬虫锁已释放');
+    }
+  }
+
+  /**
+   * 爬取完成后清理与航班数据强相关的规划类缓存。
+   * 这些缓存 TTL 是 6-24 小时，手动 refresh 后若不清理，用户最长一整天都看不到新数据。
+   */
+  private async clearPlanCaches(): Promise<void> {
+    const { deletedCount } = await this.flightService.clearCachesByPrefixes([
+      'explore',
+      'explore-v2',
+      'date-window',
+      'transfer',
+    ]);
+    if (deletedCount > 0) {
+      this.logger.log(`🧹 已清理规划类缓存 ${deletedCount} 条`);
     }
   }
 

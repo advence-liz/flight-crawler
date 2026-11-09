@@ -16,6 +16,8 @@ import {
 } from './dto/explore-result.dto';
 import { QueryCache } from './entities/query-cache.entity';
 import { calcLeaveDays } from './utils/leave-days';
+import { readCache, writeCache } from './utils/query-cache';
+import { pLimit } from './utils/p-limit';
 import {
   pickCandidatesPerDate,
   outboundBucket,
@@ -45,24 +47,6 @@ function sortByLeaveThenScore(a: RoundTripResultDto, b: RoundTripResultDto): num
   return b.score - a.score;
 }
 
-async function pLimit<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
-  const results: T[] = [];
-  let i = 0;
-  const run = async (): Promise<void> => {
-    while (i < tasks.length) {
-      const idx = i++;
-      results[idx] = await tasks[idx]();
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, run));
-  return results;
-}
-
-/**
- * 往返行程规划服务
- * 独立于单程路径规划，避免逻辑耦合
- */
-@Injectable()
 export class RoundTripService {
   private readonly logger = new Logger(RoundTripService.name);
 
@@ -138,10 +122,15 @@ export class RoundTripService {
     }
 
     // 4. 排序：先按请假成本（越少越好），再按综合评分
+    // 停留时长上限（0/不传 = 不限）：避免"停留最久"排序把两个月的行程顶到第一
+    const maxStayMinutes = dto.maxStayDays && dto.maxStayDays > 0 ? dto.maxStayDays * 24 * 60 : 0;
+    const withinStayLimit = (r: RoundTripResultDto) => !maxStayMinutes || r.stayDuration <= maxStayMinutes;
+
     // 排序：默认请假最少优先；用户想看长行程时可按停留时长/出发日/总耗时排
     const sortBy = dto.sortBy || 'leave';
     const limit = dto.limit ?? 10;
-    roundTripRoutes.sort((a, b) => {
+    const limitedRoutes = roundTripRoutes.filter(withinStayLimit);
+    limitedRoutes.sort((a, b) => {
       switch (sortBy) {
         case 'stay':
           return b.stayDuration - a.stayDuration || a.leaveDays - b.leaveDays;
@@ -154,10 +143,10 @@ export class RoundTripService {
       }
     });
 
-    this.logger.log(`✅ 找到 ${roundTripRoutes.length} 个往返方案（排序: ${sortBy}）`);
+    this.logger.log(`✅ 找到 ${limitedRoutes.length} 个往返方案（排序: ${sortBy}）`);
 
     return {
-      routes: roundTripRoutes.slice(0, limit),
+      routes: limitedRoutes.slice(0, limit),
       searchParams: {
         origin: dto.origin,
         destination: dto.destination,
@@ -409,10 +398,10 @@ export class RoundTripService {
     // 检查 DB 缓存
     // v2：结果里新增了请假成本字段，旧缓存（无这些字段）不能复用
     const cacheKey = `explore-v2|${dto.origin}|${dto.departureDate}|${departureDateEnd}|${dto.returnDate}|${returnDateEnd}|${maxTransfers}|${dto.flightType || 'all'}`;
-    const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
-    if (cached && cached.expireAt > new Date()) {
+    const cached = await readCache<ExplorePlanResponseDto>(this.queryCacheRepository, cacheKey);
+    if (cached) {
       this.logger.log(`探索查询命中缓存: ${cacheKey}`);
-      return JSON.parse(cached.data);
+      return cached;
     }
 
     // 1. 全量加载去程/返程日期范围内所有航班（1次SQL替代N+1）
@@ -497,12 +486,38 @@ export class RoundTripService {
       });
     }
 
+    // 同城多机场（上海浦东/上海虹桥）合并成一条，展示城市名；
+    // 否则列表里会出现"重庆江北"和"重庆"混排，且回填目的地时可能不在下拉选项里
+    const airportCityMap = await this.flightService.getAirportCityMap();
+    const byCity = new Map<string, ExploreDestinationDto>();
+    for (const item of destinations_result) {
+      const displayCity = airportCityMap.get(item.city) ?? item.city;
+      const existing = byCity.get(displayCity);
+      if (!existing) {
+        byCity.set(displayCity, { ...item, city: displayCity });
+        continue;
+      }
+      // 方案数累加；代表行程取评分更高的那组
+      existing.outboundCount += item.outboundCount;
+      existing.returnCount += item.returnCount;
+      if (item.score > existing.score) {
+        existing.bestOutbound = item.bestOutbound;
+        existing.bestReturn = item.bestReturn;
+        existing.score = item.score;
+        existing.leaveDays = item.leaveDays;
+        existing.departDate = item.departDate;
+        existing.returnDate = item.returnDate;
+        existing.noLeaveNeeded = item.noLeaveNeeded;
+      }
+    }
+    const mergedDestinations = Array.from(byCity.values());
+
     // 先看请假成本，再按评分——"周末能去哪"应该排在最前面
-    destinations_result.sort((a, b) => {
+    mergedDestinations.sort((a, b) => {
       if (a.leaveDays !== b.leaveDays) return a.leaveDays - b.leaveDays;
       return b.score - a.score;
     });
-    const top30 = destinations_result.slice(0, 30);
+    const top30 = mergedDestinations.slice(0, 30);
 
     this.logger.log(`✅ 探索完成，找到 ${top30.length} 个可往返目的地`);
 
@@ -516,14 +531,8 @@ export class RoundTripService {
       },
     };
 
-    // 写入 DB 缓存
-    const expireAt = new Date(Date.now() + EXPLORE_CACHE_TTL_MS);
-    await this.queryCacheRepository.save({
-      cacheKey,
-      data: JSON.stringify(result),
-      expireAt,
-      createdAt: new Date(),
-    });
+    // 写入 DB 缓存（失败只丢日志，不影响返回）
+    await writeCache(this.queryCacheRepository, cacheKey, result, EXPLORE_CACHE_TTL_MS);
     this.logger.log(`探索结果已缓存，TTL 6h: ${cacheKey}`);
 
     return result;

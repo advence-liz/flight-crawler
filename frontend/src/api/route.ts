@@ -31,6 +31,8 @@ export interface PlanRoundTripParams {
   sortBy?: 'leave' | 'stay' | 'departure' | 'duration';
   /** 返回条数上限，默认 10 */
   limit?: number;
+  /** 目的地最大停留天数，0/不传 = 不限 */
+  maxStayDays?: number;
 }
 
 export interface FlightSegment {

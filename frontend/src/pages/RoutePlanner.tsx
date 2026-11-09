@@ -42,6 +42,18 @@ import CuteLoader from '@/components/CuteLoader';
 
 const { useBreakpoint } = Grid;
 
+/**
+ * 权益卡筛选映射。
+ * 后端语义：666 只保留支持 666 的航班；2666 因为可订全部航班，等价于"全部"。
+ * 这里把 UI 上的三档显式映射成后端接受的两种值 / undefined。
+ */
+function toFlightTypeParam(value?: string): '666权益卡航班' | '2666权益卡航班' | undefined {
+  if (value === '666权益卡航班') return '666权益卡航班';
+  if (value === '2666权益卡航班') return '2666权益卡航班';
+  return undefined;
+}
+
+
 // ─── 工具函数 ───────────────────────────────────────────────
 
 function formatDuration(minutes: number): string {
@@ -64,6 +76,16 @@ const SORT_OPTIONS = [
   { value: 'departure', label: '出发最早' },
   { value: 'duration', label: '总耗时最短' },
 ];
+/** 停留时长筛选（天），0 = 不限；默认 14 天，避免两个月行程排到第一 */
+const STAY_OPTIONS = [
+  { value: 0, label: '不限' },
+  { value: 3, label: '≤ 3 天' },
+  { value: 7, label: '≤ 7 天' },
+  { value: 14, label: '≤ 14 天' },
+  { value: 30, label: '≤ 30 天' },
+];
+const DEFAULT_MAX_STAY_DAYS = 14;
+
 const SORT_LABELS: Record<string, string> = {
   leave: '请假成本优先',
   stay: '停留时长优先',
@@ -275,6 +297,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const [mode, setMode] = useState<'explore' | 'plan'>('explore');
   const [searched, setSearched] = useState(false);
   const sortBy = Form.useWatch('sortBy', form) ?? 'leave';
+  const maxStayDays = Form.useWatch('maxStayDays', form) ?? DEFAULT_MAX_STAY_DAYS;
   const triggeredRef = useRef(false);
   /** 表单字段只在挂载时初始化一次，避免 cities 接口返回后二次执行覆盖用户改动 */
   const initializedRef = useRef(false);
@@ -365,7 +388,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           origin,
           destination,
           maxTransfers: values.maxTransfers ?? 1,
-          flightType: values.flightType === '666权益卡航班' ? '666权益卡航班' : undefined,
+          flightType: toFlightTypeParam(values.flightType),
         });
         // 对齐请求可能跑了很久，期间用户可能已经把航线改成别的了，
         // 这时旧航线的窗口不能套到新航线上
@@ -492,7 +515,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     const returnDate: string | undefined = retStart?.format('YYYY-MM-DD');
     const returnDateEnd: string | undefined = retEnd ? retEnd.format('YYYY-MM-DD') : returnDate;
 
-    const flightType = values.flightType === '666权益卡航班' ? '666权益卡航班' : undefined;
+    const flightType = toFlightTypeParam(values.flightType);
 
     setLoading(true);
     setSearched(true);
@@ -544,6 +567,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           maxLayoverHours: 24,
           flightType,
           sortBy: sortBy as 'leave' | 'stay' | 'departure' | 'duration',
+          maxStayDays: values.maxStayDays ?? DEFAULT_MAX_STAY_DAYS,
         });
         if (isStale()) return;
 
@@ -628,7 +652,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           layout="vertical"
           onFinish={handleSearch}
           onFinishFailed={() => setLoading(false)}
-          initialValues={{ maxTransfers: 1, flightType: '2666权益卡航班', sortBy: 'leave' }}
+          initialValues={{ maxTransfers: 1, flightType: '全部', sortBy: 'leave', maxStayDays: DEFAULT_MAX_STAY_DAYS }}
         >
           <Row gutter={[12, 12]} style={{ width: '100%' }}>
             <Col xs={12} md={6} lg={5}>
@@ -672,6 +696,9 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
           <Form.Item name="sortBy" hidden>
             <input type="hidden" />
           </Form.Item>
+          <Form.Item name="maxStayDays" hidden>
+            <input type="hidden" />
+          </Form.Item>
           <Row gutter={[12, 12]} justify="end" style={{ width: '100%', marginTop: 12 }}>
             <Col xs={12} md={3} lg={2}>
               <Form.Item name="maxTransfers" label="中转">
@@ -681,6 +708,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
             <Col xs={12} md={3} lg={3}>
               <Form.Item name="flightType" label="权益卡">
                 <Select style={{ width: '100%' }}>
+                  <Select.Option value="全部">全部</Select.Option>
                   <Select.Option value="666权益卡航班">666</Select.Option>
                   <Select.Option value="2666权益卡航班">2666</Select.Option>
                 </Select>
@@ -730,18 +758,33 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
               共 {isRoundTrip ? roundTripRoutes.length : oneWayRoutes.length} 个方案
               {isRoundTrip ? `（往返，已按${SORT_LABELS[sortBy] || '请假成本优先'}排序）` : '（单程）'}
             </span>
-            <Space size={4}>
-              <span style={{ fontSize: 12 }}>排序</span>
-              <Select
-                size="small"
-                style={{ width: 132 }}
-                value={sortBy}
-                options={SORT_OPTIONS}
-                onChange={(v) => {
-                  form.setFieldValue('sortBy', v);
-                  form.submit();
-                }}
-              />
+            <Space size={8}>
+              <Space size={4}>
+                <span style={{ fontSize: 12 }}>停留</span>
+                <Select
+                  size="small"
+                  style={{ width: 96 }}
+                  value={maxStayDays}
+                  options={STAY_OPTIONS}
+                  onChange={(v) => {
+                    form.setFieldValue('maxStayDays', v);
+                    form.submit();
+                  }}
+                />
+              </Space>
+              <Space size={4}>
+                <span style={{ fontSize: 12 }}>排序</span>
+                <Select
+                  size="small"
+                  style={{ width: 120 }}
+                  value={sortBy}
+                  options={SORT_OPTIONS}
+                  onChange={(v) => {
+                    form.setFieldValue('sortBy', v);
+                    form.submit();
+                  }}
+                />
+              </Space>
             </Space>
           </div>
           <Row gutter={[12, 12]}>

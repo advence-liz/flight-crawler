@@ -4,6 +4,7 @@ import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Flight } from './entities/flight.entity';
 import { Airport } from './entities/airport.entity';
 import { QueryCache } from '../route/entities/query-cache.entity';
+import { readCache, writeCache } from '../route/utils/query-cache';
 import { QueryFlightsDto } from './dto/query-flights.dto';
 import {
   DestinationResultDto,
@@ -65,10 +66,10 @@ export class FlightService {
     // 仅在包含返程时使用缓存
     if (includeReturn) {
       const cacheKey = `destinations|${origin}|${startDate}|${endDate}|${flightTypeKey}`;
-      const cached = await this.queryCacheRepository.findOne({ where: { cacheKey } });
-      if (cached && cached.expireAt > new Date()) {
+      const cached = await readCache<DestinationsResponseDto>(this.queryCacheRepository, cacheKey);
+      if (cached) {
         this.logger.log(`目的地查询命中缓存: ${cacheKey}`);
-        return JSON.parse(cached.data);
+        return cached;
       }
     }
 
@@ -180,13 +181,7 @@ export class FlightService {
     // 仅 includeReturn=true 时写入缓存
     if (includeReturn) {
       const cacheKey = `destinations|${origin}|${startDate}|${endDate}|${flightTypeKey}`;
-      const expireAt = new Date(Date.now() + DESTINATIONS_CACHE_TTL_MS);
-      await this.queryCacheRepository.save({
-        cacheKey,
-        data: JSON.stringify(result),
-        expireAt,
-        createdAt: new Date(),
-      });
+      await writeCache(this.queryCacheRepository, cacheKey, result, DESTINATIONS_CACHE_TTL_MS);
       this.logger.log(`目的地查询结果已写入缓存: ${cacheKey}`);
     }
 
@@ -495,6 +490,12 @@ export class FlightService {
     const destinations = await this.getAvailableDestinations();
     const cityList = [...new Set([...origins, ...destinations])].sort();
     return { origins, destinations, cityList, minDate, maxDate };
+  }
+
+  /** 机场名 -> 城市名 映射（探索结果统一展示城市名用） */
+  async getAirportCityMap(): Promise<Map<string, string>> {
+    const airports = await this.airportRepository.find();
+    return new Map(airports.map(a => [a.name, a.city]));
   }
 
   /**
@@ -810,6 +811,26 @@ export class FlightService {
       .where('cacheKey IN (:...keys)', { keys })
       .execute();
     return { deletedCount: result.affected ?? 0 };
+  }
+
+  /**
+   * 按 cacheKey 前缀批量清理缓存（爬取完成后清掉规划类缓存用）
+   */
+  async clearCachesByPrefixes(prefixes: string[]): Promise<{ deletedCount: number }> {
+    if (prefixes.length === 0) return { deletedCount: 0 };
+    try {
+      const conditions = prefixes.map((_, i) => `cacheKey LIKE :p${i}`).join(' OR ');
+      const params = Object.fromEntries(prefixes.map((p, i) => [`p${i}`, `${p}|%`]));
+      const result = await this.queryCacheRepository
+        .createQueryBuilder()
+        .delete()
+        .where(conditions, params)
+        .execute();
+      return { deletedCount: result.affected ?? 0 };
+    } catch {
+      // 清理失败不影响主流程
+      return { deletedCount: 0 };
+    }
   }
 
   /**

@@ -65,6 +65,16 @@ export class PlanRoundTripDto {
   @IsOptional()
   sortBy?: string = 'leave';
 
+  /**
+   * 目的地的最大停留天数（默认由前端传 14）。
+   * 0 或不传 = 不限；用于避免"停留最久"排序把两个月的行程顶到第一。
+   */
+  @IsInt()
+  @Min(0)
+  @Max(90)
+  @IsOptional()
+  maxStayDays?: number;
+
   /** 返回条数上限（默认 10） */
   @IsInt()
   @Min(1)
