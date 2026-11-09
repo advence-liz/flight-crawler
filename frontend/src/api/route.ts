@@ -136,6 +136,8 @@ export interface ExploreDestination {
 
 export interface ExplorePlanResponse {
   destinations: ExploreDestination[];
+  /** 可往返目的地总数（可能大于 destinations.length，后端只返回最优的前若干个） */
+  total?: number;
   searchParams: {
     origin: string;
     departureDate: string;

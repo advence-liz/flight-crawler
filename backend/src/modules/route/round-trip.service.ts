@@ -39,6 +39,9 @@ const CANDIDATES_PER_DATE = 2;
 /** 默认返回多少个方案：每个周末只给最优的一条，5 条足够覆盖近期可选出行 */
 const DEFAULT_RESULT_LIMIT = 5;
 
+/** 探索模式最多返回多少个目的地：再多就是噪声，用户挑不过来 */
+const EXPLORE_RESULT_LIMIT = 12;
+
 /**
  * 往返组合在目的地的最短停留时间。
  * 不做这个约束时，会出现"20:20 落地、21:10 就返程"的假往返——它总耗时最短、
@@ -452,7 +455,7 @@ export class RoundTripService {
 
     // 检查 DB 缓存
     // v2：结果里新增了请假成本字段，旧缓存（无这些字段）不能复用
-    const cacheKey = `explore-v2|${dto.origin}|${dto.departureDate}|${departureDateEnd}|${dto.returnDate}|${returnDateEnd}|${maxTransfers}|${dto.flightType || 'all'}`;
+    const cacheKey = `explore-v3|${dto.origin}|${dto.departureDate}|${departureDateEnd}|${dto.returnDate}|${returnDateEnd}|${maxTransfers}|${dto.flightType || 'all'}`;
     const cached = await readCache<ExplorePlanResponseDto>(this.queryCacheRepository, cacheKey);
     if (cached) {
       this.logger.log(`探索查询命中缓存: ${cacheKey}`);
@@ -555,10 +558,13 @@ export class RoundTripService {
         byCity.set(displayCity, { ...item, city: displayCity });
         continue;
       }
-      // 方案数累加；代表行程取评分更高的那组
+      // 方案数累加；代表行程取"更周末友好、其次评分更高"的那组
       existing.outboundCount += item.outboundCount;
       existing.returnCount += item.returnCount;
-      if (item.score > existing.score) {
+      if (
+        item.weekendScore > existing.weekendScore ||
+        (item.weekendScore === existing.weekendScore && item.score > existing.score)
+      ) {
         existing.bestOutbound = item.bestOutbound;
         existing.bestReturn = item.bestReturn;
         existing.score = item.score;
@@ -566,21 +572,32 @@ export class RoundTripService {
         existing.departDate = item.departDate;
         existing.returnDate = item.returnDate;
         existing.noLeaveNeeded = item.noLeaveNeeded;
+        existing.weekendScore = item.weekendScore;
+        existing.nights = item.nights;
+        existing.patternLabel = item.patternLabel;
       }
     }
     const mergedDestinations = Array.from(byCity.values());
 
-    // 先看请假成本，再按评分——"周末能去哪"应该排在最前面
+    // 请假最少 → 越"下班走/周末回"越靠前 → 综合评分
     mergedDestinations.sort((a, b) => {
       if (a.leaveDays !== b.leaveDays) return a.leaveDays - b.leaveDays;
+      if (a.weekendScore !== b.weekendScore) return b.weekendScore - a.weekendScore;
       return b.score - a.score;
     });
-    const top30 = mergedDestinations.slice(0, 30);
 
-    this.logger.log(`✅ 探索完成，找到 ${top30.length} 个可往返目的地`);
+    // 只给最优的若干个：一次列 30 个目的地，用户根本挑不过来，
+    // 排在后面的既不是最省假也不是最舒服，等于噪声
+    const totalDestinations = mergedDestinations.length;
+    const topDestinations = mergedDestinations.slice(0, EXPLORE_RESULT_LIMIT);
+
+    this.logger.log(
+      `✅ 探索完成，共 ${totalDestinations} 个可往返目的地，返回前 ${topDestinations.length} 个`,
+    );
 
     const result: ExplorePlanResponseDto = {
-      destinations: top30,
+      destinations: topDestinations,
+      total: totalDestinations,
       searchParams: {
         origin: dto.origin,
         departureDate: dto.departureDate,

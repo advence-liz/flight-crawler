@@ -310,6 +310,8 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
   const [searched, setSearched] = useState(false);
   /** 当前展示的结果来自本地快照时的年龄（毫秒），真实结果回来后清空 */
   const [snapshotAge, setSnapshotAge] = useState<number | null>(null);
+  /** 探索模式可往返目的地总数（后端只返回最优的前若干个） */
+  const [exploreTotal, setExploreTotal] = useState<number | null>(null);
   /** 请求超过阈值仍未返回 → 提示后端可能在冷启动 */
   const [slowHint, setSlowHint] = useState(false);
   const sortBy = Form.useWatch('sortBy', form) ?? 'leave';
@@ -560,6 +562,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
     setOneWayRoutes([]);
     setRoundTripRoutes([]);
     setSnapshotAge(null);
+    setExploreTotal(null);
     setOriginCookie(values.origin);
 
     // 目的地留空 → 探索：从这里出发能去哪
@@ -585,6 +588,7 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
         const resp = await exploreDestinations(exploreParams);
         if (isStale()) return;
         setExploreResults(resp.destinations);
+        setExploreTotal(resp.total ?? resp.destinations.length);
         setSnapshotAge(null);
         writeSnapshot(cacheKey, resp.destinations);
         if (resp.destinations.length === 0) {
@@ -807,7 +811,10 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
       {!loading && mode === 'explore' && exploreResults.length > 0 && (
         <>
           <div style={{ marginBottom: 12, color: '#666' }}>
-            共找到 <strong>{exploreResults.length}</strong> 个可往返目的地（按请假成本优先排序）
+            共找到 <strong>{exploreTotal ?? exploreResults.length}</strong> 个可往返目的地
+            {exploreTotal && exploreTotal > exploreResults.length
+              ? `，这里是最值得去的 ${exploreResults.length} 个（按请假成本优先排序）`
+              : '（按请假成本优先排序）'}
             {snapshotAge !== null && (
               <Tag color="default" style={{ marginLeft: 8 }}>
                 {formatAge(snapshotAge)}前的数据 · 更新中

@@ -26,7 +26,10 @@ export class ExploreDestinationDto {
 }
 
 export class ExplorePlanResponseDto {
+  /** 本次返回的目的地（已按请假成本 → 周末契合度 → 评分排好序，只返回最优的前若干个） */
   destinations: ExploreDestinationDto[];
+  /** 可往返目的地的总数（可能大于 destinations.length） */
+  total: number;
   searchParams: {
     origin: string;
     departureDate: string;
