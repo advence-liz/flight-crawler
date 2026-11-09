@@ -887,6 +887,18 @@ function TripTab({ cities, urlParams, dateRange }: TripTabProps) {
             justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
           }}>
             <span>
+              <Button
+                type="link"
+                size="small"
+                style={{ padding: 0, marginRight: 8 }}
+                onClick={() => {
+                  // 从"某条航线"退回"能去哪"：清空目的地再查一次
+                  form.setFieldValue('destination', undefined);
+                  form.submit();
+                }}
+              >
+                ← 换个目的地
+              </Button>
               共 {isRoundTrip ? roundTripRoutes.length : oneWayRoutes.length} 个方案
               {isRoundTrip ? `（往返，已按${SORT_LABELS[sortBy] || '请假成本优先'}排序）` : '（单程）'}
               {snapshotAge !== null && (
