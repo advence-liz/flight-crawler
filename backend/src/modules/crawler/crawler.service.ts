@@ -408,23 +408,13 @@ export class CrawlerService implements OnApplicationBootstrap {
       }
       this.logger.log(`✅ 查询按钮点击成功`);
 
-      // 等页面真的出结果：正文里出现航班号（解析就靠这个正则），或出现无数据提示。
-      // 超时上限和原来的固定等待一样（3 秒）——有数据就提前走，没数据就等同原行为，
-      // 所以最坏情况不比现在慢。
-      const dataReady = await page
-        .waitForFunction(
-          () => {
-            const text = document.body.innerText || '';
-            if (/暂时没有可预订的航班|没有找到|暂无数据/.test(text)) return true;
-            return /[A-Z]{2}\d{4}/.test(text);
-          },
-          { timeout: 3000 },
-        )
-        .then(() => true)
-        .catch(() => false);
-      this.logger.log(dataReady ? '⚡ 结果已出现，立刻解析' : '⌛ 3 秒内未出现结果，按无数据处理');
-      // 结果出现后再留一点渲染余量
-      await this.pause(page, dataReady ? 150 : 0);
+      // 固定等待，让结果完整渲染后再解析。
+      //
+      // 试过换成"正文出现航班号就继续"的事件驱动等待（本地 3 个航线条数完全一致、
+      // 每次快 2~4 秒），但它无法排除"列表渐进渲染、只解析到前几条"的风险——
+      // 而爬取是"先删后写"，少解析几条会直接丢掉数据。收益约 20%，
+      // 不值得拿数据完整性去换，保持固定等待。
+      await this.pause(page, 3000);
 
       // 检查页面状态（通过文本内容判断）
       const pageState = await page.evaluate(() => {
