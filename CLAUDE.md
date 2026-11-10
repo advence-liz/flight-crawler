@@ -292,6 +292,7 @@ cd frontend && npm run dev
 - [爬虫配置](./docs/CRAWLER_SETUP.md) - 调试和配置步骤
 - [按日期调试](./docs/DEBUG_CRAWLER_BY_DATE.md) - 调试特定日期和出发地
 - [城市机场识别](./docs/CITY_AIRPORT_IDENTIFICATION.md) - 城市名和机场名识别流程
+- [数据刷新与调度](./docs/DATA_REFRESH.md) - 爬取→data 分支→Render 重建的完整链路、刷新频率的实测依据、失败模式与运维手册
 
 ### 部署
 - [部署指南](./docs/DEPLOYMENT.md) - 生产环境部署说明
