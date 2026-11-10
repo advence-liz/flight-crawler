@@ -286,7 +286,7 @@ export class CrawlerService implements OnApplicationBootstrap {
         timeout: 30000,
       });
 
-      // 等待页面加载
+      // 等待页面加载（goto 已经等到 networkidle2，这里保留固定等待兜底）
       await this.pause(page, 3000);
 
       // 先截图看看初始状态
@@ -408,11 +408,23 @@ export class CrawlerService implements OnApplicationBootstrap {
       }
       this.logger.log(`✅ 查询按钮点击成功`);
 
-      // 智能等待：等待数据加载完成或确认无数据
-      this.logger.log('⏳ 智能等待页面加载...');
-
-      // 等待3秒让页面加载
-      await this.pause(page, 3000);
+      // 等页面真的出结果：正文里出现航班号（解析就靠这个正则），或出现无数据提示。
+      // 超时上限和原来的固定等待一样（3 秒）——有数据就提前走，没数据就等同原行为，
+      // 所以最坏情况不比现在慢。
+      const dataReady = await page
+        .waitForFunction(
+          () => {
+            const text = document.body.innerText || '';
+            if (/暂时没有可预订的航班|没有找到|暂无数据/.test(text)) return true;
+            return /[A-Z]{2}\d{4}/.test(text);
+          },
+          { timeout: 3000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      this.logger.log(dataReady ? '⚡ 结果已出现，立刻解析' : '⌛ 3 秒内未出现结果，按无数据处理');
+      // 结果出现后再留一点渲染余量
+      await this.pause(page, dataReady ? 150 : 0);
 
       // 检查页面状态（通过文本内容判断）
       const pageState = await page.evaluate(() => {
