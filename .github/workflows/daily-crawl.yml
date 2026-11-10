@@ -144,38 +144,41 @@ jobs:
             if [ "$i" = "60" ]; then echo "::error::发现机场轮询超时"; exit 1; fi
           done
 
-      - name: 触发发现航班（滚动窗口，异步任务）
+      - name: 爬取（失败自动重试一次）
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
-        id: trigger
         run: |
           # 手动触发用输入值；定时任务统一刷未来 30 天
           DAYS="${{ github.event.inputs.days || '30' }}"
           START=$(date -u +%F)
           END=$(date -u -d "+${DAYS} days" +%F)
-          echo "爬取窗口：$START ~ $END"
-          RESP=$(curl -sf -X POST http://localhost:3000/api/crawler/initialize/refresh \
-            -H "Content-Type: application/json" \
-            -d "{\"startDate\":\"$START\",\"endDate\":\"$END\"}")
-          echo "$RESP"
-          TASK_ID=$(node -e "console.log(JSON.parse(process.argv[1]).taskId)" "$RESP")
-          if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "undefined" ]; then
-            echo "::error::未拿到 taskId，可能已同步完成或接口报错"; exit 1
-          fi
-          echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
 
-      - name: 轮询直到爬取任务结束
-        if: ${{ github.event.inputs.skip_crawl != 'true' }}
-        run: |
-          TASK_ID="${{ steps.trigger.outputs.task_id }}"
-          for i in $(seq 1 1080); do   # 最长 1080*15s = 4.5 小时
-            sleep 15
-            LOG=$(curl -sf "http://localhost:3000/api/crawler/logs/$TASK_ID")
-            STATUS=$(node -e "console.log(JSON.parse(process.argv[1]).status)" "$LOG")
-            echo "[$i] status=$STATUS"
-            if [ "$STATUS" = "success" ]; then echo "$LOG"; exit 0; fi
-            if [ "$STATUS" = "failed" ]; then echo "::error::爬取任务失败"; echo "$LOG"; exit 1; fi
+          for attempt in 1 2; do
+            echo "▶ 第 $attempt 次爬取（窗口 $START ~ $END）"
+            RESP=$(curl -sf -X POST http://localhost:3000/api/crawler/initialize/refresh \
+              -H "Content-Type: application/json" \
+              -d "{\"startDate\":\"$START\",\"endDate\":\"$END\"}") || { echo "::warning::触发失败"; sleep 30; continue; }
+            TASK_ID=$(node -e "console.log(JSON.parse(process.argv[1]).taskId)" "$RESP" 2>/dev/null)
+            if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "undefined" ]; then
+              echo "::warning::未拿到 taskId"; sleep 30; continue
+            fi
+
+            # 轮询到结束（最长 1080*15s = 4.5 小时）
+            OK=0
+            for i in $(seq 1 1080); do
+              sleep 15
+              LOG=$(curl -sf "http://localhost:3000/api/crawler/logs/$TASK_ID" || true)
+              STATUS=$(node -e "console.log(JSON.parse(process.argv[1]).status)" "$LOG" 2>/dev/null)
+              if [ $((i % 20)) -eq 0 ]; then echo "[$attempt][$i] status=$STATUS"; fi
+              if [ "$STATUS" = "success" ]; then echo "$LOG"; OK=1; break; fi
+              if [ "$STATUS" = "failed" ]; then echo "::warning::爬取任务失败"; echo "$LOG"; break; fi
+            done
+            if [ "$OK" = "1" ]; then exit 0; fi
+            echo "::warning::第 $attempt 次爬取未成功"
+            sleep 30
           done
-          echo "::error::轮询超时"; exit 1
+
+          echo "::error::连续两次爬取都失败，本轮放弃（不发布，线上数据保持不变）"
+          exit 1
 
       - name: 清理查询缓存 + 旧执行日志（控制 db 体积）
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
@@ -199,6 +202,18 @@ jobs:
           sqlite3 "$DB" "DELETE FROM flights WHERE departureTime > datetime('now', '+31 days');"
           sqlite3 "$DB" "VACUUM;"
           echo "清理后：$(du -h "$DB" | cut -f1)"
+
+      - name: 发布前数据量校验（防止异常爬取把线上数据冲掉）
+        run: |
+          DB=backend/data/flight-crawler.db
+          NEW=$(sqlite3 "$DB" "SELECT COUNT(*) FROM flights;" 2>/dev/null || echo 0)
+          OLD=$(curl -sf -m 30 https://flight-crawler.onrender.com/api/flights/data-freshness \
+                | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).total||0)}catch{console.log(0)}})")
+          echo "本次 $NEW 条 / 线上 $OLD 条"
+          if [ "${OLD:-0}" -gt 0 ] && [ "$NEW" -lt $(( OLD * 5 / 10 )) ]; then
+            echo "::error::新数据只有 $NEW 条，不足线上 $OLD 条的一半，疑似爬取异常，已中止发布"
+            exit 1
+          fi
 
       - name: 发布 db 到 data 分支（orphan force-push，不进 main 历史）
         run: |
