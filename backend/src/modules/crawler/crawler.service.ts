@@ -117,6 +117,26 @@ export class CrawlerService implements OnApplicationBootstrap {
    * @param saveToDb 是否保存到数据库（默认 true）
    * @returns 返回爬取的航班数据
    */
+  /**
+   * 页面等待的缩放系数。
+   *
+   * 整个爬取流程里大量 `waitForTimeout(1~3s)`，按 44 机场 × 30 天 × 2 卡种算，
+   * 光是"干等"就占了整轮 40 多分钟里的绝大部分。海航页面本身是接口驱动、
+   * `goto(networkidle2)` 已经等到网络空闲，很多固定等待是冗余的。
+   *
+   * 这里所有固定等待统一走 pause()，用 CRAWL_WAIT_SCALE 缩放（默认 1 = 原行为），
+   * 上线前用它实测"缩短后结果是否仍然一致"。
+   */
+  private readonly waitScale: number = (() => {
+    const raw = Number(process.env.CRAWL_WAIT_SCALE);
+    return Number.isFinite(raw) && raw > 0 ? raw : 1;
+  })();
+
+  /** 带缩放的固定等待（下限 100ms，避免缩放到 0 把页面点崩） */
+  private async pause(page: any, ms: number): Promise<void> {
+    await page.waitForTimeout(Math.max(100, Math.round(ms * this.waitScale)));
+  }
+
   async crawlFlights(
     origin: string,
     dates: string[],
@@ -267,7 +287,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       });
 
       // 等待页面加载
-      await page.waitForTimeout(3000);
+      await this.pause(page, 3000);
 
       // 先截图看看初始状态
       const timestamp = new Date().getTime();
@@ -344,7 +364,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       this.logger.log(`✅ 所有权益卡选择完成: ${cardTypeLabel}`);
 
       // 等待页面响应
-      await page.waitForTimeout(1000);
+      await this.pause(page, 1000);
 
       // 截图查看权益卡选择后的状态
       if (enableScreenshot) await this.safeScreenshot(page, path.join(this.screenshotDir, `${timestamp}-${origin}-${date}-${cardTypeShort}-card-selected.png`), '权益卡选择后截图');
@@ -360,7 +380,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       this.logger.log(`✅ 出发地选择成功: ${origin}`);
 
       // 等待页面响应
-      await page.waitForTimeout(1000);
+      await this.pause(page, 1000);
 
       // 选择日期
       this.logger.log(`📅 开始选择日期: ${date}`);
@@ -373,7 +393,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       this.logger.log(`✅ 日期选择成功: ${date}`);
 
       // 等待页面响应
-      await page.waitForTimeout(1000);
+      await this.pause(page, 1000);
 
       // 截图查看操作后的状态
       if (enableScreenshot) await this.safeScreenshot(page, path.join(this.screenshotDir, `${timestamp}-${origin}-${date}-${cardTypeShort}-after.png`), '操作后截图');
@@ -392,7 +412,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       this.logger.log('⏳ 智能等待页面加载...');
 
       // 等待3秒让页面加载
-      await page.waitForTimeout(3000);
+      await this.pause(page, 3000);
 
       // 检查页面状态（通过文本内容判断）
       const pageState = await page.evaluate(() => {
@@ -893,7 +913,7 @@ export class CrawlerService implements OnApplicationBootstrap {
         timeout: 30000,
       });
 
-      await page.waitForTimeout(2000);
+      await this.pause(page, 2000);
 
       // 1. 选择出发地
       // 2. 选择日期
@@ -954,12 +974,12 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy1) {
         this.logger.log('✅ [策略1] 点击 .dep-box 成功');
-        await page.waitForTimeout(1000);
+        await this.pause(page, 1000);
 
         // 输入城市名称
         this.logger.log(`⌨️ 输入城市: ${origin}`);
         await page.keyboard.type(origin, { delay: 100 });
-        await page.waitForTimeout(1500);
+        await this.pause(page, 1500);
 
         // 选择城市
         const citySelected = await this.selectCityFromDropdown(page, origin);
@@ -992,7 +1012,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy2) {
         this.logger.log('✅ [策略2] 找到出发地输入框');
-        await page.waitForTimeout(1000);
+        await this.pause(page, 1000);
 
         // 清空输入框
         await page.keyboard.down('Control');
@@ -1003,7 +1023,7 @@ export class CrawlerService implements OnApplicationBootstrap {
         // 输入城市名称
         await page.keyboard.type(origin, { delay: 100 });
         this.logger.log(`⌨️ 输入城市: ${origin}`);
-        await page.waitForTimeout(1500);
+        await this.pause(page, 1500);
 
         // 查找并点击匹配的城市选项
         const citySelected = await this.selectCityFromDropdown(page, origin);
@@ -1033,12 +1053,12 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy3) {
         this.logger.log('✅ [策略3] 点击出发地选择器');
-        await page.waitForTimeout(1000);
+        await this.pause(page, 1000);
 
         // 输入城市名称
         await page.keyboard.type(origin, { delay: 100 });
         this.logger.log(`⌨️ 输入城市: ${origin}`);
-        await page.waitForTimeout(1500);
+        await this.pause(page, 1500);
 
         // 选择城市
         const citySelected = await this.selectCityFromDropdown(page, origin);
@@ -1073,7 +1093,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy4) {
         this.logger.log(`✅ [策略4] 通过 select 下拉框选择成功: ${origin}`);
-        await page.waitForTimeout(1000);
+        await this.pause(page, 1000);
         return true;
       }
 
@@ -1110,7 +1130,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy1) {
         this.logger.log('✅ [策略1] 点击 .query-btn 成功');
-        await page.waitForTimeout(3000);
+        await this.pause(page, 3000);
         return true;
       }
 
@@ -1135,7 +1155,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy2) {
         this.logger.log('✅ [策略2] 通过文本匹配找到查询按钮');
-        await page.waitForTimeout(3000);
+        await this.pause(page, 3000);
         return true;
       }
 
@@ -1165,7 +1185,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy3) {
         this.logger.log('✅ [策略3] 通过属性找到查询按钮');
-        await page.waitForTimeout(3000);
+        await this.pause(page, 3000);
         return true;
       }
 
@@ -1193,7 +1213,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy4) {
         this.logger.log('✅ [策略4] 通过文本模糊匹配找到查询按钮');
-        await page.waitForTimeout(3000);
+        await this.pause(page, 3000);
         return true;
       }
 
@@ -1215,7 +1235,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy5) {
         this.logger.log('✅ [策略5] 通过表单提交');
-        await page.waitForTimeout(3000);
+        await this.pause(page, 3000);
         return true;
       }
 
@@ -1264,14 +1284,14 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (citySelected) {
         this.logger.log(`✅ 选择城市成功: ${cityName}`);
-        await page.waitForTimeout(1000);
+        await this.pause(page, 1000);
         return true;
       }
 
       // 如果没有找到下拉项，尝试直接回车确认
       this.logger.log('⚠️ 未找到下拉项，尝试回车确认');
       await page.keyboard.press('Enter');
-      await page.waitForTimeout(1000);
+      await this.pause(page, 1000);
       this.logger.log('✅ 已按回车键');
       return true;
 
@@ -1312,7 +1332,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy1) {
         this.logger.log(`✅ [策略1] 通过 .search-item 选择成功: ${cardType}`);
-        await page.waitForTimeout(1500);
+        await this.pause(page, 1500);
         return true;
       }
 
@@ -1364,7 +1384,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy2) {
         this.logger.log(`✅ [策略2] 通过 radio 选择成功: ${cardType}`);
-        await page.waitForTimeout(1500);
+        await this.pause(page, 1500);
         return true;
       }
 
@@ -1403,7 +1423,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
         if (strategy3) {
           this.logger.log(`✅ [策略3] 通过文本匹配选择成功: ${cardType}`);
-          await page.waitForTimeout(1500);
+          await this.pause(page, 1500);
           return true;
         }
       }
@@ -1434,7 +1454,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy4) {
         this.logger.log(`✅ [策略4] 通过属性选择成功: ${cardType}`);
-        await page.waitForTimeout(1500);
+        await this.pause(page, 1500);
         return true;
       }
 
@@ -1459,7 +1479,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (strategy5) {
         this.logger.log(`✅ [策略5] 通过完全匹配选择成功: ${cardType}`);
-        await page.waitForTimeout(1500);
+        await this.pause(page, 1500);
         return true;
       }
 
@@ -1506,7 +1526,7 @@ export class CrawlerService implements OnApplicationBootstrap {
       this.logger.log('✅ 日期选择器已点击');
 
       // 等待日历弹出并渲染
-      await page.waitForTimeout(1000);
+      await this.pause(page, 1000);
 
       // 等待日历容器渲染（最多等待 5 秒）
       let calendarReady = false;
@@ -1519,7 +1539,7 @@ export class CrawlerService implements OnApplicationBootstrap {
           this.logger.log(`[诊断] 日历已渲染 (等待 ${(i + 1) * 500}ms)`);
           break;
         }
-        await page.waitForTimeout(500);
+        await this.pause(page, 500);
       }
 
       if (!calendarReady) {
@@ -1557,7 +1577,7 @@ export class CrawlerService implements OnApplicationBootstrap {
 
       if (dateSelected) {
         this.logger.log(`✅ 日期选择成功: ${targetDate}`);
-        await page.waitForTimeout(1000);
+        await this.pause(page, 1000);
         return true;
       }
 
@@ -2641,16 +2661,19 @@ export class CrawlerService implements OnApplicationBootstrap {
       // 删除本任务日期范围的旧数据并保存新数据
       this.logger.log(`🔄 [子任务] 开始替换数据：删除 ${dates[0]} 至 ${dates[dates.length - 1]} 的旧数据...`);
 
-      // 先删除本任务日期范围的旧数据（无论是否爬到新数据）
-      const deletedCount = await this.flightService.deleteDiscoveryFlights(dates);
-      this.logger.log(`🗑️ [子任务] 已删除 ${deletedCount} 条旧数据（日期范围: ${dates[0]} ~ ${dates[dates.length - 1]}）`);
-
-      // 如果爬到了新数据，则保存
+      // 先删后写：删掉本任务日期范围的旧数据，再写入这次爬到的。
+      //
+      // 但「一条都没爬到」时不删——那更可能是页面没渲染完 / 接口超时 / 临时风控，
+      // 而不是这一天真的没航班。直接删会把好好的数据清空，下一轮才补回来。
       if (allCollectedFlights.length > 0) {
+        const deletedCount = await this.flightService.deleteDiscoveryFlights(dates);
+        this.logger.log(`🗑️ [子任务] 已删除 ${deletedCount} 条旧数据（日期范围: ${dates[0]} ~ ${dates[dates.length - 1]}）`);
         await this.flightService.saveFlights(allCollectedFlights);
         this.logger.log(`✅ [子任务] 已保存 ${allCollectedFlights.length} 条新数据`);
       } else {
-        this.logger.warn(`⚠️ [子任务] 未爬取到数据，已清空该日期范围的旧数据`);
+        this.logger.warn(
+          `⚠️ [子任务] ${dates[0]} ~ ${dates[dates.length - 1]} 未爬取到数据，保留原数据不动（可能是页面未渲染完或临时风控）`,
+        );
       }
 
       // 完成日志
@@ -2744,16 +2767,19 @@ export class CrawlerService implements OnApplicationBootstrap {
       // 删除本任务日期范围的旧数据并保存新数据
       this.logger.log(`🔄 [子任务] 开始替换数据：删除 ${dates[0]} 至 ${dates[dates.length - 1]} 的旧数据...`);
 
-      // 先删除本任务日期范围的旧数据（无论是否爬到新数据）
-      const deletedCount = await this.flightService.deleteDiscoveryFlights(dates);
-      this.logger.log(`🗑️ [子任务] 已删除 ${deletedCount} 条旧数据（日期范围: ${dates[0]} ~ ${dates[dates.length - 1]}）`);
-
-      // 如果爬到了新数据，则保存
+      // 先删后写：删掉本任务日期范围的旧数据，再写入这次爬到的。
+      //
+      // 但「一条都没爬到」时不删——那更可能是页面没渲染完 / 接口超时 / 临时风控，
+      // 而不是这一天真的没航班。直接删会把好好的数据清空，下一轮才补回来。
       if (allCollectedFlights.length > 0) {
+        const deletedCount = await this.flightService.deleteDiscoveryFlights(dates);
+        this.logger.log(`🗑️ [子任务] 已删除 ${deletedCount} 条旧数据（日期范围: ${dates[0]} ~ ${dates[dates.length - 1]}）`);
         await this.flightService.saveFlights(allCollectedFlights);
         this.logger.log(`✅ [子任务] 已保存 ${allCollectedFlights.length} 条新数据`);
       } else {
-        this.logger.warn(`⚠️ [子任务] 未爬取到数据，已清空该日期范围的旧数据`);
+        this.logger.warn(
+          `⚠️ [子任务] ${dates[0]} ~ ${dates[dates.length - 1]} 未爬取到数据，保留原数据不动（可能是页面未渲染完或临时风控）`,
+        );
       }
 
       // 完成日志

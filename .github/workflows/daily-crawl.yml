@@ -37,6 +37,11 @@ jobs:
     timeout-minutes: 300
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      # 页面固定等待的缩放系数，默认 1（不缩放）。
+      # 实测 0.8 在某些航线上会静默返回 0 条（页面没渲染完就点查询），
+      # 而爬取是"先删后写"，0 条会把当天数据清空——风险大于收益，保持 1。
+      # 真要提速得改成事件驱动等待（等接口响应而不是睡固定时长），那是独立改造。
+      CRAWL_WAIT_SCALE: '1'
     steps:
       - uses: actions/checkout@v4
 
@@ -56,8 +61,17 @@ jobs:
           path: ~/.cache/puppeteer
           key: puppeteer-chromium-${{ hashFiles('backend/package-lock.json') }}
 
+      # npm ci 实测要 5 分钟，占整轮的 10%。node_modules 按 lockfile 精确缓存，
+      # 命中就直接跳过安装（runner 镜像是固定的，原生模块可以复用）
+      - name: 缓存 node_modules
+        id: nm-cache
+        uses: actions/cache@v4
+        with:
+          path: backend/node_modules
+          key: node-modules-${{ hashFiles('backend/package-lock.json') }}
+
       - name: 安装后端依赖（含 puppeteer，CI 环境不省这个）
-        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        if: ${{ github.event.inputs.skip_crawl != 'true' && steps.nm-cache.outputs.cache-hit != 'true' }}
         working-directory: backend
         # 网络抖动时 npm ci 本身没有超时兜底，历史上出现过卡满 300 分钟 job 超时的情况。
         # 步骤级 timeout-minutes 只能兜底"整体卡死"，但如果第一次 npm ci 本身被这个
