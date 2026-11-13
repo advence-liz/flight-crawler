@@ -634,6 +634,12 @@ function FlightMap() {
               opts={{ renderer: 'canvas' }}
               showLoading={loading}
               onEvents={stableOnEvents}
+              // force 布局图在 merge 更新时，echarts 会按节点 id 复用旧布局缓存（preservedPoints）。
+              // 换出发地后新 origin 不在缓存里，layout 被置 [NaN, NaN]；它又是 fixed 节点，力模拟不修正，
+              // NaN 沿边传播污染全图坐标 → 画布全黑且无报错，刷新才能恢复。
+              // 图数据本就每次全量重算（chartOption 依赖 origin/destinations 全量重建），
+              // 不依赖 merge 语义，这里必须 notMerge 整体替换，代价是切城市后缩放/拖拽位置重置（符合直觉）。
+              notMerge={true}
             />
           ) : (
             <div style={{ height: isMobile ? Math.round(window.innerHeight * 0.62) : 660, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: '#475569' }}>
