@@ -1,0 +1,68 @@
+name: Verify homepage preview once
+
+"on":
+  push:
+    branches: [ops/verify-homepage-preview-20261126]
+    paths: ['.github/workflows/verify-homepage-preview-once.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate-and-refresh-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Build the generator without downloading a browser
+        working-directory: backend
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Regenerate from published SQLite without writing to either branch
+        id: preview
+        env:
+          LANG: C
+        run: |
+          source="$RUNNER_TEMP/flight-data"
+          git clone --depth=1 --single-branch --branch=data "https://github.com/${GITHUB_REPOSITORY}.git" "$source"
+          sha=$(git -C "$source" rev-parse HEAD)
+          output="$RUNNER_TEMP/verified-preview.json"
+          timeout 30s node backend/scripts/generate-default-preview.cjs "$source/backend/data/flight-crawler.db" "$output"
+          cmp "$output" "$source/default-destinations.v1.json"
+          printf 'Published preview is byte-identical to regeneration from data commit %s\n' "$sha"
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+      - name: Trigger one Render frontend refresh using the existing deployment credential
+        env:
+          PREVIEW_SHA: ${{ steps.preview.outputs.sha }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          current=$(git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/data | cut -f1)
+          main=$(git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)
+          if [ "$main" != "$(git rev-parse HEAD^)" ]; then
+            printf 'Production code changed during verification; skip the extra frontend build.\n' >&2
+            exit 1
+          fi
+          if [ "$current" != "$PREVIEW_SHA" ]; then
+            printf 'Data changed during verification; skip the extra frontend build.\n' >&2
+            exit 1
+          fi
+          if [ -z "$RENDER_API_KEY" ]; then
+            printf 'The scheduled deployment credential is unavailable.\n' >&2
+            exit 1
+          fi
+          reply=$(curl -fsS --max-time 30 -X POST 'https://api.render.com/v1/services/srv-d6t9dunpm1nc739e4dr0/deploys' \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d '{"clearCache":"do_not_clear"}')
+          jq -r '"Requested frontend deploy: \(.id // .deploy.id // "see Render Deploys")"' <<< "$reply"
