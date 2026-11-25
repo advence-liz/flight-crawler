@@ -4,7 +4,7 @@ import { Alert, Button, Tabs, Tag } from 'antd';
 import { Link, useSearchParams } from 'react-router-dom';
 import styles from './UsageGuide.module.css';
 
-const endpoint = 'http://127.0.0.1:3000/api/mcp';
+const endpoint = 'https://flight-crawler.onrender.com/api/mcp';
 const clients = [
   {
     name: 'Claude Code', file: '.mcp.json', docs: 'https://code.claude.com/docs/en/mcp',
@@ -48,7 +48,7 @@ function ConfigExample({ client }: { client: (typeof clients)[number] }) {
       <Button size="small" icon={<CopyOutlined />} onClick={() => void copy()}>复制配置</Button>
       <span className={styles.copyNotice} role="status">{notice}</span>
     </div>
-    <pre className={styles.code} tabIndex={0} aria-label={`${client.name} 本地配置示例`}><code>{client.config}</code></pre>
+    <pre className={styles.code} tabIndex={0} aria-label={`${client.name} 线上配置示例`}><code>{client.config}</code></pre>
     <p className={styles.configHelp}>{client.help} <a href={client.docs} target="_blank" rel="noreferrer">客户端官方文档</a></p>
   </div>;
 }
@@ -84,19 +84,11 @@ function WebsiteGuide() {
 function McpGuide() {
   return <div className={styles.panel}>
     <h2>让你的 AI 直接查随心飞航班</h2>
-    <Alert type="info" showIcon message="如何获取 MCP Token" description={<>登录后在<Link to="/account">我的账号</Link>查看是否可以发放 Token。如果页面提示 MCP 尚未开放，下面的示例只能在本地使用。接入已启用的部署时，用部署方提供的 HTTPS 地址和自己的 MCP Token，不要使用管理员 Token。</>} />
+    <Alert type="info" showIcon message="如何获取 MCP Token" description={<>登录后打开<Link to="/account">我的账号</Link>，在「MCP 访问」里发放个人 Token。Token 明文只显示一次；请妥善保存，不要把它发给别人，也不要使用管理员 Token。</>} />
     <ol className={styles.steps}>
       <li>
-        <h3>选择客户端，复制配置</h3>
-        <p>先启用本地后端的 MCP 并拿到接入信息，再把下方配置合并到客户端已有的配置里。不要覆盖其他 MCP 服务。</p>
-        <details className={styles.localSetup}>
-          <summary>本地启用步骤（供部署者）</summary>
-          <ul>
-            <li>在后端进程环境中配置 <code>ADMIN_TOKEN</code> 和 <code>FLIGHT_MCP_QUOTA_DATABASE_URL</code>。后者是有建表权限的 PostgreSQL 连接串，仅后端使用。</li>
-            <li>在本地后端设置 <code>FLIGHT_MCP_ENABLED=true</code>，从 <code>backend</code> 目录运行 <code>npm run dev</code>。如果端口不是 3000，同步修改客户端地址。</li>
-            <li>进入站内管理模式，在「用户管理」创建受邀用户并发放 MCP Token。将发放的值交给对应用户；下方 <code>FLIGHT_MCP_TOKEN</code> 是客户端使用的变量名。</li>
-          </ul>
-        </details>
+        <h3>复制线上配置到你的 AI 客户端</h3>
+        <p>选择客户端，把配置合并到已有设置里，并按提示提供你的个人 Token。不要覆盖其他 MCP 服务。</p>
         <Tabs size="small" items={clients.map(client => ({ key: client.name, label: client.name, children: <ConfigExample client={client} /> }))} />
         <p>ChatGPT 网页版不能直接使用这套固定 Token 配置。</p>
       </li>

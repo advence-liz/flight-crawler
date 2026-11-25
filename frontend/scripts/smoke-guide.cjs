@@ -42,8 +42,10 @@ async function check() {
     };
     await page.setViewport({ width: 1280, height: 900 });
     await page.goto(`${origin}/#/destination`, { waitUntil: 'domcontentloaded' });
-    await click('[role="menuitem"]', '使用指南');
-    await page.waitForFunction(() => document.querySelector('h1')?.textContent === '使用指南');
+    const brand = 'header a[href="#/guide"]';
+    await page.waitForSelector(`${brand} img`, { visible: true });
+    await page.click(`${brand} img`);
+    await page.waitForFunction(() => location.hash === '#/guide' && document.querySelector('h1')?.textContent === '使用指南');
     await click('a', '打开行程规划');
     await page.waitForFunction(() => location.hash === '#/route-planner');
     await click('[role="menuitem"]', '使用指南');
@@ -56,7 +58,9 @@ async function check() {
     await click('button', '复制配置');
     await page.waitForFunction(() => typeof window.__copiedGuideExample === 'string');
     const copied = await page.evaluate(() => window.__copiedGuideExample);
-    assert.match(copied, /http:\/\/127\.0\.0\.1:3000\/api\/mcp/);
+    assert.match(copied, /https:\/\/flight-crawler\.onrender\.com\/api\/mcp/);
+    assert.doesNotMatch(copied, /127\.0\.0\.1|localhost/);
+    assert.doesNotMatch(await page.locator('body').map(el => el.innerText).wait(), /本地启用步骤|FLIGHT_MCP_QUOTA_DATABASE_URL/);
     assert.match(copied, /bearer_token_env_var = "FLIGHT_MCP_TOKEN"/);
     await click('[role="tab"]', 'VS Code');
     await visibleExample('${input:flight-mcp-token}');
@@ -67,6 +71,11 @@ async function check() {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.body.innerText.includes('如何获取 MCP Token'));
     await page.setViewport({ width: 390, height: 844 });
+    await page.goto(`${origin}/#/destination`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector(brand, { visible: true });
+    await page.focus(brand);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => location.hash === '#/guide');
     await page.waitForSelector('[aria-label="打开导航菜单"]', { visible: true });
     await page.click('[aria-label="打开导航菜单"]');
     await click('[role="menuitem"]', '使用指南');
@@ -84,7 +93,7 @@ async function check() {
     await page.reload({ waitUntil: 'networkidle0' });
     assert.equal((await status).status(), 200);
     assert.equal(await page.$(launcher), null, 'anonymous visitor must not see the Agent launcher');
-    console.log('PASS: desktop and mobile navigation, planner link, MCP deep link, four client examples, clipboard, no mobile overflow, admin-only Agent launcher');
+    console.log('PASS: desktop logo click, mobile brand keyboard navigation, guide menu, planner link, MCP deep link, four client examples, clipboard, no mobile overflow, anonymous Agent hidden');
   } finally {
     await browser?.close();
     server.httpServer.close();

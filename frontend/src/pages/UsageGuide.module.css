@@ -21,7 +21,7 @@
 .guide h3 { font-size: 16px; margin-bottom: 5px; }
 .guide p { margin: 4px 0 0; color: var(--muted); }
 .guide a { color: var(--accent); }
-.guide a:focus-visible, .code:focus-visible, .localSetup summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.guide a:focus-visible, .code:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .header { display: flex; align-items: flex-start; gap: 14px; }
 .header > :first-child { padding: 10px; font-size: 24px; color: var(--accent); background: var(--tint); border-radius: 8px; }
 .snapshot { padding: 8px 0 14px; font-size: 13px; }
@@ -38,9 +38,6 @@
 .steps > li::marker { color: var(--accent); font-weight: 700; }
 .steps > li + li { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 18px; }
 .steps :global(.ant-tabs) { margin-top: 8px; }
-.localSetup { margin: 10px 0 2px; color: var(--muted); }
-.localSetup summary { cursor: pointer; color: var(--accent); }
-.localSetup ul { padding-left: 20px; }
 .codeHeader { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .codeHeader > code { margin-right: auto; }
 .code { margin: 8px 0; padding: 12px; background: var(--tint); border: 1px solid var(--line); border-radius: 6px; overflow: auto; font-size: 12px; }

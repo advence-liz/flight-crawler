@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Layout as AntLayout, Menu, Drawer, Button, Grid, Modal, Input, message } from 'antd';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined, LockOutlined, UnlockOutlined, BookOutlined, TeamOutlined } from '@ant-design/icons';
 import { getAdminToken, setAdminToken, clearAdminToken } from '@/utils/auth';
 import { getAiTripStatus } from '@/api/ai-trip';
@@ -91,22 +91,22 @@ function Layout() {
         alignItems: 'center',
         padding: isMobile ? '0 16px' : '0 50px',
       }}>
-        <div style={{
+        <Link to="/guide" aria-label="随心飞分析工具：使用指南" style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: isMobile ? 16 : 8,
           color: 'white',
           fontSize: isMobile ? '16px' : '20px',
-          marginRight: isMobile ? '16px' : '50px',
+          marginRight: isMobile ? 'auto' : '50px',
           whiteSpace: 'nowrap',
+          lineHeight: 1.4,
         }}>
-          <img src="/logo.svg" alt="logo" style={{ width: isMobile ? 28 : 36, height: isMobile ? 28 : 36 }} />
-          {!isMobile && '随心飞分析工具'}
-        </div>
+          <img src="/logo.svg" alt="" style={{ width: isMobile ? 28 : 36, height: isMobile ? 28 : 36 }} />
+          随心飞分析工具
+        </Link>
 
         {isMobile ? (
           <>
-            <span style={{ color: 'white', flex: 1, fontSize: 16 }}>随心飞分析工具</span>
             <Button
               type="text"
               icon={<MenuOutlined />}
