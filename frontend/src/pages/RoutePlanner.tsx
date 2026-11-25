@@ -29,6 +29,7 @@ import {
   planRoundTrip,
   exploreDestinations,
   RouteResult,
+  type PlanRouteParams,
   RoundTripResult,
   ExploreDestination,
   getRouteDateWindow,
@@ -780,7 +781,7 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
           }
         }
       } else {
-        const resp = await planRoute({
+        const planParams = {
           origin: values.origin,
           destination,
           departureDate,
@@ -790,9 +791,21 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
           maxLayoverHours: 24,
           flightType,
           sortBy: sortBy === 'duration' ? 'duration' : sortBy === 'departure' ? 'departure' : 'score',
-        });
+        } satisfies PlanRouteParams;
+        const cacheKey = snapshotKey('plan-one-way', planParams);
+        const snap = readSnapshot<RouteResult[]>(cacheKey, SNAPSHOT_TTL_MS);
+        if (Array.isArray(snap?.data) && snap.data.length > 0) {
+          setOneWayRoutes(snap.data);
+          setSnapshotAge(snap.ageMs);
+          showedSnapshot = true;
+          setLoading(false);
+        }
+        const resp = await planRoute(planParams);
         if (isStale()) return;
         setOneWayRoutes(resp.routes);
+        setSnapshotAge(null);
+        // An authoritative empty result also invalidates any older nonempty snapshot.
+        writeSnapshot(cacheKey, resp.routes);
         if (resp.routes.length === 0) {
           if (retryDateWindow && await retryAlignedDates()) return;
           if (!isStale()) message.warning('未找到合适的单程方案');
@@ -1033,7 +1046,7 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
               {isRoundTrip ? `（往返，已按${SORT_LABELS[sortBy] || '请假成本优先'}排序）` : '（单程）'}
               {snapshotAge !== null && (
                 <Tag color="default" style={{ marginLeft: 8 }}>
-                  {formatAge(snapshotAge)}的数据 · 更新中
+                  {formatAge(snapshotAge)}的缓存数据
                 </Tag>
               )}
             </span>

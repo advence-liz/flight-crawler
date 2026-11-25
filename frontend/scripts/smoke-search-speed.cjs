@@ -18,7 +18,9 @@ const puppeteer = createRequire(resolve(__dirname, '../../backend/package.json')
     const calls = [];
     let failFull = false;
     let noRoute = false;
+    let holdPlan = false;
     let holdMetadata = false;
+    let heldPlan;
     const requests = [];
     page.on('request', request => {
       const url = new URL(request.url());
@@ -41,6 +43,7 @@ const puppeteer = createRequire(resolve(__dirname, '../../backend/package.json')
         case '/api/routes/date-window':
           return json({ outbound: { dates: ['2026-12-08'], first: '2026-12-08', last: '2026-12-08' }, return: { dates: [] }, hasReturn: false });
         case '/api/routes/plan': {
+          if (holdPlan) { heldPlan = request; return; }
           const departureDate = JSON.parse(request.postData()).departureDate;
           return json({ routes: noRoute && departureDate === '2026-12-01' ? [] : [{
             segments: [{ origin: '上海', destination: '北京', flightNo: 'HU7701',
@@ -73,6 +76,17 @@ const puppeteer = createRequire(resolve(__dirname, '../../backend/package.json')
     const plans = () => calls.filter(c => c.path === '/api/routes/plan').map(c => JSON.parse(c.body).departureDate);
     assert.deepEqual(plans(), ['2026-12-01']);
     assert.ok(!calls.some(c => c.path === '/api/routes/date-window'), 'a successful explicit date search does not wait on alignment');
+    calls.length = 0;
+    holdPlan = true;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitText('HU7701');
+    await waitText('的缓存数据');
+    assert.deepEqual(plans(), ['2026-12-01'], 'a cached route is visible before the refresh finishes');
+    await heldPlan.respond({ status: 503, contentType: 'application/json', body: '{}' });
+    await waitText('最新数据暂时没取到，先显示上次的结果');
+    await waitText('HU7701');
+    await page.evaluate(() => localStorage.clear());
+    holdPlan = false;
     calls.length = 0;
     noRoute = true;
     await page.reload({ waitUntil: 'domcontentloaded' });
