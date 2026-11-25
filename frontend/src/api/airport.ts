@@ -1,4 +1,4 @@
-import api from './index';
+import api, { adminApi } from './index';
 
 export interface Airport {
   id: number;
@@ -52,12 +52,12 @@ export const updateAirport = (id: number, data: Partial<Airport>): Promise<{
   message: string;
   airport: Airport;
 }> => {
-  return api.put(`/airports/${id}`, data);
+  return adminApi.put(`/airports/${id}`, data);
 };
 
 // 删除机场
 export const deleteAirport = (id: number): Promise<{ success: boolean; message: string }> => {
-  return api.delete(`/airports/${id}`);
+  return adminApi.delete(`/airports/${id}`);
 };
 
 // 批量删除机场
@@ -66,5 +66,5 @@ export const batchDeleteAirports = (ids: number[]): Promise<{
   deletedCount: number;
   message: string;
 }> => {
-  return api.post('/airports/batch-delete', { ids });
+  return adminApi.post('/airports/batch-delete', { ids });
 };

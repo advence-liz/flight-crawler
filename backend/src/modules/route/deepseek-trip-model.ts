@@ -25,7 +25,7 @@ export class DeepSeekTripModel implements OnApplicationBootstrap {
 
   searchEnabled(): boolean {
     return process.env.TRIP_AI_ENABLED === 'true' && Boolean(process.env.DEEPSEEK_API_KEY)
-      && (process.env.NODE_ENV === 'development' || Boolean(process.env.ADMIN_TOKEN));
+      && (process.env.NODE_ENV === 'development' || process.env.SITE_AUTH_ENABLED === 'true');
   }
 
   private target(): Target | undefined {
@@ -59,7 +59,7 @@ export class DeepSeekTripModel implements OnApplicationBootstrap {
 
   usage() {
     const databaseUrl = process.env.TRIP_AI_BUDGET_DATABASE_URL?.trim();
-    if (!databaseUrl || (process.env.NODE_ENV !== 'development' && !process.env.ADMIN_TOKEN)) {
+    if (!databaseUrl) {
       throw new ServiceUnavailableException('AI 额度账本尚未配置');
     }
     return this.budget.summary(databaseUrl);

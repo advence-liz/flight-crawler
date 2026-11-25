@@ -71,7 +71,7 @@ export default function Account() {
         <span className={styles.avatar} aria-hidden="true">{account ? <UserOutlined /> : <MailOutlined />}</span>
         <div>
           <h1>{title}</h1>
-          {account ? <><strong>{account.name || '随心飞用户'}</strong><p>{account.email}</p></>
+          {account ? <><strong>{account.name || '随心飞用户'}</strong><p>{account.email}{account.isAdmin === true ? ' · 管理员' : ''}</p></>
             : <p>登录后可使用行程助手，或让自己的 AI 查航班。</p>}
         </div>
       </div>

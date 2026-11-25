@@ -12,16 +12,14 @@ import { TripAgentService } from './trip-agent.service';
 import { TripAiBudget } from './trip-ai-budget';
 import { TripAiLedger } from './trip-ai-ledger';
 import { FlightMcpController, FlightMcpTools } from './flight-mcp.controller';
-import { FlightMcpQuota } from './flight-mcp-quota';
 import { FlightMcpUsersController } from './flight-mcp-users.controller';
 import { FlightSitePriority } from './flight-site-priority';
 import { SiteAccountController } from './site-account.controller';
-import { SiteAuthService } from './site-auth.service';
 
 @Module({
   imports: [FlightModule, TypeOrmModule.forFeature([QueryCache])],
   controllers: [RouteController, AiTripController, FlightMcpController, FlightMcpUsersController, SiteAccountController],
-  providers: [RouteService, RoundTripService, AiTripService, DeepSeekTripModel, TripAgentService, TripAiBudget, TripAiLedger, FlightMcpTools, FlightMcpQuota, FlightSitePriority, SiteAuthService],
-  exports: [RouteService, FlightSitePriority, SiteAuthService],
+  providers: [RouteService, RoundTripService, AiTripService, DeepSeekTripModel, TripAgentService, TripAiBudget, TripAiLedger, FlightMcpTools, FlightSitePriority],
+  exports: [RouteService, FlightSitePriority],
 })
 export class RouteModule {}

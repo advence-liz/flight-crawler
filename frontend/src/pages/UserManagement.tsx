@@ -7,7 +7,8 @@ import styles from './UserManagement.module.css';
 
 function failure(error: unknown) {
   const status = isAxiosError(error) ? error.response?.status : undefined;
-  if (status === 401) return '管理员验证未通过，请退出管理模式后重新登录。';
+  if (status === 401) return '登录已失效，请在「我的账号」重新登录。';
+  if (status === 403) return '此账号没有管理员权限。';
   if (status === 503) return '用户与额度数据库暂不可用，请稍后重试。';
   if (status === 409 || status === 404) return '该用户的状态可能已改变，请刷新名单后再试。';
   return '操作未完成，请确认网络后重试。';
@@ -112,7 +113,7 @@ export default function UserManagement() {
     </Modal>
     <Modal title={`MCP Token${secret ? `：${secret.name}` : ''}`} open={Boolean(secret)} destroyOnHidden onCancel={() => setSecret(undefined)}
       footer={<Button type="primary" onClick={() => setSecret(undefined)}>完成</Button>}>
-      <Alert type="warning" showIcon message="仅显示这一次。请通过安全渠道交给受邀用户，不要发送管理员 Token。" />
+      <Alert type="warning" showIcon message="仅显示这一次。请通过安全渠道交给受邀用户。" />
       {secret && <Input.TextArea className={styles.secret} aria-label="一次性显示的 MCP Token" value={secret.token} readOnly autoSize />}
       <Button onClick={() => { if (secret) void copy(secret.token); }}>复制 Token</Button> <span role="status">{copyNote}</span>
     </Modal>

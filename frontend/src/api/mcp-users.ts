@@ -1,4 +1,4 @@
-import api from './index';
+import { adminApi as api } from './index';
 
 export interface McpUser {
   id: string;

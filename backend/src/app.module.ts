@@ -8,6 +8,7 @@ import { ConfigModule } from '@nestjs/config';
 import { WinstonModule } from 'nest-winston';
 import { FlightModule } from './modules/flight/flight.module';
 import { CrawlerModule } from './modules/crawler/crawler.module';
+import { SiteAuthModule } from './modules/route/site-auth.module';
 import { RouteModule } from './modules/route/route.module';
 import { winstonConfig } from './config/logger.config';
 
@@ -36,6 +37,7 @@ import { winstonConfig } from './config/logger.config';
     ScheduleModule.forRoot(),
 
     // 业务模块
+    SiteAuthModule,
     FlightModule,
     CrawlerModule,
     RouteModule,

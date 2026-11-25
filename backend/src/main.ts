@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
+import { crawlerCiSocket } from './modules/crawler/crawler-ci.guard';
 import { SiteAuthService } from './modules/route/site-auth.service';
 
 async function bootstrap() {
@@ -61,6 +62,13 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   const port = process.env.PORT || 3000;
+  const ciSocket = crawlerCiSocket();
+  if (process.env.CRAWLER_CI_SOCKET && !ciSocket) throw Error('Invalid crawler CI socket configuration');
+  if (ciSocket) {
+    await app.listen(ciSocket);
+    Logger.log('Crawler CI listening on a private Unix socket', 'Bootstrap');
+    return;
+  }
   await app.listen(port);
 
   console.log(`🚀 应用已启动: http://localhost:${port}`);

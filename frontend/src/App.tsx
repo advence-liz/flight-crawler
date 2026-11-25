@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Routes, Route } from 'react-router-dom';
 import { Spin } from 'antd';
 import Layout from './components/Layout';
-import { getAdminToken } from './utils/auth';
+import { useAccountPage } from './hooks/useSiteSession';
 
 // 目的地查询是默认落地页，同步加载；其余页面按路由懒加载，避免 echarts/china-map-echarts/xlsx 等重库拖累首屏体积
 import DestinationQuery from './pages/DestinationQuery';
@@ -17,9 +17,12 @@ const CronManagement = lazy(() => import('./pages/CronManagement'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
 const Account = lazy(() => import('./pages/Account'));
 
-// 管理员路由保护：无 token 时重定向到首页
+// Wait for the shared verified session before checking the server-issued role.
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  return getAdminToken() ? <>{children}</> : <Navigate to="/destination" replace />;
+  const { accountSession: { session } } = useAccountPage();
+  if (session.status === 'checking') return <PageFallback />;
+  if (session.status !== 'member') return <Navigate to="/account" replace />;
+  return session.account.isAdmin === true ? <>{children}</> : <Navigate to="/destination" replace />;
 }
 
 const PageFallback = () => (

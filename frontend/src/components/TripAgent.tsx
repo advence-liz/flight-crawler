@@ -3,7 +3,6 @@ import { AimOutlined, PlusOutlined } from '@ant-design/icons';
 import { Bubble, Sender } from '@ant-design/x';
 import { Alert, Button, Modal } from 'antd';
 import { isAxiosError } from 'axios';
-import { chatWithTripAgent } from '@/api/ai-trip';
 import { chatAsSiteUser, SiteRequestError } from '@/api/site-auth';
 import type { AiTripResults, TripAgentReply, TripChatMessage, TripSearchCriteria } from '@/api/ai-trip';
 import { formatFlightTime } from '@/utils/datetime';
@@ -53,7 +52,7 @@ function SearchCriteria({ value }: { value: TripSearchCriteria }) {
   return <details className={styles.criteria}><summary>本次查询条件</summary><p>{items.filter(Boolean).join(' · ')}</p></details>;
 }
 
-export default function TripAgent({ isAdmin }: { isAdmin: boolean }) {
+export default function TripAgent() {
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
@@ -78,7 +77,7 @@ export default function TripAgent({ isAdmin }: { isAdmin: boolean }) {
     setError(undefined);
     setPending(true);
     try {
-      const reply = await (isAdmin ? chatWithTripAgent : chatAsSiteUser)(next.slice(-11).map((t) => t.message), criteria);
+      const reply = await chatAsSiteUser(next.slice(-11).map((t) => t.message), criteria);
       setTurns([...next, { id: ++sequence.current, message: { role: 'assistant', content: reply.text }, reply }]);
       if (reply.criteria) setCriteria(reply.criteria);
     } catch (err) {

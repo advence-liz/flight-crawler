@@ -40,5 +40,3 @@ export interface TripAgentReply {
 }
 
 export const getAiTripStatus = () => api.get<unknown, { chatEnabled?: boolean }>('/routes/ai-trip/status');
-export const chatWithTripAgent = (messages: TripChatMessage[], previous?: TripSearchCriteria) =>
-  api.post<unknown, TripAgentReply>('/routes/ai-trip/chat', { messages, previous }, { timeout: 55_000 });

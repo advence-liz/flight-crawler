@@ -1,26 +1,10 @@
 import {
-  BadRequestException, Body, CanActivate, ConflictException, Controller, Delete, ExecutionContext, Get, Header, HttpCode,
-  Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, UnauthorizedException, UseGuards,
+  BadRequestException, Body, ConflictException, Controller, Delete, Get, Header, HttpCode,
+  NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
-import { createHash, timingSafeEqual } from 'node:crypto';
-import type { Request } from 'express';
+import { AdminGuard } from '../../admin.guard';
 import { z } from 'zod/v4';
 import { FlightMcpQuota } from './flight-mcp-quota';
-
-@Injectable()
-class McpUserAdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext) {
-    // Unlike legacy development endpoints, issuing credentials always requires a configured admin token.
-    const expected = process.env.ADMIN_TOKEN?.trim();
-    const request = context.switchToHttp().getRequest<Request>();
-    const header = request.headers.authorization;
-    const digest = (value: string) => createHash('sha256').update(value).digest();
-    if (!expected || !header?.startsWith('Bearer ') || !timingSafeEqual(digest(header.slice(7)), digest(expected))) {
-      throw new UnauthorizedException('需要有效的管理员 Token');
-    }
-    return true;
-  }
-}
 
 const createUser = z.strictObject({
   name: z.string().trim().min(1).max(60).regex(/^[^\p{Cc}]+$/u),
@@ -29,7 +13,7 @@ const createUser = z.strictObject({
 const setActive = z.strictObject({ active: z.boolean() });
 
 @Controller('admin/mcp-users')
-@UseGuards(McpUserAdminGuard)
+@UseGuards(AdminGuard)
 export class FlightMcpUsersController {
   constructor(private readonly users: FlightMcpQuota) {}
 

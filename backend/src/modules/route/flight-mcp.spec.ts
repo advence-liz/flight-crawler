@@ -12,6 +12,7 @@ import { AiTripService } from './ai-trip.service';
 import { RoundTripService } from './round-trip.service';
 import { FlightMcpQuota, secondsUntilBeijingMidnight } from './flight-mcp-quota';
 import { Pool } from 'pg';
+import { SiteAuthService } from './site-auth.service';
 
 let mcpKey = `sxf_${randomBytes(32).toString('hex')}`;
 const adminKey = randomBytes(32).toString('hex');
@@ -52,6 +53,11 @@ describe('flight MCP over Streamable HTTP', () => {
       const url = new URL(quotaDb);
       url.searchParams.set('options', `-c search_path=${quotaSchema}`);
       process.env.FLIGHT_MCP_QUOTA_DATABASE_URL = url.href;
+      process.env.SITE_ADMIN_EMAIL = 'admin@example.test';
+      const auth = app.get(SiteAuthService);
+      Reflect.set(auth, 'config', { origin: endpoint.origin });
+      Reflect.set(auth, 'runtime', { session: async (headers: { cookie?: string }) => headers.cookie === 'verified=admin'
+        ? { id: 'admin-test-site', name: 'Site Admin', email: 'admin@example.test' } : null, close: async () => {} });
       const store = app.get(FlightMcpQuota);
       const user = await store.create('SDK test user');
       mcpKey = (await store.issue(user!.id))!.token;
@@ -95,18 +101,14 @@ describe('flight MCP over Streamable HTTP', () => {
     const roster = new URL('/api/admin/mcp-users', endpoint);
     expect((await fetch(roster)).status).toBe(401);
     expect((await fetch(roster, { headers: { authorization: `Bearer ${mcpKey}` } })).status).toBe(401);
-    const configured = process.env.ADMIN_TOKEN;
-    delete process.env.ADMIN_TOKEN;
-    try {
-      expect((await fetch(roster, { headers: { authorization: `Bearer ${adminKey}` } })).status).toBe(401);
-    } finally { process.env.ADMIN_TOKEN = configured; }
+    expect((await fetch(roster, { headers: { authorization: `Bearer ${adminKey}` } })).status).toBe(401);
     expect((await fetch(new URL('/api/register', endpoint), { method: 'POST' })).status).toBe(404);
   });
 
   (quotaDb ? it : it.skip)('manages individual keys, stores only a hash, and keeps usage across key rotations', async () => {
     const roster = new URL('/api/admin/mcp-users', endpoint);
     const adminRequest = (suffix = '', method = 'GET', body?: object) => fetch(`${roster}${suffix}`, {
-      method, headers: { authorization: `Bearer ${adminKey}`, 'content-type': 'application/json' },
+      method, headers: { cookie: 'verified=admin', origin: endpoint.origin, 'content-type': 'application/json' },
       body: body && JSON.stringify(body),
     });
     expect((await adminRequest('', 'POST', { name: '  ' })).status).toBe(400);

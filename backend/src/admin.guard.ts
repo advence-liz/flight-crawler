@@ -1,21 +1,17 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import { SiteAuthService } from './modules/route/site-auth.service';
 
 @Injectable()
 export class AdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    // Preserve the legacy local shortcut only when website accounts are disabled.
-    if (process.env.NODE_ENV === 'development' && process.env.SITE_AUTH_ENABLED !== 'true') return true;
+  constructor(private readonly auth: SiteAuthService) {}
 
-    const adminToken = process.env.ADMIN_TOKEN?.trim();
-    if (!adminToken) throw new UnauthorizedException('未配置管理员 Token');
-
-    const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers['authorization'];
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-
-    if (token !== adminToken) {
-      throw new UnauthorizedException('Token 错误或未设置');
-    }
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const http = context.switchToHttp();
+    const req = http.getRequest<Request>();
+    http.getResponse<Response>().setHeader('Cache-Control', 'no-store');
+    const account = await this.auth.user(req, !['GET', 'HEAD', 'OPTIONS'].includes(req.method));
+    if (!account.isAdmin) throw new ForbiddenException('此账号没有管理员权限');
     return true;
   }
 }

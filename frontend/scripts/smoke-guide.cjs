@@ -18,11 +18,15 @@ async function check() {
     const page = await browser.newPage();
     page.setDefaultTimeout(5000);
     // Keep this UI test independent of a running crawler or model server.
+    let signedIn = false;
     await page.setRequestInterception(true);
     page.on('request', request => {
       const path = new URL(request.url()).pathname;
       if (path === '/api/routes/ai-trip/status') {
         void request.respond({ status: 200, contentType: 'application/json', body: '{"chatEnabled":true}' });
+      } else if (path === '/api/account') {
+        void request.respond({ status: signedIn ? 200 : 401, contentType: 'application/json',
+          body: JSON.stringify(signedIn ? { name: 'Member', email: 'member@example.test', isAdmin: false } : {}) });
       } else if (path.startsWith('/api/')) {
         void request.respond({ status: 503, contentType: 'application/json', body: '{}' });
       } else void request.continue();
@@ -126,16 +130,14 @@ async function check() {
     await click('summary', '开发者配置');
     await click('[role="tab"]', 'Cursor');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    // With the same enabled status response, only the admin-mode browser gets the launcher.
     const launcher = 'button[class*="launcher"]';
-    await page.evaluate(() => localStorage.setItem('admin_token', 'ui-test-only'));
+    signedIn = true;
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector(launcher, { visible: true });
-    await page.evaluate(() => localStorage.removeItem('admin_token'));
-    const status = page.waitForResponse(response => new URL(response.url()).pathname === '/api/routes/ai-trip/status');
+    signedIn = false;
+    await page.evaluate(() => localStorage.setItem('admin_token', 'formerly-used-ui-test-only'));
     await page.reload({ waitUntil: 'networkidle0' });
-    assert.equal((await status).status(), 200);
-    assert.equal(await page.$(launcher), null, 'anonymous visitor must not see the Agent launcher');
+    assert.equal(await page.$(launcher), null, 'a legacy token cannot reveal the launcher');
     console.log('PASS: desktop and mobile navigation, MCP deep link, four peer desktop choices and copy actions, three developer examples, keyboard selection, no mobile overflow, anonymous Agent hidden');
   } finally {
     await browser?.close();

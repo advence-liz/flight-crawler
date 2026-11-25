@@ -1,45 +1,31 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Layout as AntLayout, Menu, Drawer, Button, Grid, Modal, Input, message } from 'antd';
+import { Layout as AntLayout, Menu, Drawer, Button, Grid } from 'antd';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined, LockOutlined, UnlockOutlined, BookOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
-import { getAdminToken, setAdminToken, clearAdminToken } from '@/utils/auth';
+import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined, BookOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
 import { getAiTripStatus } from '@/api/ai-trip';
 import { useSiteSession } from '@/hooks/useSiteSession';
 import styles from './Layout.module.css';
 
 const TripAgent = lazy(() => import('./TripAgent'));
-
 const { Header, Content } = AntLayout;
 const { useBreakpoint } = Grid;
-
-const ADMIN_PATHS = [
-  '/user-management',
-  '/flight-management',
-  '/airport-management',
-  '/data-management',
-  '/cache-management',
-  '/cron-management',
-];
 
 function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [loginVisible, setLoginVisible] = useState(false);
-  const [tokenInput, setTokenInput] = useState('');
   const [tripAgentEnabled, setTripAgentEnabled] = useState(false);
   const accountSession = useSiteSession();
   const { session, options } = accountSession;
   useEffect(() => {
+    try { localStorage.removeItem('admin_token'); } catch { /* Old storage is optional. */ }
     let active = true;
     getAiTripStatus().then(({ chatEnabled }) => { if (active) setTripAgentEnabled(chatEnabled === true); }).catch(() => {});
     return () => { active = false; };
   }, []);
-  const screens = useBreakpoint();
-  const isMobile = !screens.md;
-
-  const isAdmin = !!getAdminToken();
+  const isMobile = !useBreakpoint().md;
   const signedIn = session.status === 'member';
+  const isAdmin = session.status === 'member' && session.account.isAdmin === true;
   const checking = session.status === 'checking';
   const label = signedIn ? '已登录' : session.status === 'guest' ? '登录' : '账号';
   const accountEntry = (session.status !== 'guest' || (options && Object.values(options).some(Boolean))) && (
@@ -47,32 +33,9 @@ function Layout() {
       aria-label={signedIn ? '已登录，打开我的账号' : checking ? '正在确认登录状态，打开账号页' : `${label}，打开账号页`}>
       <UserOutlined aria-hidden="true" />
       {signedIn && <span className={styles.dot} aria-hidden="true" />}
-      <span>{label}</span>
+      <span>{isAdmin ? '管理员' : label}</span>
     </Link>
   );
-
-  const handleLogin = () => {
-    if (!tokenInput.trim()) {
-      message.warning('请输入 Token');
-      return;
-    }
-    setAdminToken(tokenInput.trim());
-    setLoginVisible(false);
-    setTokenInput('');
-    message.success('已进入管理模式');
-    // 强制刷新以更新菜单
-    window.location.reload();
-  };
-
-  const handleLogout = () => {
-    clearAdminToken();
-    // 如果当前在管理页面，跳回首页
-    if (ADMIN_PATHS.some(p => location.pathname.startsWith(p))) {
-      navigate('/destination');
-    }
-    message.info('已退出管理模式');
-    window.location.reload();
-  };
 
   const allMenuItems = [
     { key: '/destination', icon: <CompassOutlined />, label: '目的地查询' },
@@ -86,121 +49,42 @@ function Layout() {
     { key: '/cache-management', icon: <HddOutlined />, label: '缓存管理', adminOnly: true },
     { key: '/cron-management', icon: <FieldTimeOutlined />, label: '定时任务', adminOnly: true },
   ];
-
   const menuItems = allMenuItems.filter(item => !item.adminOnly || isAdmin);
-
   const currentPath = location.pathname === '/' ? '/destination' : location.pathname;
 
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
-      <Header style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: isMobile ? '0 16px' : '0 50px',
-      }}>
+      <Header style={{ display: 'flex', alignItems: 'center', padding: isMobile ? '0 16px' : '0 50px' }}>
         <Link to="/guide" aria-label="随心飞分析工具：使用指南" style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: isMobile ? 16 : 8,
-          color: 'white',
-          fontSize: isMobile ? '16px' : '20px',
-          marginRight: isMobile ? 'auto' : '50px',
-          whiteSpace: 'nowrap',
-          lineHeight: 1.4,
+          display: 'flex', alignItems: 'center', gap: isMobile ? 16 : 8, color: 'white',
+          fontSize: isMobile ? '16px' : '20px', marginRight: isMobile ? 'auto' : '50px',
+          whiteSpace: 'nowrap', lineHeight: 1.4,
         }}>
           <img src="/logo.svg" alt="" style={{ width: isMobile ? 28 : 36, height: isMobile ? 28 : 36 }} />
           随心飞分析工具
         </Link>
-
         {isMobile ? (
           <>
             {accountEntry}
-            <Button
-              type="text"
-              icon={<MenuOutlined />}
-              aria-label="打开导航菜单"
-              onClick={() => setDrawerVisible(true)}
-              style={{ color: 'white' }}
-            />
-            <Drawer
-              title="导航菜单"
-              placement="right"
-              onClose={() => setDrawerVisible(false)}
-              open={drawerVisible}
-              footer={
-                isAdmin
-                  ? <Button danger icon={<LockOutlined />} block onClick={() => { setDrawerVisible(false); handleLogout(); }}>退出管理模式</Button>
-                  : <Button icon={<UnlockOutlined />} block onClick={() => { setDrawerVisible(false); setLoginVisible(true); }}>进入管理模式</Button>
-              }
-            >
-              <Menu
-                mode="inline"
-                selectedKeys={[currentPath]}
-                items={menuItems}
-                onClick={({ key }) => { navigate(key); setDrawerVisible(false); }}
-              />
+            <Button type="text" icon={<MenuOutlined />} aria-label="打开导航菜单"
+              onClick={() => setDrawerVisible(true)} style={{ color: 'white' }} />
+            <Drawer title="导航菜单" placement="right" onClose={() => setDrawerVisible(false)} open={drawerVisible}>
+              <Menu mode="inline" selectedKeys={[currentPath]} items={menuItems}
+                onClick={({ key }) => { navigate(key); setDrawerVisible(false); }} />
             </Drawer>
           </>
         ) : (
           <>
-            <Menu
-              theme="dark"
-              mode="horizontal"
-              selectedKeys={[currentPath]}
-              items={menuItems}
-              onClick={({ key }) => navigate(key)}
-              style={{ flex: 1, minWidth: 0 }}
-            />
+            <Menu theme="dark" mode="horizontal" selectedKeys={[currentPath]} items={menuItems}
+              onClick={({ key }) => navigate(key)} style={{ flex: 1, minWidth: 0 }} />
             {accountEntry}
-            {isAdmin ? (
-              <Button
-                type="text"
-                icon={<LockOutlined />}
-                onClick={handleLogout}
-                style={{ color: '#faad14', marginLeft: 8, whiteSpace: 'nowrap' }}
-              >
-                退出管理
-              </Button>
-            ) : (
-              <Button
-                type="text"
-                icon={<UnlockOutlined />}
-                onClick={() => setLoginVisible(true)}
-                style={{ color: 'rgba(255,255,255,0.65)', marginLeft: 8, whiteSpace: 'nowrap' }}
-              >
-                管理员
-              </Button>
-            )}
           </>
         )}
       </Header>
-
       <Content style={{ padding: isMobile ? '16px' : '24px', background: '#f0f2f5' }}>
         <Outlet context={{ accountSession, tripAgentEnabled }} />
       </Content>
-
-      {(isAdmin || signedIn) && tripAgentEnabled && <Suspense fallback={null}>
-        <TripAgent isAdmin={isAdmin} />
-      </Suspense>}
-
-      <Modal
-        title={<><UnlockOutlined /> 进入管理模式</>}
-        open={loginVisible}
-        onOk={handleLogin}
-        onCancel={() => { setLoginVisible(false); setTokenInput(''); }}
-        okText="确认"
-        cancelText="取消"
-      >
-        <Input.Password
-          placeholder="请输入管理员 Token"
-          value={tokenInput}
-          onChange={e => setTokenInput(e.target.value)}
-          onPressEnter={handleLogin}
-          style={{ marginTop: 16 }}
-          autoComplete="off"
-          autoFocus={!isMobile}
-        />
-      </Modal>
+      {signedIn && tripAgentEnabled && <Suspense fallback={null}><TripAgent /></Suspense>}
     </AntLayout>
   );
 }

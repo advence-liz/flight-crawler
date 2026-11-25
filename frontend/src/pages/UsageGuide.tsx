@@ -162,7 +162,7 @@ function McpGuide() {
   const { Guide } = desktopClients.find(client => client.key === desktop) ?? desktopClients[0];
   return <div className={styles.panel}>
     <h2>让你的 AI 直接查随心飞航班</h2>
-    <Alert type="info" showIcon message="如何获取 MCP Token" description={<>登录后打开<Link to="/account">我的账号</Link>，在「MCP 访问」生成个人 Token。它只显示一次，请妥善保存，不要发给别人，也不要使用管理员 Token。</>} />
+    <Alert type="info" showIcon message="如何获取 MCP Token" description={<>登录后打开<Link to="/account">我的账号</Link>，在「MCP 访问」生成个人 Token。它只显示一次，请妥善保存，不要发给别人。</>} />
     <ol className={styles.steps}>
       <li>
         <h3>在你的桌面 AI 里添加随心飞</h3>

@@ -116,18 +116,19 @@ jobs:
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
         working-directory: backend
         run: |
-          nohup node dist/main.js > "$GITHUB_WORKSPACE/server.log" 2>&1 &
+          install -d -m 700 "$RUNNER_TEMP/flight-ci"
+          CRAWLER_CI_SOCKET="$RUNNER_TEMP/flight-ci/crawler.sock" nohup node dist/main.js > "$GITHUB_WORKSPACE/server.log" 2>&1 &
           echo $! > "$GITHUB_WORKSPACE/server.pid"
           for i in $(seq 1 30); do
             sleep 1
-            curl -sf http://localhost:3000/api/health >/dev/null 2>&1 && { echo "后端已就绪"; exit 0; }
+            curl --unix-socket "$RUNNER_TEMP/flight-ci/crawler.sock" -sf http://localhost/api/health >/dev/null 2>&1 && { echo "后端已就绪"; exit 0; }
           done
           echo "::error::后端启动超时"; cat "$GITHUB_WORKSPACE/server.log"; exit 1
 
       - name: 发现机场（保持机场列表最新，异步任务，需轮询到完成再继续）
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
         run: |
-          RESP=$(curl -sf -X POST http://localhost:3000/api/crawler/initialize/discover \
+          RESP=$(curl --unix-socket "$RUNNER_TEMP/flight-ci/crawler.sock" -sf -X POST http://localhost/api/crawler/initialize/discover \
             -H "Content-Type: application/json" -d '{"days":1}')
           echo "$RESP"
           TASK_ID=$(node -e "console.log(JSON.parse(process.argv[1]).taskId)" "$RESP")
@@ -136,7 +137,7 @@ jobs:
           fi
           for i in $(seq 1 60); do   # discover 历史耗时 <3 分钟，最长等 15 分钟
             sleep 15
-            LOG=$(curl -sf "http://localhost:3000/api/crawler/logs/$TASK_ID")
+            LOG=$(curl --unix-socket "$RUNNER_TEMP/flight-ci/crawler.sock" -sf "http://localhost/api/crawler/logs/$TASK_ID")
             STATUS=$(node -e "console.log(JSON.parse(process.argv[1]).status)" "$LOG")
             echo "[discover $i] status=$STATUS"
             if [ "$STATUS" = "success" ]; then break; fi
@@ -154,7 +155,7 @@ jobs:
 
           for attempt in 1 2; do
             echo "▶ 第 $attempt 次爬取（窗口 $START ~ $END）"
-            RESP=$(curl -sf -X POST http://localhost:3000/api/crawler/initialize/refresh \
+            RESP=$(curl --unix-socket "$RUNNER_TEMP/flight-ci/crawler.sock" -sf -X POST http://localhost/api/crawler/initialize/refresh \
               -H "Content-Type: application/json" \
               -d "{\"startDate\":\"$START\",\"endDate\":\"$END\"}") || { echo "::warning::触发失败"; sleep 30; continue; }
             TASK_ID=$(node -e "console.log(JSON.parse(process.argv[1]).taskId)" "$RESP" 2>/dev/null)
@@ -166,7 +167,7 @@ jobs:
             OK=0
             for i in $(seq 1 1080); do
               sleep 15
-              LOG=$(curl -sf "http://localhost:3000/api/crawler/logs/$TASK_ID" || true)
+              LOG=$(curl --unix-socket "$RUNNER_TEMP/flight-ci/crawler.sock" -sf "http://localhost/api/crawler/logs/$TASK_ID" || true)
               STATUS=$(node -e "console.log(JSON.parse(process.argv[1]).status)" "$LOG" 2>/dev/null)
               if [ $((i % 20)) -eq 0 ]; then echo "[$attempt][$i] status=$STATUS"; fi
               if [ "$STATUS" = "success" ]; then echo "$LOG"; OK=1; break; fi
@@ -184,9 +185,9 @@ jobs:
         if: ${{ github.event.inputs.skip_crawl != 'true' }}
         run: |
           echo "清理 query_cache（destinations + transfer 查询缓存，不需要随 db 分发）..."
-          curl -sf -X DELETE http://localhost:3000/api/crawler/cache/clear || true
+          curl --unix-socket "$RUNNER_TEMP/flight-ci/crawler.sock" -sf -X DELETE http://localhost/api/crawler/cache/clear || true
           echo "清理 30 天前的执行日志..."
-          curl -sf -X DELETE http://localhost:3000/api/crawler/logs/clean \
+          curl --unix-socket "$RUNNER_TEMP/flight-ci/crawler.sock" -sf -X DELETE http://localhost/api/crawler/logs/clean \
             -H "Content-Type: application/json" -d '{"days":30}' || true
 
       - name: 停止后端

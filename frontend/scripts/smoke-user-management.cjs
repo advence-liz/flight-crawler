@@ -13,23 +13,34 @@ async function check() {
   assert.ok(['127.0.0.1', '[::1]', 'localhost'].includes(connection.hostname), 'Use a loopback test database');
   const pool = new Pool({ connectionString: connection.href });
   const schema = `roster_browser_${randomBytes(6).toString('hex')}`;
-  const admin = randomBytes(32).toString('hex');
+  const admin = 'admin@example.test', member = 'member@example.test';
+  const delivered = new Map();
   let app, previewServer, browser;
   try {
     await pool.query(`CREATE SCHEMA ${schema}`);
     connection.searchParams.set('options', `-c search_path=${schema}`);
     Object.assign(process.env, { NODE_ENV: 'test', DB_TYPE: 'sqlite', DB_DATABASE: ':memory:', CRAWLER_ENABLED: 'false',
-      FLIGHT_MCP_QUOTA_DATABASE_URL: connection.href, ADMIN_TOKEN: admin, FLIGHT_MCP_ENABLED: 'true',
+      FLIGHT_MCP_QUOTA_DATABASE_URL: connection.href, SITE_ADMIN_EMAIL: admin, SITE_AUTH_ENABLED: 'true',
+      SITE_AUTH_SECRET: randomBytes(32).toString('hex'), SITE_AUTH_EMAIL_DAILY_LIMIT: '5', FLIGHT_MCP_ENABLED: 'true',
       FLIGHT_MCP_DAILY_LIMIT: '100', TRIP_AI_ENABLED: 'false' });
     const { NestFactory } = backend('@nestjs/core');
     const { AppModule } = backend('./dist/app.module');
     app = await NestFactory.create(AppModule, { logger: false });
+    const { SiteAuthService } = backend('./dist/modules/route/site-auth.service');
+    const { FlightMcpQuota } = backend('./dist/modules/route/flight-mcp-quota');
+    const auth = app.get(SiteAuthService);
+    app.use(auth.middleware);
     app.setGlobalPrefix('api');
     await app.listen(0, '127.0.0.1');
     const api = await app.getUrl();
     const { preview } = await import('vite');
     previewServer = await preview({ root: resolve(__dirname, '..'), preview: { host: '127.0.0.1', port: 0, proxy: { '/api': api } } });
     const origin = `http://127.0.0.1:${previewServer.httpServer.address().port}`;
+    process.env.SITE_AUTH_ORIGIN = origin;
+    auth.initialize(async (email, code) => { delivered.set(email, code); });
+    const store = app.get(FlightMcpQuota);
+    await store.create('Fixture admin', admin);
+    await store.create('Fixture member', member);
     browser = await puppeteer.launch({ headless: 'new', executablePath: process.env.PUPPETEER_EXECUTABLE_PATH });
     const page = await browser.newPage();
     page.setDefaultTimeout(6000);
@@ -47,14 +58,31 @@ async function check() {
       catch { throw new Error(`Expected button: ${text}`); }
     };
     const visible = (text) => page.waitForFunction(label => document.body.innerText.includes(label), {}, text);
+    const post = (path, body) => page.evaluate(async (url, data) => (await fetch(url, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data),
+    })).status, path, body);
+    const signIn = async email => {
+      assert.equal(await post('/api/auth/email-otp/send-verification-otp', { email, type: 'sign-in' }), 200);
+      const otp = delivered.get(email);
+      assert.ok(otp, 'A code should be delivered in the isolated test mailer');
+      assert.equal(await post('/api/auth/sign-in/email-otp', { email, otp }), 200);
+    };
+    const roster = () => page.evaluate(async () => (await fetch('/api/admin/mcp-users')).status);
     await page.goto(`${origin}/#/user-management`, { waitUntil: 'networkidle0' });
+    assert.equal(new URL(page.url()).hash, '#/account');
+    assert.equal(await roster(), 401);
+    await signIn(member);
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.goto(`${origin}/#/user-management`, { waitUntil: 'networkidle0' });
+    await page.waitForFunction(() => location.hash === '#/destination');
     assert.equal(new URL(page.url()).hash, '#/destination');
-    assert.ok(!await page.evaluate(() => document.body.innerText.includes('用户管理')));
-    await button('管理员');
-    await page.type('input[placeholder="请输入管理员 Token"]', admin);
-    await page.keyboard.press('Enter');
-    await page.waitForFunction(() => !!localStorage.getItem('admin_token'));
+    assert.equal(await roster(), 403);
+    assert.equal(await post('/api/admin/mcp-users', { name: 'must not be created' }), 403);
+    assert.equal(await post('/api/auth/sign-out', {}), 200);
+    await signIn(admin);
+    await page.reload({ waitUntil: 'networkidle0' });
     await page.goto(`${origin}/#/user-management`, { waitUntil: 'networkidle0' });
+    assert.equal(await roster(), 200);
     await button('新建用户');
     await page.type('input[placeholder="识别受邀者用的名称"]', '本地浏览器试用');
     await button('创建');
@@ -78,14 +106,19 @@ async function check() {
     await page.reload({ waitUntil: 'networkidle0' });
     await visible('1 次');
     await page.setViewport({ width: 390, height: 844 });
+    await page.waitForSelector('header button[aria-label="打开导航菜单"]', { visible: true });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     if (process.env.ROSTER_SCREENSHOT_PATH) await page.screenshot({ path: process.env.ROSTER_SCREENSHOT_PATH, fullPage: true });
     await button('撤销 Token');
+    const revoked = page.waitForResponse(response => response.request().method() === 'DELETE' && /^\/api\/admin\/mcp-users\/[^/]+\/token$/.test(new URL(response.url()).pathname));
     await button('确认');
+    assert.equal((await revoked).status(), 204);
     await visible('未发放 Token');
     await visible('1 次');
     assert.equal((await call()).status, 401);
-    console.log('PASS: anonymous route blocked; admin creates user, issues one-time token, counts a real MCP call, and revokes token; mobile fits');
+    assert.equal(await post('/api/auth/sign-out', {}), 200);
+    assert.equal(await roster(), 401);
+    console.log('PASS: verified regular session blocked; verified admin creates user, issues and revokes an MCP key, and loses access at logout; mobile fits');
   } finally {
     await browser?.close();
     if (previewServer) {

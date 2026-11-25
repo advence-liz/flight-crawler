@@ -17,10 +17,7 @@ import {
   DatePicker,
   Descriptions,
   InputNumber,
-  Input,
 } from 'antd';
-import { SaveOutlined } from '@ant-design/icons';
-import { getAdminToken, setAdminToken } from '@/utils/auth';
 import type { ColumnsType } from 'antd/es/table';
 import {
   ReloadOutlined,
@@ -58,8 +55,6 @@ function DataManagement() {
   const [refreshForm] = Form.useForm();
 
   // Admin Token 相关状态
-  const [adminToken, setAdminTokenState] = useState(getAdminToken);
-  const [tokenInput, setTokenInput] = useState(getAdminToken);
 
   // 发现机场相关状态
   const [discoverLoading, setDiscoverLoading] = useState(false);
@@ -541,40 +536,6 @@ function DataManagement() {
       <Paragraph type="secondary">
         管理航班数据的爬取和更新
       </Paragraph>
-
-      {/* Admin Token 配置（仅生产环境显示） */}
-      {import.meta.env.PROD && (
-        <Card
-          size="small"
-          style={{ marginBottom: 24, background: '#fafafa' }}
-        >
-          <Space align="center" style={{ width: '100%' }}>
-            <Text strong style={{ whiteSpace: 'nowrap' }}>管理员 Token：</Text>
-            <Input.Password
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="输入管理员 Token（未配置时留空）"
-              style={{ width: 320 }}
-              autoComplete="off"
-              allowClear
-            />
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              onClick={() => {
-                setAdminToken(tokenInput);
-                setAdminTokenState(tokenInput);
-                message.success(tokenInput ? 'Token 已保存' : 'Token 已清除');
-              }}
-            >
-              保存
-            </Button>
-            {adminToken && (
-              <Text type="success" style={{ fontSize: 12 }}>✓ Token 已配置</Text>
-            )}
-          </Space>
-        </Card>
-      )}
 
       <Divider />
 

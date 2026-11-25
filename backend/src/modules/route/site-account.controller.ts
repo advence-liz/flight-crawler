@@ -14,8 +14,8 @@ export class SiteAccountController {
   @Get()
   @Header('Cache-Control', 'no-store')
   async me(@Req() req: Request) {
-    const { name, email, hasToken } = await this.auth.user(req);
-    return { name, email, hasToken, mcpEnabled: process.env.FLIGHT_MCP_ENABLED === 'true' };
+    const { name, email, hasToken, isAdmin } = await this.auth.user(req);
+    return { name, email, hasToken, isAdmin, mcpEnabled: process.env.FLIGHT_MCP_ENABLED === 'true' };
   }
 
   @Post('mcp/token')

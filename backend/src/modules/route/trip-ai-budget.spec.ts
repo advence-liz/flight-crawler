@@ -1,4 +1,5 @@
-import { INestApplication } from '@nestjs/common';
+import { SiteAuthService } from './site-auth.service';
+import { INestApplication, UnauthorizedException } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { createServer, Socket } from 'node:net';
 import { Pool } from 'pg';
@@ -154,7 +155,7 @@ const connectionString = process.env.TEST_TRIP_AI_DATABASE_URL;
   let app: INestApplication;
   let http: string;
   let pool: Pool;
-  const adminHeader = { authorization: 'Bearer budget-test-only', 'content-type': 'application/json' };
+  const adminHeader = { cookie: 'fixture=admin', 'content-type': 'application/json' };
   const chat = { messages: [{ role: 'user', content: '周末想出去玩' }] };
   const interpret = { text: '周末想出去玩' };
   const originalEnv = process.env;
@@ -168,7 +169,7 @@ const connectionString = process.env.TEST_TRIP_AI_DATABASE_URL;
 
   beforeAll(async () => {
     process.env = { ...originalEnv, NODE_ENV: 'test', TRIP_AI_ENABLED: 'true', DEEPSEEK_API_KEY: 'fake-provider-key',
-      ADMIN_TOKEN: 'budget-test-only', TRIP_AI_BUDGET_DATABASE_URL: connectionString, DEEPSEEK_MODEL: 'deepseek-flash',
+      SITE_AUTH_ENABLED: 'true', TRIP_AI_BUDGET_DATABASE_URL: connectionString, DEEPSEEK_MODEL: 'deepseek-flash',
       DEEPSEEK_BASE_URL: 'https://api.deepseek.com', DB_DATABASE: ':memory:', CRAWLER_ENABLED: 'false' };
     pool = new Pool({ connectionString });
     const { AppModule } = await import('../../app.module');
@@ -179,6 +180,10 @@ const connectionString = process.env.TEST_TRIP_AI_DATABASE_URL;
   });
   beforeEach(async () => {
     await pool.query('TRUNCATE trip_ai_attempts, trip_ai_days');
+    jest.spyOn(app.get(SiteAuthService), 'user').mockImplementation(async req => {
+      if (req.headers.cookie !== 'fixture=admin') throw new UnauthorizedException();
+      return { id: 'fixture', name: 'Fixture', email: 'admin@example.test', active: true, hasToken: false, todayCalls: 0, isAdmin: true };
+    });
     jest.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected provider call'));
   });
   afterEach(() => jest.restoreAllMocks());

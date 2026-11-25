@@ -1,6 +1,7 @@
 import { Controller, Post, Get, Delete, HttpCode, HttpStatus, Body, Query, Param, BadRequestException, Inject, UseGuards } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { AdminGuard } from '../../admin.guard';
+import { CrawlerCiGuard } from './crawler-ci.guard';
 import { CrawlerService } from './crawler.service';
 import { CrawlerServiceStub } from './crawler.service.stub';
 import { FlightService } from '../flight/flight.service';
@@ -47,7 +48,7 @@ export class CrawlerController {
    * Body: { days?: number } // 可选，默认 1 天
    */
   @Post('initialize/discover')
-  @UseGuards(AdminGuard)
+  @UseGuards(CrawlerCiGuard)
   @HttpCode(HttpStatus.OK)
   async initializeDiscover(@Body() dto: InitializeDiscoverDto) {
     const result = await this.crawlerService.initializeDiscoverAirports(dto.days, dto.planOnly);
@@ -77,7 +78,7 @@ export class CrawlerController {
    * 2. 仅获取计划：{ "startDate": "2026-03-18", "endDate": "2026-03-25", "planOnly": true }
    */
   @Post('initialize/refresh')
-  @UseGuards(AdminGuard)
+  @UseGuards(CrawlerCiGuard)
   @HttpCode(HttpStatus.OK)
   async initializeRefresh(@Body() dto: InitializeRefreshFlightsDto) {
     // 验证日期有效性
@@ -156,7 +157,7 @@ export class CrawlerController {
    * GET /api/crawler/logs/:id
    */
   @Get('logs/:id')
-  @UseGuards(AdminGuard)
+  @UseGuards(CrawlerCiGuard)
   @HttpCode(HttpStatus.OK)
   async getLogDetail(@Param('id') id: string) {
     const log = await this.crawlerService.getLogDetail(parseInt(id, 10));
@@ -194,7 +195,7 @@ export class CrawlerController {
    * Body: { days?: number } // 保留最近多少天的日志，默认 90 天
    */
   @Delete('logs/clean')
-  @UseGuards(AdminGuard)
+  @UseGuards(CrawlerCiGuard)
   @HttpCode(HttpStatus.OK)
   async cleanOldLogs(@Body() dto: CleanLogsDto) {
     const result = await this.crawlerService.cleanOldLogs(dto.days);
@@ -224,7 +225,7 @@ export class CrawlerController {
    * DELETE /api/crawler/cache/clear
    */
   @Delete('cache/clear')
-  @UseGuards(AdminGuard)
+  @UseGuards(CrawlerCiGuard)
   @HttpCode(HttpStatus.OK)
   async clearQueryCache() {
     const result = await this.flightService.clearQueryCache();

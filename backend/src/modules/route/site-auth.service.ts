@@ -1,5 +1,4 @@
 import { ForbiddenException, Injectable, Logger, OnModuleDestroy, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import type { Request, Response, NextFunction } from 'express';
@@ -9,13 +8,6 @@ type Mailer = (email: string, code: string) => Promise<void>;
 type Provider = { clientId: string; clientSecret: string };
 type RuntimeConfig = { origin: string; secret: string; databaseUrl: string; github?: Provider; google?: Provider; mail?: Mailer; emailDayLimit: number };
 type Runtime = { handle(req: Request, res: Response): Promise<unknown>; session(headers: Request['headers']): Promise<SiteIdentity | null>; close(): Promise<void> };
-const digest = (value: string) => createHash('sha256').update(value).digest();
-export function isSiteAdmin(req: Request) {
-  const expected = process.env.ADMIN_TOKEN?.trim();
-  const got = req.headers.authorization;
-  return Boolean(expected && got?.startsWith('Bearer ') && timingSafeEqual(digest(got.slice(7)), digest(expected)));
-}
-
 @Injectable()
 export class SiteAuthService implements OnModuleDestroy {
   private runtime?: Runtime;
@@ -77,7 +69,8 @@ export class SiteAuthService implements OnModuleDestroy {
       if (!identity) throw new UnauthorizedException('请重新登录');
       const user = await this.access.siteUser(identity);
       if (!user?.active) throw new ForbiddenException('此账号已停用');
-      return user;
+      const admin = process.env.SITE_ADMIN_EMAIL?.trim().toLowerCase();
+      return { ...user, isAdmin: Boolean(admin && identity.email.trim().toLowerCase() === admin) };
     } finally { this.inFlight--; }
   }
 

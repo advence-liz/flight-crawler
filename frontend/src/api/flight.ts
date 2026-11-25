@@ -1,4 +1,4 @@
-import api from './index';
+import api, { adminApi } from './index';
 
 export interface QueryFlightsParams {
   origin: string;
@@ -79,7 +79,7 @@ export const initializeDiscoverAirports = (options: { days?: number; planOnly?: 
   message: string;
   executionPlan?: DiscoverAirportsExecutionPlan;
 }> => {
-  return api.post('/crawler/initialize/discover', options);
+  return adminApi.post('/crawler/initialize/discover', options);
 };
 
 // 初始化阶段2：发现航班数据（按日期区间）
@@ -121,7 +121,7 @@ export const initializeDiscoverFlights = (options: {
     taskDetails: Array<{ taskId: number; date: string; success: boolean; count: number }>;
   };
 }> => {
-  return api.post('/crawler/initialize/refresh', options);
+  return adminApi.post('/crawler/initialize/refresh', options);
 };
 
 
@@ -158,12 +158,12 @@ export interface QueryLogsResponse {
 
 // 查询执行日志
 export const queryCrawlerLogs = (params?: QueryLogsParams): Promise<QueryLogsResponse> => {
-  return api.get('/crawler/logs', { params });
+  return adminApi.get('/crawler/logs', { params });
 };
 
 // 获取日志详情
 export const getCrawlerLogDetail = (id: number): Promise<CrawlerLog> => {
-  return api.get(`/crawler/logs/${id}`);
+  return adminApi.get(`/crawler/logs/${id}`);
 };
 
 // 获取日志统计
@@ -176,12 +176,12 @@ export interface LogStats {
 }
 
 export const getCrawlerLogStats = (): Promise<LogStats> => {
-  return api.get('/crawler/logs-stats');
+  return adminApi.get('/crawler/logs-stats');
 };
 
 // 获取子任务日志列表
 export const getSubLogs = (parentId: number): Promise<CrawlerLog[]> => {
-  return api.get(`/crawler/logs/${parentId}/sub-tasks`);
+  return adminApi.get(`/crawler/logs/${parentId}/sub-tasks`);
 };
 
 // 强制停止当前运行中的爬虫任务
@@ -190,16 +190,16 @@ export const stopCrawler = (): Promise<{
   taskId: number | null;
   message: string;
 }> => {
-  return api.post('/crawler/stop');
+  return adminApi.post('/crawler/stop');
 };
 
 // 清理日志
 export const cleanOldLogs = (days?: number): Promise<{ deletedCount: number; message: string }> => {
-  return api.delete('/crawler/logs/clean', { data: { days } });
+  return adminApi.delete('/crawler/logs/clean', { data: { days } });
 };
 
 export const cleanAllLogs = (): Promise<{ deletedCount: number; message: string }> => {
-  return api.delete('/crawler/logs/clean-all');
+  return adminApi.delete('/crawler/logs/clean-all');
 };
 
 // 定时任务相关
@@ -213,25 +213,25 @@ export interface CronJob {
 }
 
 export const getCronJobs = (): Promise<CronJob[]> => {
-  return api.get('/crawler/cron/list');
+  return adminApi.get('/crawler/cron/list');
 };
 
 export const triggerCronJob = (name: string): Promise<{ success: boolean; message: string }> => {
-  return api.post('/crawler/cron/trigger', { name });
+  return adminApi.post('/crawler/cron/trigger', { name });
 };
 
 export const toggleCronJob = (name: string, enable: boolean): Promise<{ success: boolean; running: boolean; message: string }> => {
-  return api.post('/crawler/cron/toggle', { name, enable });
+  return adminApi.post('/crawler/cron/toggle', { name, enable });
 };
 
 // 清除所有查询缓存
 export const clearQueryCache = (): Promise<{ deletedCount: number; message: string }> => {
-  return api.delete('/crawler/cache/clear');
+  return adminApi.delete('/crawler/cache/clear');
 };
 
 // 查询缓存统计（含缓存开关状态）
 export const getQueryCacheStats = (): Promise<{ total: number; expired: number; valid: number; disabled: boolean }> => {
-  return api.get('/crawler/cache/stats');
+  return adminApi.get('/crawler/cache/stats');
 };
 
 // 缓存条目
@@ -246,17 +246,17 @@ export interface CacheItem {
 
 // 查询缓存列表
 export const listQueryCache = (params?: { page?: number; pageSize?: number; type?: string }): Promise<{ list: CacheItem[]; total: number }> => {
-  return api.get('/crawler/cache/list', { params });
+  return adminApi.get('/crawler/cache/list', { params });
 };
 
 // 批量删除缓存
 export const deleteCacheByKeys = (keys: string[]): Promise<{ deletedCount: number }> => {
-  return api.delete('/crawler/cache/batch', { data: { keys } });
+  return adminApi.delete('/crawler/cache/batch', { data: { keys } });
 };
 
 // 切换缓存开关
 export const toggleCache = (enable: boolean): Promise<{ disabled: boolean }> => {
-  return api.post('/crawler/cache/toggle', { enable });
+  return adminApi.post('/crawler/cache/toggle', { enable });
 };
 
 // 查询往返航班详情
@@ -304,12 +304,12 @@ export const updateFlight = (id: number, data: Partial<Flight>): Promise<{
   message: string;
   flight: Flight;
 }> => {
-  return api.put(`/flights/${id}`, data);
+  return adminApi.put(`/flights/${id}`, data);
 };
 
 // 删除航班
 export const deleteFlight = (id: number): Promise<{ success: boolean; message: string }> => {
-  return api.delete(`/flights/${id}`);
+  return adminApi.delete(`/flights/${id}`);
 };
 
 // 批量删除航班
@@ -318,7 +318,7 @@ export const batchDeleteFlights = (ids: number[]): Promise<{
   deletedCount: number;
   message: string;
 }> => {
-  return api.post('/flights/batch-delete', { ids });
+  return adminApi.post('/flights/batch-delete', { ids });
 };
 
 // 删除 N 天前的历史航班
@@ -327,7 +327,7 @@ export const deleteFlightsBeforeDays = (days: number): Promise<{
   deletedCount: number;
   message: string;
 }> => {
-  return api.delete(`/flights/before-days/${days}`);
+  return adminApi.delete(`/flights/before-days/${days}`);
 };
 
 // 路由规划相关类型
@@ -395,7 +395,7 @@ export interface DiscoverTransferResponse {
 
 // 手动触发中转缓存预热
 export const warmupTransferCache = (): Promise<{ message: string }> => {
-  return api.post('/routes/warmup-cache');
+  return adminApi.post('/routes/warmup-cache');
 };
 
 // 查询缓存预热状态
@@ -410,7 +410,7 @@ export interface WarmupStatus {
 }
 
 export const getWarmupCacheStatus = (): Promise<WarmupStatus> => {
-  return api.get('/routes/warmup-cache/status');
+  return adminApi.get('/routes/warmup-cache/status');
 };
 
 export const discoverTransferDestinations = (params: {

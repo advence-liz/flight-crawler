@@ -126,7 +126,7 @@ export class FlightMcpController {
     const auth = req.headers.authorization;
     const token = auth?.startsWith('Bearer ') ? auth.slice(7) : '';
     const unauthorized = () => reject(401, 'A valid Flight MCP bearer token is required');
-    if (!isFlightMcpToken(token) || token === process.env.ADMIN_TOKEN?.trim()) return unauthorized();
+    if (!isFlightMcpToken(token)) return unauthorized();
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
       return reject(405, 'Method not allowed');
