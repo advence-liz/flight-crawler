@@ -1,0 +1,24 @@
+.account {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 7px;
+  margin-left: 8px;
+  padding: 0 12px;
+  min-height: 38px;
+  border: 1px solid #426178;
+  border-radius: 7px;
+  color: #f1f7fc;
+  background: #18354a;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.account:hover, .account[aria-current='page'] { color: white; background: #244962; border-color: #9abacd; }
+.account:focus-visible { outline: 2px solid #a8d8ff; outline-offset: 3px; }
+.dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #73e0ac; }
+@media (max-width: 420px) {
+  .account { gap: 5px; padding-inline: 7px; margin-left: 6px; }
+  .account .dot { display: none; }
+}

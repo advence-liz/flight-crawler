@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Layout as AntLayout, Menu, Drawer, Button, Grid, Modal, Input, message } from 'antd';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined, LockOutlined, UnlockOutlined, BookOutlined, TeamOutlined } from '@ant-design/icons';
+import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined, LockOutlined, UnlockOutlined, BookOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
 import { getAdminToken, setAdminToken, clearAdminToken } from '@/utils/auth';
 import { getAiTripStatus } from '@/api/ai-trip';
-import { getLoginOptions, getSiteAccount } from '@/api/site-auth';
+import { useSiteSession } from '@/hooks/useSiteSession';
+import styles from './Layout.module.css';
 
 const TripAgent = lazy(() => import('./TripAgent'));
 
@@ -27,21 +28,28 @@ function Layout() {
   const [loginVisible, setLoginVisible] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
   const [tripAgentEnabled, setTripAgentEnabled] = useState(false);
-  const [loginEnabled, setLoginEnabled] = useState(false);
-  const [signedIn, setSignedIn] = useState(false);
+  const accountSession = useSiteSession();
+  const { session, options } = accountSession;
   useEffect(() => {
     let active = true;
     getAiTripStatus().then(({ chatEnabled }) => { if (active) setTripAgentEnabled(chatEnabled === true); }).catch(() => {});
-    getLoginOptions().then(options => { if (active && options && Object.values(options).some(Boolean)) {
-      setLoginEnabled(true);
-      void getSiteAccount().then(account => { if (active && account.email) setSignedIn(true); }).catch(() => {});
-    } }).catch(() => {});
     return () => { active = false; };
   }, []);
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
   const isAdmin = !!getAdminToken();
+  const signedIn = session.status === 'member';
+  const checking = session.status === 'checking';
+  const label = signedIn ? '已登录' : session.status === 'guest' ? '登录' : '账号';
+  const accountEntry = (session.status !== 'guest' || (options && Object.values(options).some(Boolean))) && (
+    <Link to="/account" className={styles.account} aria-current={location.pathname === '/account' ? 'page' : undefined}
+      aria-label={signedIn ? '已登录，打开我的账号' : checking ? '正在确认登录状态，打开账号页' : `${label}，打开账号页`}>
+      <UserOutlined aria-hidden="true" />
+      {signedIn && <span className={styles.dot} aria-hidden="true" />}
+      <span>{label}</span>
+    </Link>
+  );
 
   const handleLogin = () => {
     if (!tokenInput.trim()) {
@@ -71,7 +79,6 @@ function Layout() {
     { key: '/flight-map', icon: <GlobalOutlined />, label: '航线地图' },
     { key: '/route-planner', icon: <AimOutlined />, label: '行程规划' },
     { key: '/guide', icon: <BookOutlined />, label: '使用指南' },
-    ...(loginEnabled ? [{ key: '/account', label: signedIn ? '我的账号' : '登录' }] : []),
     { key: '/user-management', icon: <TeamOutlined />, label: '用户管理', adminOnly: true },
     { key: '/flight-management', icon: <UnorderedListOutlined />, label: '航班管理', adminOnly: true },
     { key: '/airport-management', icon: <EnvironmentOutlined />, label: '机场管理', adminOnly: true },
@@ -107,6 +114,7 @@ function Layout() {
 
         {isMobile ? (
           <>
+            {accountEntry}
             <Button
               type="text"
               icon={<MenuOutlined />}
@@ -143,6 +151,7 @@ function Layout() {
               onClick={({ key }) => navigate(key)}
               style={{ flex: 1, minWidth: 0 }}
             />
+            {accountEntry}
             {isAdmin ? (
               <Button
                 type="text"
@@ -167,7 +176,7 @@ function Layout() {
       </Header>
 
       <Content style={{ padding: isMobile ? '16px' : '24px', background: '#f0f2f5' }}>
-        <Outlet />
+        <Outlet context={{ accountSession, tripAgentEnabled }} />
       </Content>
 
       {(isAdmin || signedIn) && tripAgentEnabled && <Suspense fallback={null}>

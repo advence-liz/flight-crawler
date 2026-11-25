@@ -2,9 +2,9 @@ import { useState, type ReactNode } from 'react';
 import { BookOutlined, CodeOutlined, CompassOutlined, AimOutlined, GlobalOutlined, CopyOutlined } from '@ant-design/icons';
 import { Alert, Button, Tabs, Tag } from 'antd';
 import { Link, useSearchParams } from 'react-router-dom';
+import { MCP_ENDPOINT as endpoint } from '@/api/site-auth';
 import styles from './UsageGuide.module.css';
 
-const endpoint = 'https://flight-crawler.onrender.com/api/mcp';
 const workBuddyDocs = 'https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Connector';
 const harnessDocs = 'https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-manager/README.zh.md';
 const workBuddyConfig = JSON.stringify({ mcpServers: { suixinfei: {
@@ -17,17 +17,16 @@ const harnessConfig = `suixinfei:
     Authorization: 'Bearer \${credential:FLIGHT_MCP_TOKEN}'
   enabled: true`;
 
-const clients = [
+const codexDocs = 'https://learn.chatgpt.com/docs/extend/mcp';
+const claudeDesktopDocs = 'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp';
+const codexConfig = `[mcp_servers.suixinfei]\nurl = "${endpoint}"\nbearer_token_env_var = "FLIGHT_MCP_TOKEN"`;
+
+const developerClients = [
   {
     name: 'Claude Code', file: '.mcp.json', docs: 'https://code.claude.com/docs/en/mcp',
     config: JSON.stringify({ mcpServers: { suixinfei: { type: 'http', url: endpoint,
       headers: { Authorization: 'Bearer ${FLIGHT_MCP_TOKEN}' } } } }, null, 2),
     help: '在启动 Claude Code 的进程环境中设置 FLIGHT_MCP_TOKEN，再用 /mcp 查看连接。',
-  },
-  {
-    name: 'Codex', file: '~/.codex/config.toml', docs: 'https://learn.chatgpt.com/docs/extend/mcp?surface=cli',
-    config: `[mcp_servers.suixinfei]\nurl = "${endpoint}"\nbearer_token_env_var = "FLIGHT_MCP_TOKEN"`,
-    help: '在启动 Codex 的进程环境中设置 FLIGHT_MCP_TOKEN。适用于 Codex CLI 和 IDE 扩展。',
   },
   {
     name: 'Cursor', file: '.cursor/mcp.json', docs: 'https://cursor.com/docs/context/mcp',
@@ -43,8 +42,8 @@ const clients = [
   },
 ];
 
-function CopyableConfig({ name, file, config, copyLabel = '复制配置', children }: {
-  name: string; file: string; config: string; copyLabel?: string; children?: ReactNode;
+function CopyableConfig({ name, file, config, copyLabel = '复制配置', wrap = false, children }: {
+  name: string; file: string; config: string; copyLabel?: string; wrap?: boolean; children?: ReactNode;
 }) {
   const [notice, setNotice] = useState('');
   async function copy() {
@@ -62,7 +61,7 @@ function CopyableConfig({ name, file, config, copyLabel = '复制配置', childr
       <Button size="small" icon={<CopyOutlined />} onClick={() => void copy()}>{copyLabel}</Button>
       <span className={styles.copyNotice} role="status">{notice}</span>
     </div>
-    <pre className={styles.code} tabIndex={0} aria-label={`${name} 线上配置示例`}><code>{config}</code></pre>
+    <pre className={wrap ? `${styles.code} ${styles.wrappedCode}` : styles.code} tabIndex={0} aria-label={`${name} 线上配置示例`}><code>{config}</code></pre>
     {children}
   </div>;
 }
@@ -97,6 +96,39 @@ function HarnessGuide() {
   </div>;
 }
 
+function CodexDesktopGuide() {
+  return <div>
+    <ol className={styles.clientSteps}>
+      <li>在 Codex 桌面端打开 Settings（设置）→ MCP servers。普通 ChatGPT 网页不是这个入口。</li>
+      <li>把下方配置合并到 <code>~/.codex/config.toml</code>，保留已有服务器。让桌面应用的启动环境能读到 <code>FLIGHT_MCP_TOKEN</code>，值填个人 Token。不要把 Token 原文写进配置，也不用走 OAuth。</li>
+      <li>完全退出再打开应用，回到 MCP servers 确认 <code>suixinfei</code> 已启用。</li>
+    </ol>
+    <CopyableConfig name="Codex" file="~/.codex/config.toml" config={codexConfig} copyLabel="复制 Codex 配置">
+      <p className={styles.configHelp}>桌面端、Codex CLI 和 IDE 扩展共用这份配置。<DocsLink href={codexDocs}>Codex 官方 MCP 说明</DocsLink></p>
+    </CopyableConfig>
+  </div>;
+}
+
+function ClaudeDesktopGuide() {
+  return <div>
+    <ol className={styles.clientSteps}>
+      <li>在 Claude 桌面端打开 Customize（自定义）→ Connectors（连接器）→「+ Add」→「Add custom connector」。名称可填「随心飞」，地址用下方完整链接。</li>
+      <li>认证选 No sign in（无需登录）。在 Request headers（请求头）中，名称填 <code>Authorization</code>，值填 <code>Bearer YOUR_FLIGHT_MCP_TOKEN</code>，把占位文字替换成个人 Token，保留 <code>Bearer</code> 和空格。</li>
+      <li>添加后，在聊天输入框旁的「+」菜单启用随心飞。请把个人 Token 只填到你自己的连接器里，不要填到组织共享连接器或聊天里。</li>
+    </ol>
+    <CopyableConfig name="Claude 桌面版" file="远程 MCP 地址" config={endpoint} copyLabel="复制 MCP 地址" wrap>
+      <p className={styles.configHelp}>如果没有自定义连接器或 Request headers 入口，请先查看账户权限。<DocsLink href={claudeDesktopDocs}>Claude 官方连接器说明</DocsLink></p>
+    </CopyableConfig>
+  </div>;
+}
+
+const desktopClients = [
+  { key: 'workbuddy', label: 'WorkBuddy', Guide: WorkBuddyGuide },
+  { key: 'harness', label: 'DeepSeek Harness', Guide: HarnessGuide },
+  { key: 'codex', label: 'Codex 桌面版', Guide: CodexDesktopGuide },
+  { key: 'claude', label: 'Claude 桌面版', Guide: ClaudeDesktopGuide },
+] as const;
+
 function WebsiteGuide() {
   return <div className={styles.panel}>
     <h2>先查能飞哪，再比较怎么飞</h2>
@@ -126,20 +158,25 @@ function WebsiteGuide() {
 }
 
 function McpGuide() {
+  const [desktop, setDesktop] = useState<(typeof desktopClients)[number]['key']>('workbuddy');
+  const { Guide } = desktopClients.find(client => client.key === desktop) ?? desktopClients[0];
   return <div className={styles.panel}>
     <h2>让你的 AI 直接查随心飞航班</h2>
     <Alert type="info" showIcon message="如何获取 MCP Token" description={<>登录后打开<Link to="/account">我的账号</Link>，在「MCP 访问」生成个人 Token。它只显示一次，请妥善保存，不要发给别人，也不要使用管理员 Token。</>} />
     <ol className={styles.steps}>
       <li>
         <h3>在你的桌面 AI 里添加随心飞</h3>
-        <p>选择你正在用的客户端。WorkBuddy 和 DeepSeek Harness 的步骤依据产品文档整理，未做桌面端实测；入口可能随版本变化。</p>
-        <Tabs size="small" items={[
-          { key: 'workbuddy', label: 'WorkBuddy', children: <WorkBuddyGuide /> },
-          { key: 'harness', label: 'DeepSeek Harness', children: <HarnessGuide /> },
-        ]} />
+        <p>选你正在用的桌面应用，按步骤添加随心飞。步骤依据产品文档整理，未做桌面端实测；入口可能随版本变化。</p>
+        <div role="radiogroup" aria-label="桌面客户端" className={styles.desktopChoices}>
+          {desktopClients.map(({ key, label }) => <label key={key}>
+            <input type="radio" name="desktop-mcp-client" checked={desktop === key} onChange={() => setDesktop(key)} />
+            <span>{label}</span>
+          </label>)}
+        </div>
+        <Guide />
         <details className={styles.developerConfigs}>
           <summary>开发者配置</summary>
-          <Tabs size="small" items={clients.map(client => ({ key: client.name, label: client.name, children:
+          <Tabs size="small" items={developerClients.map(client => ({ key: client.name, label: client.name, children:
             <CopyableConfig key={client.name} {...client}>
               <p className={styles.configHelp}>{client.help} <DocsLink href={client.docs}>客户端官方文档</DocsLink></p>
             </CopyableConfig>,

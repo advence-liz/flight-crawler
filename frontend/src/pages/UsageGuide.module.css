@@ -38,6 +38,12 @@
 .steps > li::marker { color: var(--accent); font-weight: 700; }
 .steps > li + li { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 18px; }
 .steps :global(.ant-tabs) { margin-top: 8px; }
+.desktopChoices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0 16px; }
+.desktopChoices label { position: relative; display: flex; min-width: 0; cursor: pointer; }
+.desktopChoices input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.desktopChoices span { display: grid; align-content: center; flex: 1; min-height: 42px; padding: 5px 8px; text-align: center; border: 1px solid var(--line); border-radius: 6px; font-weight: 600; }
+.desktopChoices input:checked + span { color: var(--accent); background: var(--tint); border-color: var(--accent); }
+.desktopChoices input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .clientSteps { display: grid; gap: 6px; margin: 0 0 12px; padding-inline-start: 20px; color: var(--muted); }
 .clientSteps code { overflow-wrap: anywhere; }
 .developerConfigs { margin-top: 16px; border-block: 1px solid var(--line); }
@@ -47,6 +53,7 @@
 .codeHeader { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .codeHeader > code { margin-right: auto; }
 .code { margin: 8px 0; padding: 12px; background: var(--tint); border: 1px solid var(--line); border-radius: 6px; overflow: auto; font-size: 12px; }
+.wrappedCode { white-space: pre-wrap; overflow-wrap: anywhere; }
 .configHelp, .copyNotice { font-size: 13px; }
 .errors { margin-top: 8px; }
 .errors > div { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; margin-bottom: 6px; }
@@ -60,4 +67,5 @@
   .board section > a { grid-column: 2; }
   .steps { padding-left: 18px; }
   .steps > li { padding-left: 1px; }
+  .desktopChoices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

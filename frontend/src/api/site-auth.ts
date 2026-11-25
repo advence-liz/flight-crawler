@@ -2,6 +2,7 @@ import type { TripAgentReply, TripChatMessage, TripSearchCriteria } from './ai-t
 
 export type LoginOptions = { email: boolean; github: boolean; google: boolean };
 export type SiteAccount = { name: string; email: string; hasToken: boolean; mcpEnabled: boolean };
+export const MCP_ENDPOINT = 'https://flight-crawler.onrender.com/api/mcp';
 export class SiteRequestError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }

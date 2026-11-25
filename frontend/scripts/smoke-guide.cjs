@@ -53,8 +53,12 @@ async function check() {
     await page.waitForFunction(() => document.body.innerText.includes('如何获取 MCP Token'));
     const visibleExample = (text) => page.waitForFunction(value => [...document.querySelectorAll('pre')]
       .some(el => el.getClientRects().length && el.textContent.includes(value)), {}, text);
-    await page.waitForSelector('[role="tab"][aria-selected="true"]', { visible: true });
-    assert.equal(await page.evaluate(() => [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].some(el => el.textContent === 'WorkBuddy')), true, 'WorkBuddy should be the default desktop client');
+    const desktopChoices = '[role="radiogroup"][aria-label="桌面客户端"]';
+    const chooseDesktop = label => click(`${desktopChoices} label`, label);
+    await page.waitForSelector(`${desktopChoices} input:checked`, { visible: true });
+    assert.deepEqual(await page.$$eval(`${desktopChoices} label`, labels => labels.map(el => el.innerText.trim())),
+      ['WorkBuddy', 'DeepSeek Harness', 'Codex 桌面版', 'Claude 桌面版']);
+    assert.equal(await page.$eval(`${desktopChoices} input:checked`, el => el.closest('label').innerText), 'WorkBuddy');
     await visibleExample('streamableHttp');
     await click('button', '复制 WorkBuddy 配置');
     await page.waitForFunction(() => typeof window.__copiedGuideExample === 'string');
@@ -62,7 +66,7 @@ async function check() {
     assert.deepEqual(workBuddy.mcpServers.suixinfei, {
       type: 'streamableHttp', url: 'https://flight-crawler.onrender.com/api/mcp', headers: { Authorization: 'Bearer YOUR_FLIGHT_MCP_TOKEN' },
     });
-    await click('[role="tab"]', 'DeepSeek Harness');
+    await chooseDesktop('DeepSeek Harness');
     await visibleExample('transport: streamable-http');
     await click('button', '复制 Harness 配置');
     await page.waitForFunction(() => window.__copiedGuideExample?.includes('transport: streamable-http'));
@@ -70,16 +74,22 @@ async function check() {
     assert.match(harness, /url: https:\/\/flight-crawler\.onrender\.com\/api\/mcp/);
     assert.match(harness, /Authorization: 'Bearer \$\{credential:FLIGHT_MCP_TOKEN\}'/);
     assert.match(await page.locator('body').map(el => el.innerText).wait(), /未做桌面端实测/);
-    await click('summary', '开发者配置');
-    await click('[role="tab"]', 'Codex');
+    assert.equal(await page.$eval('details', el => el.open), false, 'desktop options must not require expanding developer settings');
+    await chooseDesktop('Codex 桌面版');
     await visibleExample('bearer_token_env_var');
-    await click('button', '复制配置');
+    await click('button', '复制 Codex 配置');
     await page.waitForFunction(() => window.__copiedGuideExample?.includes('bearer_token_env_var'));
     const copied = await page.evaluate(() => window.__copiedGuideExample);
     assert.match(copied, /https:\/\/flight-crawler\.onrender\.com\/api\/mcp/);
     assert.doesNotMatch(copied, /127\.0\.0\.1|localhost/);
     assert.doesNotMatch(await page.locator('body').map(el => el.innerText).wait(), /本地启用步骤|FLIGHT_MCP_QUOTA_DATABASE_URL/);
     assert.match(copied, /bearer_token_env_var = "FLIGHT_MCP_TOKEN"/);
+    await chooseDesktop('Claude 桌面版');
+    await page.waitForFunction(() => document.body.innerText.includes('Add custom connector') && document.body.innerText.includes('Bearer YOUR_FLIGHT_MCP_TOKEN'));
+    await click('button', '复制 MCP 地址');
+    await page.waitForFunction(() => window.__copiedGuideExample === 'https://flight-crawler.onrender.com/api/mcp');
+    assert.equal(await page.$eval('details', el => el.open), false);
+    await click('summary', '开发者配置');
     await click('[role="tab"]', 'VS Code');
     await visibleExample('${input:flight-mcp-token}');
     await click('[role="tab"]', 'Cursor');
@@ -98,8 +108,19 @@ async function check() {
     await page.click('[aria-label="打开导航菜单"]');
     await click('[role="menuitem"]', '使用指南');
     await click('[role="tab"]', '接入自己的 AI');
-    await click('[role="tab"]', 'DeepSeek Harness');
+    await chooseDesktop('DeepSeek Harness');
     await visibleExample('transport: streamable-http');
+    const choicesFit = await page.$$eval(`${desktopChoices} label`, labels => labels.length === 4 && labels.every(el => {
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.left >= 0 && rect.right <= innerWidth;
+    }));
+    assert.ok(choicesFit, 'all four desktop options must be visible without horizontal scrolling');
+    await page.focus(`${desktopChoices} input:checked`);
+    await page.keyboard.press('ArrowRight');
+    await visibleExample('bearer_token_env_var');
+    await page.keyboard.press('ArrowRight');
+    await page.waitForSelector('pre[aria-label="Claude 桌面版 线上配置示例"]', { visible: true });
+    assert.equal(await page.$eval(`${desktopChoices} input:checked`, el => el.closest('label').innerText), 'Claude 桌面版');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'desktop client guide must fit mobile');
     if (process.env.GUIDE_SCREENSHOT_PATH) await page.screenshot({ path: process.env.GUIDE_SCREENSHOT_PATH, fullPage: true });
     await click('summary', '开发者配置');
@@ -115,7 +136,7 @@ async function check() {
     await page.reload({ waitUntil: 'networkidle0' });
     assert.equal((await status).status(), 200);
     assert.equal(await page.$(launcher), null, 'anonymous visitor must not see the Agent launcher');
-    console.log('PASS: desktop logo and mobile navigation, MCP deep link, WorkBuddy and Harness configuration clipboard, four developer examples, no mobile overflow, anonymous Agent hidden');
+    console.log('PASS: desktop and mobile navigation, MCP deep link, four peer desktop choices and copy actions, three developer examples, keyboard selection, no mobile overflow, anonymous Agent hidden');
   } finally {
     await browser?.close();
     server.httpServer.close();
