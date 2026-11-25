@@ -38,6 +38,12 @@
 .steps > li::marker { color: var(--accent); font-weight: 700; }
 .steps > li + li { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 18px; }
 .steps :global(.ant-tabs) { margin-top: 8px; }
+.clientSteps { display: grid; gap: 6px; margin: 0 0 12px; padding-inline-start: 20px; color: var(--muted); }
+.clientSteps code { overflow-wrap: anywhere; }
+.developerConfigs { margin-top: 16px; border-block: 1px solid var(--line); }
+.developerConfigs summary { padding: 8px 0; color: var(--accent); cursor: pointer; }
+.developerConfigs summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.developerConfigs[open] { padding-bottom: 12px; }
 .codeHeader { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .codeHeader > code { margin-right: auto; }
 .code { margin: 8px 0; padding: 12px; background: var(--tint); border: 1px solid var(--line); border-radius: 6px; overflow: auto; font-size: 12px; }

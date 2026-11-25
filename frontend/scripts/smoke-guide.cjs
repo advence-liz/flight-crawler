@@ -53,10 +53,28 @@ async function check() {
     await page.waitForFunction(() => document.body.innerText.includes('如何获取 MCP Token'));
     const visibleExample = (text) => page.waitForFunction(value => [...document.querySelectorAll('pre')]
       .some(el => el.getClientRects().length && el.textContent.includes(value)), {}, text);
+    await page.waitForSelector('[role="tab"][aria-selected="true"]', { visible: true });
+    assert.equal(await page.evaluate(() => [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].some(el => el.textContent === 'WorkBuddy')), true, 'WorkBuddy should be the default desktop client');
+    await visibleExample('streamableHttp');
+    await click('button', '复制 WorkBuddy 配置');
+    await page.waitForFunction(() => typeof window.__copiedGuideExample === 'string');
+    const workBuddy = JSON.parse(await page.evaluate(() => window.__copiedGuideExample));
+    assert.deepEqual(workBuddy.mcpServers.suixinfei, {
+      type: 'streamableHttp', url: 'https://flight-crawler.onrender.com/api/mcp', headers: { Authorization: 'Bearer YOUR_FLIGHT_MCP_TOKEN' },
+    });
+    await click('[role="tab"]', 'DeepSeek Harness');
+    await visibleExample('transport: streamable-http');
+    await click('button', '复制 Harness 配置');
+    await page.waitForFunction(() => window.__copiedGuideExample?.includes('transport: streamable-http'));
+    const harness = await page.evaluate(() => window.__copiedGuideExample);
+    assert.match(harness, /url: https:\/\/flight-crawler\.onrender\.com\/api\/mcp/);
+    assert.match(harness, /Authorization: 'Bearer \$\{credential:FLIGHT_MCP_TOKEN\}'/);
+    assert.match(await page.locator('body').map(el => el.innerText).wait(), /未做桌面端实测/);
+    await click('summary', '开发者配置');
     await click('[role="tab"]', 'Codex');
     await visibleExample('bearer_token_env_var');
     await click('button', '复制配置');
-    await page.waitForFunction(() => typeof window.__copiedGuideExample === 'string');
+    await page.waitForFunction(() => window.__copiedGuideExample?.includes('bearer_token_env_var'));
     const copied = await page.evaluate(() => window.__copiedGuideExample);
     assert.match(copied, /https:\/\/flight-crawler\.onrender\.com\/api\/mcp/);
     assert.doesNotMatch(copied, /127\.0\.0\.1|localhost/);
@@ -80,9 +98,13 @@ async function check() {
     await page.click('[aria-label="打开导航菜单"]');
     await click('[role="menuitem"]', '使用指南');
     await click('[role="tab"]', '接入自己的 AI');
+    await click('[role="tab"]', 'DeepSeek Harness');
+    await visibleExample('transport: streamable-http');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'desktop client guide must fit mobile');
+    if (process.env.GUIDE_SCREENSHOT_PATH) await page.screenshot({ path: process.env.GUIDE_SCREENSHOT_PATH, fullPage: true });
+    await click('summary', '开发者配置');
     await click('[role="tab"]', 'Cursor');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    if (process.env.GUIDE_SCREENSHOT_PATH) await page.screenshot({ path: process.env.GUIDE_SCREENSHOT_PATH, fullPage: true });
     // With the same enabled status response, only the admin-mode browser gets the launcher.
     const launcher = 'button[class*="launcher"]';
     await page.evaluate(() => localStorage.setItem('admin_token', 'ui-test-only'));
@@ -93,7 +115,7 @@ async function check() {
     await page.reload({ waitUntil: 'networkidle0' });
     assert.equal((await status).status(), 200);
     assert.equal(await page.$(launcher), null, 'anonymous visitor must not see the Agent launcher');
-    console.log('PASS: desktop logo click, mobile brand keyboard navigation, guide menu, planner link, MCP deep link, four client examples, clipboard, no mobile overflow, anonymous Agent hidden');
+    console.log('PASS: desktop logo and mobile navigation, MCP deep link, WorkBuddy and Harness configuration clipboard, four developer examples, no mobile overflow, anonymous Agent hidden');
   } finally {
     await browser?.close();
     server.httpServer.close();

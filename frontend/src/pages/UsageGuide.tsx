@@ -1,10 +1,22 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { BookOutlined, CodeOutlined, CompassOutlined, AimOutlined, GlobalOutlined, CopyOutlined } from '@ant-design/icons';
 import { Alert, Button, Tabs, Tag } from 'antd';
 import { Link, useSearchParams } from 'react-router-dom';
 import styles from './UsageGuide.module.css';
 
 const endpoint = 'https://flight-crawler.onrender.com/api/mcp';
+const workBuddyDocs = 'https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Connector';
+const harnessDocs = 'https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-manager/README.zh.md';
+const workBuddyConfig = JSON.stringify({ mcpServers: { suixinfei: {
+  type: 'streamableHttp', url: endpoint, headers: { Authorization: 'Bearer YOUR_FLIGHT_MCP_TOKEN' },
+} } }, null, 2);
+const harnessConfig = `suixinfei:
+  transport: streamable-http
+  url: ${endpoint}
+  headers:
+    Authorization: 'Bearer \${credential:FLIGHT_MCP_TOKEN}'
+  enabled: true`;
+
 const clients = [
   {
     name: 'Claude Code', file: '.mcp.json', docs: 'https://code.claude.com/docs/en/mcp',
@@ -31,11 +43,13 @@ const clients = [
   },
 ];
 
-function ConfigExample({ client }: { client: (typeof clients)[number] }) {
+function CopyableConfig({ name, file, config, copyLabel = '复制配置', children }: {
+  name: string; file: string; config: string; copyLabel?: string; children?: ReactNode;
+}) {
   const [notice, setNotice] = useState('');
   async function copy() {
     try {
-      await navigator.clipboard.writeText(client.config);
+      await navigator.clipboard.writeText(config);
       setNotice('已复制');
     } catch {
       setNotice('无法自动复制，请选中下方配置手动复制。');
@@ -44,12 +58,42 @@ function ConfigExample({ client }: { client: (typeof clients)[number] }) {
 
   return <div>
     <div className={styles.codeHeader}>
-      <code>{client.file}</code>
-      <Button size="small" icon={<CopyOutlined />} onClick={() => void copy()}>复制配置</Button>
+      <code>{file}</code>
+      <Button size="small" icon={<CopyOutlined />} onClick={() => void copy()}>{copyLabel}</Button>
       <span className={styles.copyNotice} role="status">{notice}</span>
     </div>
-    <pre className={styles.code} tabIndex={0} aria-label={`${client.name} 线上配置示例`}><code>{client.config}</code></pre>
-    <p className={styles.configHelp}>{client.help} <a href={client.docs} target="_blank" rel="noreferrer">客户端官方文档</a></p>
+    <pre className={styles.code} tabIndex={0} aria-label={`${name} 线上配置示例`}><code>{config}</code></pre>
+    {children}
+  </div>;
+}
+
+function DocsLink({ href, children }: { href: string; children: ReactNode }) {
+  return <a href={href} target="_blank" rel="noreferrer">{children}</a>;
+}
+
+function WorkBuddyGuide() {
+  return <div>
+    <ol className={styles.clientSteps}>
+      <li>在腾讯 WorkBuddy 桌面端，打开「专家·技能·连接器」，选「连接器」→「自定义连接器」→「配置 MCP」。</li>
+      <li>复制下面的配置，粘贴到连接器配置里。把 <code>YOUR_FLIGHT_MCP_TOKEN</code> 换成你的个人 Token，保留前面的 <code>Bearer</code> 和一个空格。如果已有连接器，只新增 <code>suixinfei</code> 这一项。</li>
+      <li>保存并启用连接器。请在连接器配置里填写 Token，不要把带 Token 的配置发到聊天里。</li>
+    </ol>
+    <CopyableConfig name="WorkBuddy" file="MCP 配置（JSON）" config={workBuddyConfig} copyLabel="复制 WorkBuddy 配置">
+      <p className={styles.configHelp}><DocsLink href={workBuddyDocs}>WorkBuddy 官方操作说明</DocsLink> · <DocsLink href="https://open.workbuddy.cn/docs/connector">连接器配置规范</DocsLink></p>
+    </CopyableConfig>
+  </div>;
+}
+
+function HarnessGuide() {
+  return <div>
+    <ol className={styles.clientSteps}>
+      <li>打开 DeepSeek Harness 桌面端（不是普通 DeepSeek 聊天），在凭据设置中保存个人 Token，名称填 <code>FLIGHT_MCP_TOKEN</code>，值只填 Token。</li>
+      <li>在设置里的 MCP 管理器添加名为 <code>suixinfei</code> 的服务。传输类型选 <strong>Streamable HTTP</strong>，地址和请求头按下方示例填写。不要开启 OAuth，也不要把 Token 明文填进配置。</li>
+      <li>保存并启用。如果没有 MCP 管理器或无法添加请求头，请按官方说明查看版本及配置方式。</li>
+    </ol>
+    <CopyableConfig name="DeepSeek Harness" file="单个服务器配置（YAML 片段）" config={harnessConfig} copyLabel="复制 Harness 配置">
+      <p className={styles.configHelp}>按字段填写，或将片段合并到管理器的 <code>config.servers</code> 下；不要替换已有服务器。<DocsLink href={harnessDocs}>DeepSeek Harness 官方配置说明</DocsLink></p>
+    </CopyableConfig>
   </div>;
 }
 
@@ -84,12 +128,23 @@ function WebsiteGuide() {
 function McpGuide() {
   return <div className={styles.panel}>
     <h2>让你的 AI 直接查随心飞航班</h2>
-    <Alert type="info" showIcon message="如何获取 MCP Token" description={<>登录后打开<Link to="/account">我的账号</Link>，在「MCP 访问」里发放个人 Token。Token 明文只显示一次；请妥善保存，不要把它发给别人，也不要使用管理员 Token。</>} />
+    <Alert type="info" showIcon message="如何获取 MCP Token" description={<>登录后打开<Link to="/account">我的账号</Link>，在「MCP 访问」生成个人 Token。它只显示一次，请妥善保存，不要发给别人，也不要使用管理员 Token。</>} />
     <ol className={styles.steps}>
       <li>
-        <h3>复制线上配置到你的 AI 客户端</h3>
-        <p>选择客户端，把配置合并到已有设置里，并按提示提供你的个人 Token。不要覆盖其他 MCP 服务。</p>
-        <Tabs size="small" items={clients.map(client => ({ key: client.name, label: client.name, children: <ConfigExample client={client} /> }))} />
+        <h3>在你的桌面 AI 里添加随心飞</h3>
+        <p>选择你正在用的客户端。WorkBuddy 和 DeepSeek Harness 的步骤依据产品文档整理，未做桌面端实测；入口可能随版本变化。</p>
+        <Tabs size="small" items={[
+          { key: 'workbuddy', label: 'WorkBuddy', children: <WorkBuddyGuide /> },
+          { key: 'harness', label: 'DeepSeek Harness', children: <HarnessGuide /> },
+        ]} />
+        <details className={styles.developerConfigs}>
+          <summary>开发者配置</summary>
+          <Tabs size="small" items={clients.map(client => ({ key: client.name, label: client.name, children:
+            <CopyableConfig key={client.name} {...client}>
+              <p className={styles.configHelp}>{client.help} <DocsLink href={client.docs}>客户端官方文档</DocsLink></p>
+            </CopyableConfig>,
+          }))} />
+        </details>
         <p>ChatGPT 网页版不能直接使用这套固定 Token 配置。</p>
       </li>
       <li>
