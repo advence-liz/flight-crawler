@@ -89,7 +89,7 @@ export interface LeaveInfo {
 /**
  * 根据整段行程的首段起飞时间和末段落地时间，计算请假成本。
  */
-export function calcLeaveDays(departureTime: Date, arrivalTime: Date): LeaveInfo {
+export function calcLeaveDays(departureTime: Date, arrivalTime: Date, memo?: Map<string, LeaveInfo>): LeaveInfo {
   const departDate = toDateStr(departureTime);
   const returnDate = toDateStr(arrivalTime);
   const depHour = departureTime.getUTCHours();
@@ -97,6 +97,11 @@ export function calcLeaveDays(departureTime: Date, arrivalTime: Date): LeaveInfo
 
   const eveningDeparture = depHour >= EVENING_DEPARTURE_HOUR;
   const earlyArrival = arrHour < MORNING_ARRIVAL_HOUR;
+  const key = memo && `${departDate}|${returnDate}|${Number(eveningDeparture)}${Number(earlyArrival)}`;
+  if (key) {
+    const cached = memo?.get(key);
+    if (cached) return cached;
+  }
 
   let leaveDays = 0;
   for (const date of eachDate(departDate, returnDate)) {
@@ -106,7 +111,7 @@ export function calcLeaveDays(departureTime: Date, arrivalTime: Date): LeaveInfo
     leaveDays++;
   }
 
-  return {
+  const result = {
     leaveDays,
     departDate,
     returnDate,
@@ -114,6 +119,9 @@ export function calcLeaveDays(departureTime: Date, arrivalTime: Date): LeaveInfo
     earlyArrival,
     noLeaveNeeded: leaveDays === 0,
   };
+  // Keep the request-local cache bounded even for unusually wide searches.
+  if (key && memo && memo.size < 4096) memo.set(key, result);
+  return result;
 }
 
 /**

@@ -11,18 +11,15 @@ import {
 import {
   RouteResultDto,
   RoutePlanResponseDto,
-  FlightSegmentDto,
 } from './dto/route-result.dto';
 import { Flight } from '../flight/entities/flight.entity';
 import { QueryCache } from './entities/query-cache.entity';
-import { pLimit } from './utils/p-limit';
 import {
   GraphNode,
   buildGraph,
+  firstDepartureAtOrAfter,
   expandReachableOrigins,
   buildRouteResult,
-  calculateDuration,
-  calculateLayover,
 } from './utils/flight-graph';
 import { readCache, writeCache } from './utils/query-cache';
 
@@ -382,11 +379,11 @@ export class RouteService implements OnApplicationBootstrap {
       if (nextCities.size === 0) break;
       nextCities.forEach((c) => visited.add(c));
 
-      const legsArray = await pLimit(
-        Array.from(nextCities).map(city =>
-          () => this.flightService.queryFlights({ origin: city, startDate, endDate, flightType }),
-        ), 10);
-      frontierFlights = legsArray.flat();
+      const origins = Array.from(nextCities);
+      const batch = await this.flightService.queryFlights({ origin: origins[0], origins, startDate, endDate, flightType });
+      // Keep the previous frontier order so ties and the next round's expansion are stable.
+      const byOrigin = buildGraph(batch);
+      frontierFlights = origins.flatMap(city => byOrigin.get(city)?.flights ?? []);
       pool.push(...frontierFlights);
     }
 
@@ -468,31 +465,34 @@ export class RouteService implements OnApplicationBootstrap {
     maxTransfers: number,
     minLayoverHours: number,
     maxLayoverHours: number,
+    destinations?: ReadonlySet<string>,
   ): Map<string, RouteResultDto[]> {
     const result = new Map<string, RouteResultDto[]>();
     const visited = new Set<string>();
     const path: Flight[] = [];
     const minLayoverMs = minLayoverHours * 60 * 60 * 1000;
     const maxLayoverMs = maxLayoverHours * 60 * 60 * 1000;
+    const maxLegs = maxTransfers + 1;
 
     const dfs = (current: string) => {
-      if (path.length > 0 && !excludeOrigins.has(current)) {
-        // 到达一个非起点城市，记录路径
+      if (path.length > 0 && !excludeOrigins.has(current) && (!destinations || destinations.has(current))) {
+        // Only materialize paths that the caller can use.
         if (!result.has(current)) result.set(current, []);
         result.get(current)!.push(buildRouteResult([...path]));
       }
-      if (path.length >= maxTransfers + 1) return; // 已达最大段数
-      if (visited.has(current)) return;
+      if (path.length >= maxLegs || visited.has(current)) return;
 
       visited.add(current);
       const node = graph.get(current);
       if (node) {
-        for (const flight of node.flights) {
-          if (path.length > 0) {
-            const lastArrival = path[path.length - 1].arrivalTime.getTime();
-            const layoverMs = flight.departureTime.getTime() - lastArrival;
-            if (layoverMs < minLayoverMs || layoverMs > maxLayoverMs) continue;
-          }
+        const finalLeg = path.length === maxLegs - 1;
+        const lastArrival = path[path.length - 1]?.arrivalTime.getTime();
+        const first = lastArrival === undefined ? 0 : firstDepartureAtOrAfter(node.flights, lastArrival + minLayoverMs);
+        const latest = lastArrival === undefined ? Infinity : lastArrival + maxLayoverMs;
+        for (let i = first; i < node.flights.length; i++) {
+          const flight = node.flights[i];
+          if (flight.departureTime.getTime() > latest) break;
+          if (finalLeg && destinations && !destinations.has(flight.destination)) continue;
           path.push(flight);
           dfs(flight.destination);
           path.pop();
@@ -537,12 +537,12 @@ export class RouteService implements OnApplicationBootstrap {
       visited.add(current);
       const node = graph.get(current);
       if (node) {
-        for (const flight of node.flights) {
-          if (path.length > 0) {
-            const lastArrival = path[path.length - 1].arrivalTime.getTime();
-            const layoverMs = flight.departureTime.getTime() - lastArrival;
-            if (layoverMs < minLayoverMs || layoverMs > maxLayoverMs) continue;
-          }
+        const lastArrival = path[path.length - 1]?.arrivalTime.getTime();
+        const first = lastArrival === undefined ? 0 : firstDepartureAtOrAfter(node.flights, lastArrival + minLayoverMs);
+        const latest = lastArrival === undefined ? Infinity : lastArrival + maxLayoverMs;
+        for (let i = first; i < node.flights.length; i++) {
+          const flight = node.flights[i];
+          if (flight.departureTime.getTime() > latest) break;
           path.push(flight);
           dfs(flight.destination);
           path.pop();

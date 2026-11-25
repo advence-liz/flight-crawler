@@ -20,7 +20,23 @@ export function buildGraph(flights: Flight[]): Map<string, GraphNode> {
     }
     graph.get(flight.origin)!.flights.push(flight);
   }
+  for (const node of graph.values()) {
+    // Stable sorting keeps the existing tie order while allowing range lookups.
+    node.flights.sort((a, b) => a.departureTime.getTime() - b.departureTime.getTime());
+  }
   return graph;
+}
+
+/** Lower bound within a graph node's chronologically sorted departures. */
+export function firstDepartureAtOrAfter(flights: readonly Flight[], timestamp: number): number {
+  let low = 0;
+  let high = flights.length;
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    if (flights[middle].departureTime.getTime() < timestamp) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }
 
 /**

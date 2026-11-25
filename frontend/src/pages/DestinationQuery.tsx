@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card,
@@ -254,6 +254,8 @@ function DestinationQuery() {
   const [transferOneWay, setTransferOneWay] = useState<TransferOneWayDest[]>([]);
   const [discoverTransferLoading, setDiscoverTransferLoading] = useState(false);
   const [transferDiscovered, setTransferDiscovered] = useState(false);
+  const activeSearch = useRef<AbortController | null>(null);
+  useEffect(() => () => activeSearch.current?.abort(), []);
 
   // 跳转到行程规划
   const goToPlan = (destination: string) => {
@@ -335,75 +337,73 @@ function DestinationQuery() {
       flightType: values.flightType,
     };
 
-    // 重置状态
-    setDestinations([]);
+    // Cancel the previous search so older responses cannot replace the current results.
+    activeSearch.current?.abort();
+    const { signal } = (activeSearch.current = new AbortController());
     setTransferRoundTrip([]);
     setTransferOneWay([]);
     setTransferDiscovered(false);
-    setEnrichingReturn(false);
-    setSnapshotAge(null);
-    setLoading(true);
+    setDiscoverTransferLoading(false);
 
-    // 先上本地快照：命中就立刻可见，不用干等后端（可能是 15~40 秒的冷启动）。
-    // 真实请求照常发出，回来后再覆盖——允许短暂不一致。
     const snapshotK = snapshotKey('destinations', queryParams);
     const snapshot = readSnapshot<DestinationResult[]>(snapshotK, SNAPSHOT_TTL_MS);
-    if (snapshot && snapshot.data.length > 0) {
-      setDestinations(snapshot.data);
-      setSnapshotAge(snapshot.ageMs);
-      setLoading(false);
-    }
+    const hasSnapshot = Boolean(snapshot?.data.length);
+    setDestinations(snapshot?.data ?? []);
+    setSnapshotAge(hasSnapshot && snapshot ? snapshot.ageMs : null);
+    setLoading(!hasSnapshot);
+    setEnrichingReturn(hasSnapshot);
 
-    // 第一步：仅查去程，立即渲染（无缓存，速度快）
+    // The complete lookup is one small response (and has a server cache). Use the
+    // one-way endpoint only as a fallback, not as a prerequisite on every search.
     try {
-      const fastResult = await queryDestinations({ ...queryParams, includeReturn: false });
-      if (!snapshot) {
-        setDestinations(fastResult.destinations);
-      }
+      const result = await queryDestinations({ ...queryParams, includeReturn: true }, signal);
+      if (signal.aborted) return;
+      setDestinations(result.destinations);
+      setSnapshotAge(null);
       setOriginCookie(values.origin);
+      writeSnapshot(snapshotK, result.destinations);
+      if (!hasSnapshot) message.success(`查询成功，共 ${result.totalCount} 个目的地`);
     } catch {
-      if (!snapshot) {
-        message.error('查询失败，请稍后重试');
-        setLoading(false);
-        return;
+      if (signal.aborted) return;
+      if (hasSnapshot) {
+        message.warning('最新数据暂时没取到，先显示上次的结果');
+      } else {
+        try {
+          const result = await queryDestinations({ ...queryParams, includeReturn: false }, signal);
+          if (signal.aborted) return;
+          setDestinations(result.destinations);
+          setOriginCookie(values.origin);
+          message.warning('返程信息加载失败，仅显示去程数据');
+        } catch {
+          if (!signal.aborted) message.error('查询失败，请稍后重试');
+          return;
+        }
       }
-      // 有快照就先继续展示，后面补返程那一步还会再试
-    }
-
-    // 第二步：补充返程信息（有缓存命中时很快，无缓存时稍慢但不阻塞首屏）
-    setEnrichingReturn(true);
-    queryDestinations({ ...queryParams, includeReturn: true })
-      .then(fullResult => {
-        setDestinations(fullResult.destinations);
-        setSnapshotAge(null);
-        writeSnapshot(snapshotK, fullResult.destinations);
-        if (!snapshot) message.success(`查询成功，共 ${fullResult.totalCount} 个目的地`);
-      })
-      .catch(() => {
-        // 返程查询失败不影响已展示的去程数据
-        if (!snapshot) message.warning('返程信息加载失败，仅显示去程数据');
-      })
-      .finally(() => {
+    } finally {
+      if (!signal.aborted) {
         setEnrichingReturn(false);
         setLoading(false);
-      });
+      }
+    }
 
-    // 第三步：异步触发中转目的地发现（不阻塞前两步）
+    // Run the more expensive exploratory request after the direct results are ready.
     setDiscoverTransferLoading(true);
-    discoverTransferDestinations({
-      origin: values.origin,
-      departureDate: startDate.format('YYYY-MM-DD'),
-      endDate: endDate.format('YYYY-MM-DD'),
-      maxTransfers: 1,
-    }).then(transferResult => {
-      setTransferRoundTrip(transferResult.roundTrip);
-      setTransferOneWay(transferResult.oneWay);
+    try {
+      const result = await discoverTransferDestinations({
+        origin: queryParams.origin,
+        departureDate: queryParams.startDate,
+        endDate: queryParams.endDate,
+        maxTransfers: 1,
+      }, signal);
+      if (signal.aborted) return;
+      setTransferRoundTrip(result.roundTrip);
+      setTransferOneWay(result.oneWay);
       setTransferDiscovered(true);
-    }).catch(() => {
-      // 中转查询失败不阻断主流程
-    }).finally(() => {
-      setDiscoverTransferLoading(false);
-    });
+    } catch {
+      // An unavailable transfer search does not hide the direct results.
+    } finally {
+      if (!signal.aborted) setDiscoverTransferLoading(false);
+    }
   };
 
   const handleShowDetail = async (dest: DestinationResult) => {

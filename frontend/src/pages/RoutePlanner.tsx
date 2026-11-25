@@ -377,6 +377,7 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
   /** 初始化时写入的去程区间，用来判断用户后来有没有手动改过 */
   const initialDepartureStrRef = useRef<{ start: string | null; end: string | null } | null>(null);
   const dbWindowAppliedRef = useRef(false);
+  const retryDateWindowRef = useRef(false);
   /** 请求序号：只有最后一次查询的响应能落地，避免乱序返回覆盖 */
   const reqIdRef = useRef(0);
   const screens = useBreakpoint();
@@ -459,12 +460,14 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
     return notes;
   };
 
-  /** 指定目的地时：先把日期区间对齐到真实可飞日期，再查询 */
-  const alignDatesAndSearch = async () => {
+  /** Align defaults, or retry an empty deep-link search only if its dates actually change. */
+  const alignDatesAndSearch = async (canRetry?: () => boolean): Promise<boolean> => {
     const values = form.getFieldsValue();
     const { origin, destination } = values;
-    setLoading(true);
-    setMode('plan');
+    if (!canRetry) {
+      setLoading(true);
+      setMode('plan');
+    }
     if (origin && destination && origin !== destination) {
       try {
         // 日期窗口按航线固定，12 小时内不会变——命中快照就不必多等一个 RTT
@@ -486,19 +489,24 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
         // 对齐请求可能跑了很久，期间用户可能已经把航线改成别的了，
         // 这时旧航线的窗口不能套到新航线上
         const latest = form.getFieldsValue();
-        if (latest.origin !== origin || latest.destination !== destination) {
-          setLoading(false);
-          return;
+        if (latest.origin !== origin || latest.destination !== destination || (canRetry && !canRetry())) {
+          if (!canRetry) setLoading(false);
+          return false;
         }
         const notes = applyDateWindow(win);
+        if (canRetry && notes.length === 0) return false;
         if (notes.length) {
           message.info(`已按该航线可飞日期自动调整：${notes.join('；')}`);
         }
       } catch {
-        // 对齐失败不阻断，按原区间照常查询
+        // A failed date-window request must not block the original dates or retry them again.
+        if (canRetry) return false;
       }
+    } else if (canRetry) {
+      return false;
     }
     form.submit();
+    return true;
   };
 
   useEffect(() => {
@@ -572,15 +580,15 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
       dbWindowAppliedRef.current = true;
     }
 
-    // 表单字段已填好（cities 由预设兜底，下拉框首屏可用），
-    // 但自动查询仍等接口返回真实的 minDate，避免用错的默认区间去查
-    if (cities.length === 0 || !dateRange.minDate) return;
-    if (triggeredRef.current) return;
+    // Only inferred dates need the database window before their first request.
+    const hasExplicitDeparture = Boolean(urlParams?.departureDate);
+    if (triggeredRef.current || cities.length === 0 || (!hasExplicitDeparture && !dateRange.minDate)) return;
     triggeredRef.current = true;
 
-    if (urlParams?.destination) {
+    if (urlParams?.destination && !hasExplicitDeparture) {
       void alignDatesAndSearch();
     } else {
+      retryDateWindowRef.current = Boolean(urlParams?.destination && hasExplicitDeparture);
       form.submit();
     }
   }, [cities, dateRange.minDate]);
@@ -607,6 +615,20 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
     const [retStart, retEnd] = values.returnRange || [];
     const returnDate: string | undefined = retStart?.format('YYYY-MM-DD');
     const returnDateEnd: string | undefined = retEnd ? retEnd.format('YYYY-MM-DD') : returnDate;
+    const retryDateWindow = retryDateWindowRef.current;
+    retryDateWindowRef.current = false;
+    const canRetryDateWindow = () => {
+      if (isStale()) return false;
+      const latest = form.getFieldsValue();
+      const sameRange = (current: dayjs.Dayjs[] | undefined, original: dayjs.Dayjs[] | undefined) =>
+        [0, 1].every(index => current?.[index]?.format('YYYY-MM-DD') === original?.[index]?.format('YYYY-MM-DD'));
+      return latest.origin === values.origin && latest.destination === values.destination &&
+        latest.maxTransfers === values.maxTransfers && latest.flightType === values.flightType &&
+        sameRange(latest.departureRange, values.departureRange) && sameRange(latest.returnRange, values.returnRange);
+    };
+    const retryAlignedDates = () => retryDateWindow && canRetryDateWindow()
+      ? alignDatesAndSearch(canRetryDateWindow)
+      : Promise.resolve(false);
 
     const flightType = toFlightTypeParam(values.flightType);
 
@@ -733,6 +755,8 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
           writeSnapshot(cacheKey, resp.routes);
           if (!snap) message.success(`找到 ${resp.routes.length} 个往返方案`);
         } else {
+          if (retryDateWindow && await retryAlignedDates()) return;
+          if (isStale()) return;
           // 往返为空时自动降级查单程：单程可达的城市（如北京→伊犁伊宁）
           // 否则会卡在"没有往返方案"的死胡同里
           const oneWay = await planRoute({
@@ -770,7 +794,8 @@ function TripTab({ cities, urlParams, dateRange, dataFreshness }: TripTabProps) 
         if (isStale()) return;
         setOneWayRoutes(resp.routes);
         if (resp.routes.length === 0) {
-          message.warning('未找到合适的单程方案');
+          if (retryDateWindow && await retryAlignedDates()) return;
+          if (!isStale()) message.warning('未找到合适的单程方案');
         } else {
           message.success(`找到 ${resp.routes.length} 个单程方案`);
         }

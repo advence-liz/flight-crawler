@@ -15,7 +15,7 @@ import {
   ExplorePlanResponseDto,
 } from './dto/explore-result.dto';
 import { QueryCache } from './entities/query-cache.entity';
-import { calcLeaveDays, holidaysInRange } from './utils/leave-days';
+import { calcLeaveDays, holidaysInRange, type LeaveInfo } from './utils/leave-days';
 import { evaluateTripPattern } from './utils/trip-pattern';
 import { readCache, writeCache } from './utils/query-cache';
 import { pLimit } from './utils/p-limit';
@@ -284,7 +284,8 @@ export class RoundTripService {
   private pickBestLeavePair(
     outboundRoutes: RouteResultDto[],
     returnRoutes: RouteResultDto[],
-    filter?: ExploreRouteFilter,
+    filter: ExploreRouteFilter | undefined,
+    leaveMemo: Map<string, LeaveInfo>,
   ): {
     outbound: RouteResultDto;
     return: RouteResultDto;
@@ -314,26 +315,25 @@ export class RoundTripService {
       holiday?: string;
     } | null = null;
 
+    const timedReturns = retCandidates.map(route => ({
+      route,
+      departure: new Date(route.segments[0].departureTime),
+      arrival: new Date(route.segments[route.segments.length - 1].arrivalTime),
+    }));
     for (const outbound of outCandidates) {
       const lastOutbound = outbound.segments[outbound.segments.length - 1];
       const outboundArrival = new Date(lastOutbound.arrivalTime).getTime();
+      const firstDeparture = new Date(outbound.segments[0].departureTime);
 
-      for (const returnRoute of retCandidates) {
-        const returnDeparture = new Date(returnRoute.segments[0].departureTime).getTime();
-        if (returnDeparture - outboundArrival < MIN_STAY_MS) continue;
+      for (const { route: returnRoute, departure, arrival: finalArrival } of timedReturns) {
+        if (departure.getTime() - outboundArrival < MIN_STAY_MS) continue;
 
-        const firstDeparture = new Date(outbound.segments[0].departureTime);
-        const finalArrival = new Date(returnRoute.segments[returnRoute.segments.length - 1].arrivalTime);
-        const leave = calcLeaveDays(firstDeparture, finalArrival);
+        const leave = calcLeaveDays(firstDeparture, finalArrival, leaveMemo);
         if (filter && !filter.acceptPair(outbound, returnRoute, leave.leaveDays)) continue;
         // 已经找到更省假的组合，这个就不必再算了
         if (best && leave.leaveDays > best.leaveDays) continue;
 
-        const pattern = evaluateTripPattern(
-          firstDeparture,
-          new Date(returnRoute.segments[0].departureTime),
-          finalArrival,
-        );
+        const pattern = evaluateTripPattern(firstDeparture, departure, finalArrival);
         const score = this.calculateRoundTripScore(
           outbound.totalDuration + returnRoute.totalDuration,
           outbound.transferCount + returnRoute.transferCount,
@@ -523,7 +523,7 @@ export class RoundTripService {
 
     // 5. 一次DFS得到所有能回到出发城市的返程路径，按出发城市分组
     const returnByDest = this.routeService.findAllRoutesGroupedByDestPublic(
-      returnGraph, candidateCities, new Set(candidateCities), maxTransfers, 2, 24,
+      returnGraph, candidateCities, new Set(candidateCities), maxTransfers, 2, 24, originSet,
     );
     const returnBySrc = new Map<string, RouteResultDto[]>();
     for (const [dest, routes] of returnByDest) {
@@ -541,6 +541,7 @@ export class RoundTripService {
 
     // 6. 按目的地汇总，计算评分
     const destinations_result: ExploreDestinationDto[] = [];
+    const leaveMemo = new Map<string, LeaveInfo>();
     let pairBudget = 500_000;
     for (const city of candidateCities) {
       const outboundRoutes = outboundByDest.get(city) ?? [];
@@ -558,7 +559,7 @@ export class RoundTripService {
 
       // 去程/返程不能各挑各的最优：那样时间线可能倒置（返程早于去程落地），
       // 也算不出真实的请假成本。这里按日期组合挑出「请假最少、其次评分最高」的一对。
-      const bestPair = this.pickBestLeavePair(scoredOut, scoredRet, filter);
+      const bestPair = this.pickBestLeavePair(scoredOut, scoredRet, filter, leaveMemo);
       if (!bestPair) continue;
 
       destinations_result.push({

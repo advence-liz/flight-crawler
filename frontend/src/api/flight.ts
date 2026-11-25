@@ -42,9 +42,10 @@ export interface Flight {
 
 // 查询所有可达目的地
 export const queryDestinations = (
-  params: QueryFlightsParams & { includeReturn?: boolean }
+  params: QueryFlightsParams & { includeReturn?: boolean },
+  signal?: AbortSignal,
 ): Promise<DestinationsResponse> => {
-  return api.get('/flights/destinations', { params });
+  return api.get('/flights/destinations', { params, signal });
 };
 
 
@@ -417,8 +418,8 @@ export const discoverTransferDestinations = (params: {
   departureDate: string;
   endDate?: string;
   maxTransfers?: number;
-}): Promise<DiscoverTransferResponse> => {
-  return api.post('/routes/discover-transfer', params, { timeout: 120000 }); // 中转搜索最多等 2 分钟
+}, signal?: AbortSignal): Promise<DiscoverTransferResponse> => {
+  return api.post('/routes/discover-transfer', params, { timeout: 120000, signal });
 };
 
 

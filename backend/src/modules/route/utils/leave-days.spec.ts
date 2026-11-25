@@ -18,6 +18,16 @@ describe('isWorkday', () => {
 });
 
 describe('calcLeaveDays', () => {
+  it('memoizes equivalent pairs without merging the 18:00 and 08:00 boundaries', () => {
+    const memo = new Map<string, ReturnType<typeof calcLeaveDays>>();
+    const calc = (departure: string, arrival: string) => calcLeaveDays(at(departure), at(arrival), memo);
+    expect(calc('2026-11-13T18:00:00Z', '2026-11-16T07:59:00Z').leaveDays).toBe(0);
+    expect(calc('2026-11-13T21:00:00Z', '2026-11-16T07:00:00Z').leaveDays).toBe(0);
+    expect(memo.size).toBe(1);
+    expect(calc('2026-11-13T17:59:00Z', '2026-11-16T07:59:00Z').leaveDays).toBe(1);
+    expect(calc('2026-11-13T18:00:00Z', '2026-11-16T08:00:00Z').leaveDays).toBe(1);
+    expect(memo.size).toBe(3);
+  });
   it('周五 18:00 后走、周日回 → 不请假', () => {
     const r = calcLeaveDays(at('2026-11-13T18:00:00Z'), at('2026-11-15T22:00:00Z'));
     expect(r.leaveDays).toBe(0);
