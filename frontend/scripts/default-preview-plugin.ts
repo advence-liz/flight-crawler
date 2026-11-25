@@ -5,6 +5,7 @@ import type { Plugin } from 'vite';
 
 const repo = 'advence-liz/flight-crawler';
 const maxSize = 128 * 1024; // Only a few public destination result sets, not the database.
+const maxInlineCss = 8 * 1024;
 const isoDay = /^\d{4}-\d{2}-\d{2}$/;
 
 async function loadPublishedPreview() {
@@ -21,7 +22,7 @@ export function defaultPreview(): Plugin {
   return {
     name: 'default-destination-preview',
     apply: 'build',
-    async transformIndexHtml() {
+    async transformIndexHtml(html, { bundle }) {
       const file = process.env.FLIGHT_PREVIEW_FILE;
       if (!file && process.env.RENDER !== 'true') return;
       try {
@@ -39,10 +40,21 @@ export function defaultPreview(): Plugin {
         if (entries.length === 0) return;
         const json = JSON.stringify({ crawledAt: data.crawledAt, entries }).replace(/</g, '\\u003c');
         const boot = await readFile(new URL('./default-preview-boot.js', import.meta.url), 'utf8');
-        return [
-          { tag: 'script', attrs: { id: 'flight-preview-data', type: 'application/json' }, children: json, injectTo: 'body' },
-          { tag: 'script', children: boot, injectTo: 'body' },
-        ];
+        // A stylesheet in the head blocks both the inline boot script and first paint.
+        // Embed only the small, self-contained Vite entry asset; leave other CSS untouched.
+        const withStyles = html.replace(/<link rel="stylesheet" crossorigin href="\/(assets\/index-[\w-]+\.css)">/, (link, fileName: string) => {
+          const asset = bundle?.[fileName];
+          const css = asset?.type === 'asset' && asset.source;
+          if (typeof css !== 'string' || Buffer.byteLength(css) > maxInlineCss || /url\s*\(|@import\b|<\/style/i.test(css)) return link;
+          return `<style>${css}</style>`;
+        });
+        return {
+          html: withStyles,
+          tags: [
+            { tag: 'script', attrs: { id: 'flight-preview-data', type: 'application/json' }, children: json, injectTo: 'body' },
+            { tag: 'script', children: boot, injectTo: 'body' },
+          ],
+        };
       } catch {
         // Missing, invalid, or unreachable preview never blocks a frontend release.
         console.warn('[default-preview] no usable snapshot; building the live-search fallback');

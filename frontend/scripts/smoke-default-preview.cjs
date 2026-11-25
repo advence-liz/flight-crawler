@@ -51,6 +51,8 @@ const result = (...cities) => ({ destinations: cities.map(city), totalCount: cit
           const u = new URL(req.url());
           if (u.origin !== base) { void req.abort().catch(() => {}); return; }
           if (u.pathname.startsWith('/assets/index-') && u.pathname.endsWith('.js')) { heldEntry = req; return; }
+          // A delayed entry stylesheet must not block a matching preview from painting.
+          if (expected && u.pathname.startsWith('/assets/index-') && u.pathname.endsWith('.css')) return;
           if (u.pathname === '/api/flights/destinations') { heldQuery = req; return; }
           if (u.pathname.startsWith('/api/')) { void json(req, {}); return; }
           void req.continue();
@@ -58,6 +60,10 @@ const result = (...cities) => ({ destinations: cities.map(city), totalCount: cit
         const loaded = page.goto(base + path, { waitUntil: 'domcontentloaded', timeout: 8000 }).catch(e => e);
         await page.waitForSelector('.boot-wrap', { timeout: 2500 });
         await page.waitForFunction(() => document.querySelector('script[type="module"][src]'));
+        if (expected) {
+          await page.waitForFunction(() => document.querySelector('#boot-destinations:not([hidden]) li') &&
+            performance.getEntriesByName('first-contentful-paint').length > 0, { timeout: 1800 });
+        }
         assert.equal(await page.evaluate(() => Boolean(document.querySelector('#boot-destinations:not([hidden]) li'))), expected, `${name}: default snapshot must only show on an exact match`);
         if (expected) {
           assert.ok(await page.evaluate(() => document.querySelector('#boot-destinations').textContent.includes('海口')));
