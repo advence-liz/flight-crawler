@@ -13,11 +13,9 @@ import {
 } from './dto/destination-result.dto';
 import { QueryFlightsWithPaginationDto } from './dto/query-flights-pagination.dto';
 import { UpdateFlightDto } from './dto/update-flight.dto';
-import { BatchDeleteFlightsDto } from './dto/batch-delete-flights.dto';
 
 const DISABLED = process.env.DISABLE_CACHE === 'true';
 const DESTINATIONS_CACHE_TTL_MS = DISABLED ? 0 : 24 * 60 * 60 * 1000;
-const SHORT_CACHE_TTL_MS = DISABLED ? 0 : 30 * 60 * 1000; // 30 分钟，用于规划类接口
 
 @Injectable()
 export class FlightService {
@@ -191,7 +189,7 @@ export class FlightService {
   /**
    * 全量加载日期范围内所有航班（用于中转搜索，1次SQL替代N+1）
    */
-  async queryAllFlightsInRange(startDate: string, endDate: string, flightType?: string): Promise<Flight[]> {
+  async queryAllFlightsInRange(startDate: string, endDate: string, flightType?: string, strictCard = false): Promise<Flight[]> {
     const startDateTime = new Date(startDate);
     const endDateTime = new Date(endDate);
     endDateTime.setUTCHours(23, 59, 59, 999);
@@ -199,7 +197,7 @@ export class FlightService {
       .where('flight.departureTime >= :startDateTime', { startDateTime })
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
-    if (flightType === '666权益卡航班') {
+    if (strictCard || flightType === '666权益卡航班') {
       query = this.applyCardTypeFilter(query, flightType);
     }
     return query.getMany();

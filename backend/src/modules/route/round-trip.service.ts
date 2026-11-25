@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FlightService } from '../flight/flight.service';
@@ -25,6 +25,12 @@ import {
   returnBucket,
   keepBestPerDatePair,
 } from './utils/route-candidates';
+
+export interface ExploreRouteFilter {
+  acceptOutbound(route: RouteResultDto): boolean;
+  acceptReturn(route: RouteResultDto): boolean;
+  acceptPair(outbound: RouteResultDto, returnRoute: RouteResultDto, leaveDays: number): boolean;
+}
 
 // 探索查询缓存 TTL：6 小时
 const EXPLORE_CACHE_TTL_MS = process.env.DISABLE_CACHE === 'true' ? 0 : 6 * 60 * 60 * 1000;
@@ -71,6 +77,7 @@ function sortByLeaveThenScore(a: RoundTripResultDto, b: RoundTripResultDto): num
   return b.score - a.score;
 }
 
+@Injectable()
 export class RoundTripService {
   private readonly logger = new Logger(RoundTripService.name);
 
@@ -277,6 +284,7 @@ export class RoundTripService {
   private pickBestLeavePair(
     outboundRoutes: RouteResultDto[],
     returnRoutes: RouteResultDto[],
+    filter?: ExploreRouteFilter,
   ): {
     outbound: RouteResultDto;
     return: RouteResultDto;
@@ -289,8 +297,9 @@ export class RoundTripService {
     label: string;
     holiday?: string;
   } | null {
-    const outCandidates = pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
-    const retCandidates = pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
+    // A time/length constraint can make a lower-ranked flight the only valid pair.
+    const outCandidates = filter ? outboundRoutes : pickCandidatesPerDate(outboundRoutes, CANDIDATES_PER_DATE, outboundBucket);
+    const retCandidates = filter ? returnRoutes : pickCandidatesPerDate(returnRoutes, CANDIDATES_PER_DATE, returnBucket);
 
     let best: {
       outbound: RouteResultDto;
@@ -316,6 +325,7 @@ export class RoundTripService {
         const firstDeparture = new Date(outbound.segments[0].departureTime);
         const finalArrival = new Date(returnRoute.segments[returnRoute.segments.length - 1].arrivalTime);
         const leave = calcLeaveDays(firstDeparture, finalArrival);
+        if (filter && !filter.acceptPair(outbound, returnRoute, leave.leaveDays)) continue;
         // 已经找到更省假的组合，这个就不必再算了
         if (best && leave.leaveDays > best.leaveDays) continue;
 
@@ -451,7 +461,7 @@ export class RoundTripService {
    * 探索模式：发现所有能往返的目的地
    * 返回按目的地分组的结果，每个目的地包含最优去程和最优返程
    */
-  async exploreDestinations(dto: ExploreRouteDto): Promise<ExplorePlanResponseDto> {
+  async exploreDestinations(dto: ExploreRouteDto, filter?: ExploreRouteFilter): Promise<ExplorePlanResponseDto> {
     this.logger.log(
       `探索往返目的地: ${dto.origin}，${dto.departureDate} 去，${dto.returnDate} 回`,
     );
@@ -465,7 +475,7 @@ export class RoundTripService {
     // 检查 DB 缓存
     // v2：结果里新增了请假成本字段，旧缓存（无这些字段）不能复用
     const cacheKey = `explore-v3|${dto.origin}|${dto.departureDate}|${departureDateEnd}|${dto.returnDate}|${returnDateEnd}|${maxTransfers}|${dto.flightType || 'all'}`;
-    const cached = await readCache<ExplorePlanResponseDto>(this.queryCacheRepository, cacheKey);
+    const cached = filter ? null : await readCache<ExplorePlanResponseDto>(this.queryCacheRepository, cacheKey);
     if (cached) {
       this.logger.log(`探索查询命中缓存: ${cacheKey}`);
       return cached;
@@ -477,10 +487,13 @@ export class RoundTripService {
 
     // 多载一天：最后一天晚班起飞、次日转机的跨天中转需要次日的航班。
     // 这些次日的航班只作为"中转腿"使用，最终结果会按首段起飞日期过滤回用户区间。
-    const [outboundAllFlights, returnAllFlights] = await Promise.all([
-      this.flightService.queryAllFlightsInRange(dto.departureDate, this.addOneDay(departureDateEnd), dto.flightType),
-      this.flightService.queryAllFlightsInRange(dto.returnDate, this.addOneDay(returnDateEnd), dto.flightType),
-    ]);
+    const outboundLoad = this.flightService.queryAllFlightsInRange(
+      dto.departureDate, this.addOneDay(departureDateEnd), dto.flightType, Boolean(filter),
+    );
+    const returnLoad = dto.departureDate === dto.returnDate && departureDateEnd === returnDateEnd
+      ? outboundLoad
+      : this.flightService.queryAllFlightsInRange(dto.returnDate, this.addOneDay(returnDateEnd), dto.flightType, Boolean(filter));
+    const [outboundAllFlights, returnAllFlights] = await Promise.all([outboundLoad, returnLoad]);
 
     // 2. 内存建去程图（出发机场 + 按 maxTransfers 层数展开可达城市）
     const outboundReachableOrigins = this.routeService.expandReachableOriginsPublic(outboundAllFlights, originAirports, maxTransfers);
@@ -494,7 +507,8 @@ export class RoundTripService {
 
     // 多载的次日航班只用于中转腿，出发日期必须落在用户区间内
     const filterOutboundWindow = (routes: RouteResultDto[] | undefined) =>
-      (routes ?? []).filter(r => this.withinWindow(r.segments[0]?.departureTime, dto.departureDate, departureDateEnd));
+      (routes ?? []).filter(r => this.withinWindow(r.segments[0]?.departureTime, dto.departureDate, departureDateEnd)
+        && (!filter || filter.acceptOutbound(r)));
     for (const [dest, routes] of outboundByDest) {
       outboundByDest.set(dest, filterOutboundWindow(routes));
     }
@@ -516,7 +530,8 @@ export class RoundTripService {
       if (originAirports.includes(dest)) {
         for (const route of routes) {
           // 返程同样只保留用户区间内出发的
-          if (!this.withinWindow(route.segments[0]?.departureTime, dto.returnDate, returnDateEnd)) continue;
+          if (!this.withinWindow(route.segments[0]?.departureTime, dto.returnDate, returnDateEnd)
+            || (filter && !filter.acceptReturn(route))) continue;
           const src = route.segments[0].origin;
           if (!returnBySrc.has(src)) returnBySrc.set(src, []);
           returnBySrc.get(src)!.push(route);
@@ -526,17 +541,24 @@ export class RoundTripService {
 
     // 6. 按目的地汇总，计算评分
     const destinations_result: ExploreDestinationDto[] = [];
+    let pairBudget = 500_000;
     for (const city of candidateCities) {
       const outboundRoutes = outboundByDest.get(city) ?? [];
       const returnRoutes = returnBySrc.get(city) ?? [];
       if (outboundRoutes.length === 0 || returnRoutes.length === 0) continue;
+      if (filter) {
+        pairBudget -= outboundRoutes.length * returnRoutes.length;
+        if (pairBudget < 0) {
+          throw new UnprocessableEntityException('候选行程过多，请缩短日期区间、指定目的地或仅查直飞');
+        }
+      }
 
       const scoredOut = outboundRoutes.map(r => this.routeService.calculateScorePublic(r)).sort((a, b) => b.score - a.score);
       const scoredRet = returnRoutes.map(r => this.routeService.calculateScorePublic(r)).sort((a, b) => b.score - a.score);
 
       // 去程/返程不能各挑各的最优：那样时间线可能倒置（返程早于去程落地），
       // 也算不出真实的请假成本。这里按日期组合挑出「请假最少、其次评分最高」的一对。
-      const bestPair = this.pickBestLeavePair(scoredOut, scoredRet);
+      const bestPair = this.pickBestLeavePair(scoredOut, scoredRet, filter);
       if (!bestPair) continue;
 
       destinations_result.push({
@@ -622,9 +644,11 @@ export class RoundTripService {
       },
     };
 
-    // 写入 DB 缓存（失败只丢日志，不影响返回）
-    await writeCache(this.queryCacheRepository, cacheKey, result, EXPLORE_CACHE_TTL_MS);
-    this.logger.log(`探索结果已缓存，TTL 6h: ${cacheKey}`);
+    // 交互式过滤条件不与公共探索缓存混用。
+    if (!filter) {
+      await writeCache(this.queryCacheRepository, cacheKey, result, EXPLORE_CACHE_TTL_MS);
+      this.logger.log(`探索结果已缓存，TTL 6h: ${cacheKey}`);
+    }
 
     return result;
   }
