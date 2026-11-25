@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { TripAiLedger } from './trip-ai-ledger';
+import { TripAiLedger, TripAiLedgerError } from './trip-ai-ledger';
 import { quoteUsage } from './trip-ai-pricing';
 
 @Injectable()
@@ -34,12 +34,27 @@ export class TripAiBudget {
     return this.access(() => this.ledger.summary(databaseUrl));
   }
 
+  async probe(databaseUrl: string) {
+    const start = performance.now();
+    try {
+      await this.ledger.summary(databaseUrl);
+      this.logger.log(`AI budget ledger ready elapsedMs=${Math.round(performance.now() - start)}`);
+    } catch (error) {
+      this.warn('startup check failed', error);
+    }
+  }
+
+  private warn(reason: string, error: unknown) {
+    // A database error can embed credentials, hostnames or connection parameters.
+    const detail = error instanceof TripAiLedgerError ? ` ${error.message}` : '';
+    this.logger.warn(`AI budget ledger ${reason}${detail}`);
+  }
+
   private async access<T>(action: () => Promise<T>) {
     try {
       return await action();
-    } catch {
-      // A database error can embed credentials, hostnames or connection parameters.
-      this.logger.warn('AI budget ledger unavailable');
+    } catch (error) {
+      this.warn('unavailable', error);
       throw new ServiceUnavailableException('AI 额度暂不可用，请稍后重试或手动查询航班');
     }
   }
@@ -47,10 +62,10 @@ export class TripAiBudget {
   private async recordOutcome(action: () => Promise<void>) {
     try {
       await action();
-    } catch {
+    } catch (error) {
       // Keep the durable reservation if writing the receipt fails; do not retry
       // or discard the already paid-for user response.
-      this.logger.warn('AI budget outcome not recorded; reservation retained unless already settled');
+      this.warn('outcome not recorded; reservation retained unless already settled', error);
     }
   }
 }

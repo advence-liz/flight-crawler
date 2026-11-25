@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { createServer, Socket } from 'node:net';
 import { Pool } from 'pg';
 
 // OpenAI 4 uses its own fetch by default. Point it at the same test transport
@@ -57,6 +58,54 @@ const connectionString = process.env.TEST_TRIP_AI_DATABASE_URL;
   });
   afterAll(async () => {
     await Promise.all([pool.end(), first.onModuleDestroy(), second.onModuleDestroy()]);
+  });
+
+  it('waits for a slow cold connection before reserving, without duplicating the attempt', async () => {
+    const upstream = new URL(connectionString!);
+    const upstreamPort = Number(upstream.port || 5432);
+    const sockets = new Set<Socket>();
+    const track = (socket: Socket) => {
+      sockets.add(socket);
+      socket.on('error', () => undefined);
+      socket.on('close', () => sockets.delete(socket));
+      return socket;
+    };
+    const proxy = createServer((client) => {
+      track(client);
+      const remote = track(new Socket());
+      const timer = setTimeout(() => {
+        remote.connect(upstreamPort, upstream.hostname);
+        client.pipe(remote).pipe(client);
+      }, 3300);
+      client.once('close', () => { clearTimeout(timer); remote.destroy(); });
+      remote.once('close', () => client.destroy());
+    });
+    await new Promise<void>(resolve => proxy.listen(0, '127.0.0.1', resolve));
+    const addr = proxy.address();
+    if (!addr || typeof addr === 'string') throw new Error('Test proxy did not bind');
+    upstream.port = String(addr.port);
+    const cold = new TripAiLedger();
+    try {
+      expect(await cold.reserve(upstream.href, 'chat')).not.toBeNull();
+      expect(await first.summary(connectionString!)).toMatchObject({ pendingAttempts: 1 });
+    } finally {
+      await cold.onModuleDestroy();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => proxy.close(() => resolve()));
+    }
+  }, 8000);
+
+  it('reports a PostgreSQL reservation lock timeout without writing a partial attempt', async () => {
+    const blocker = await pool.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('LOCK TABLE trip_ai_days IN ACCESS EXCLUSIVE MODE');
+      await expect(first.reserve(connectionString!, 'chat')).rejects.toThrow(/operation=reserve phase=query code=55P03 elapsedMs=\d+/);
+    } finally {
+      await blocker.query('ROLLBACK');
+      blocker.release();
+    }
+    expect(await first.summary(connectionString!)).toMatchObject({ accountedNanoCny: 0, pendingAttempts: 0 });
   });
 
   it('atomically admits just two worst-case calls across independent pools', async () => {

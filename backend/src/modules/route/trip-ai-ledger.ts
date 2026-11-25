@@ -1,11 +1,25 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { Pool, QueryResultRow } from 'pg';
 import { BUDGET_MODEL, dailyLimitNanoCny, MAX_ATTEMPT_NANO_CNY, TARIFF_VERSION, UsageQuote } from './trip-ai-pricing';
 
 type Channel = 'chat' | 'interpret';
 type Reservation = { id: string; startedAt: Date };
 const BEIJING_DAY = "(statement_timestamp() AT TIME ZONE 'Asia/Shanghai')::date";
+type Operation = 'schema' | 'reserve' | 'settle' | 'mark-unknown' | 'summary';
+
+export class TripAiLedgerError extends Error {
+  constructor(operation: Operation, phase: 'connect' | 'query' | 'config', error: unknown, elapsedMs: number) {
+    const { code, message } = error instanceof Error ? error as NodeJS.ErrnoException : {};
+    const category = phase === 'config' ? 'invalid_limit'
+      : typeof code === 'string' && (/^[0-9A-Z]{5}$/.test(code)
+      || /^(?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|CERT_HAS_EXPIRED|UNABLE_TO_VERIFY_LEAF_SIGNATURE|ERR_TLS_CERT_ALTNAME_INVALID)$/.test(code))
+      ? code
+      : typeof message === 'string' && /timeout/i.test(message) ? 'timeout' : 'other';
+    // Never include the driver's message, stack, connection URI, or SQL values.
+    super(`operation=${operation} phase=${phase} code=${category} elapsedMs=${elapsedMs}`);
+  }
+}
 
 // Dedicated DB, independent of the flight SQLite snapshot. The schema lock
 // serializes first startup across app instances. One implicit SQL transaction.
@@ -45,23 +59,50 @@ export class TripAiLedger implements OnModuleDestroy {
     await this.pool?.end();
   }
 
+  private async query<Row extends QueryResultRow = QueryResultRow>(pool: Pool, operation: Operation, sql: string,
+    values?: unknown[]) {
+    const start = performance.now();
+    let phase: 'connect' | 'query' = 'connect';
+    let client;
+    let discard = false;
+    try {
+      client = await pool.connect();
+      phase = 'query';
+      return await client.query<Row>(sql, values);
+    } catch (error) {
+      discard = true;
+      throw new TripAiLedgerError(operation, phase, error, Math.round(performance.now() - start));
+    } finally {
+      client?.release(discard);
+    }
+  }
+
   private async connect(connectionString: string) {
-    this.pool ??= new Pool({ connectionString, max: 4, connectionTimeoutMillis: 3000, statement_timeout: 3000,
+    // A cold managed Postgres connection may need more time than a SQL statement.
+    this.pool ??= new Pool({ connectionString, max: 4, connectionTimeoutMillis: 12_000, statement_timeout: 3000,
       query_timeout: 4000, lock_timeout: 2500 });
     // Idle socket errors must not take down the unmetered flight routes.
     if (!this.pool.listenerCount('error')) this.pool.on('error', () => undefined);
-    this.ready ??= this.pool.query(SCHEMA).catch((err: unknown) => { this.ready = undefined; throw err; });
+    this.ready ??= this.query(this.pool, 'schema', SCHEMA).catch((err: unknown) => { this.ready = undefined; throw err; });
     await this.ready;
     return this.pool;
   }
 
+  private configuredLimit(operation: 'reserve' | 'summary') {
+    try {
+      return dailyLimitNanoCny(process.env.TRIP_AI_DAILY_LIMIT_CNY);
+    } catch (error) {
+      throw new TripAiLedgerError(operation, 'config', error, 0);
+    }
+  }
+
   async reserve(connectionString: string, channel: Channel): Promise<Reservation | null> {
-    const limit = dailyLimitNanoCny(process.env.TRIP_AI_DAILY_LIMIT_CNY);
+    const limit = this.configuredLimit('reserve');
     if (limit < MAX_ATTEMPT_NANO_CNY) return null;
     const pool = await this.connect(connectionString);
     // The upsert rechecks the cap under a row lock; the attempt is inserted only
     // if the allocation succeeded. Both effects commit before the model call.
-    const result = await pool.query<Reservation>(`
+    const result = await this.query<Reservation>(pool, 'reserve', `
       WITH allocation AS (
         INSERT INTO trip_ai_days (day, accounted_nano_cny)
         VALUES (${BEIJING_DAY}, $1::bigint)
@@ -79,7 +120,7 @@ export class TripAiLedger implements OnModuleDestroy {
 
   async settle(connectionString: string, id: string, quote: UsageQuote) {
     const pool = await this.connect(connectionString);
-    await pool.query(`
+    await this.query(pool, 'settle', `
       WITH receipt AS (
         UPDATE trip_ai_attempts
         SET state = 'settled', finished_at = statement_timestamp(), upper_nano_cny = $2,
@@ -96,16 +137,16 @@ export class TripAiLedger implements OnModuleDestroy {
 
   async markUnknown(connectionString: string, id: string) {
     const pool = await this.connect(connectionString);
-    await pool.query(`UPDATE trip_ai_attempts SET state = 'unknown', finished_at = statement_timestamp()
+    await this.query(pool, 'mark-unknown', `UPDATE trip_ai_attempts SET state = 'unknown', finished_at = statement_timestamp()
       WHERE id = $1 AND state = 'pending'`, [id]);
   }
 
   async summary(connectionString: string) {
-    const limitNanoCny = dailyLimitNanoCny(process.env.TRIP_AI_DAILY_LIMIT_CNY);
+    const limitNanoCny = this.configuredLimit('summary');
     const pool = await this.connect(connectionString);
-    const { rows: [row] } = await pool.query<{
+    const { rows: [row] } = await this.query<{
       date: string; accounted: string; estimated: string; pending: number; unknown: number; settled: number;
-    }>(`
+    }>(pool, 'summary', `
       SELECT ${BEIJING_DAY}::text AS date,
         COALESCE((SELECT accounted_nano_cny FROM trip_ai_days WHERE day = ${BEIJING_DAY}), 0) AS accounted,
         COALESCE(SUM(estimated_nano_cny), 0) AS estimated,

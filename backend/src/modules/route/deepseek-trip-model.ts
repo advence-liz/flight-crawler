@@ -1,4 +1,4 @@
-import { BadGatewayException, GatewayTimeoutException, HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadGatewayException, GatewayTimeoutException, HttpException, HttpStatus, Injectable, Logger, OnApplicationBootstrap, ServiceUnavailableException } from '@nestjs/common';
 import OpenAI from 'openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { wrapLanguageModel } from 'ai';
@@ -10,11 +10,18 @@ const OFFICIAL_URL = 'https://api.deepseek.com';
 type Target = { baseURL: string; model: string; apiKey: string; databaseUrl?: string };
 
 @Injectable()
-export class DeepSeekTripModel {
+export class DeepSeekTripModel implements OnApplicationBootstrap {
   private readonly logger = new Logger(DeepSeekTripModel.name);
   private inFlight = 0;
 
   constructor(private readonly budget: TripAiBudget) {}
+
+  onApplicationBootstrap() {
+    const databaseUrl = this.target()?.databaseUrl;
+    // Check the deployed credentials and schema once without blocking flight
+    // traffic or making a paid model call. On failure, normal requests can retry.
+    if (process.env.RENDER && databaseUrl) void this.budget.probe(databaseUrl);
+  }
 
   searchEnabled(): boolean {
     return process.env.TRIP_AI_ENABLED === 'true' && Boolean(process.env.DEEPSEEK_API_KEY)
