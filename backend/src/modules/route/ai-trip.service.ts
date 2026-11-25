@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { FlightService } from '../flight/flight.service';
-import { aiTripIntent, aiTripRequest, beijingNow, DAY_MS, MAX_SEARCH_DAYS } from './ai-trip-intent';
+import { aiTripIntent, aiTripRequest, beijingNow, DAY_MS, MAX_SEARCH_DAYS, tripSearchCriteria } from './ai-trip-intent';
 import { DeepSeekTripModel } from './deepseek-trip-model';
 import { RoundTripService } from './round-trip.service';
 import { RouteResultDto } from './dto/route-result.dto';
@@ -29,10 +29,12 @@ export class AiTripService {
   }
 
   async search(input: unknown) {
-    const result = aiTripIntent.safeParse(input);
+    const result = tripSearchCriteria.safeParse(input);
     if (!result.success) throw new BadRequestException('行程条件格式不正确');
     const { origin, destination, startDate, endDate, card, maxTransfers, maxLeaveDays, minStayHours,
-      maxStayHours, departureWeekday, arrivalWeekday, departAfter, arriveBefore, unresolved } = result.data;
+      maxStayHours, departureWeekday, arrivalWeekday, departAfter, arriveBefore, unresolved,
+      excludeDestinations, returnDepartAfter } = result.data;
+    const excluded = new Set(excludeDestinations ?? []);
     const now = beijingNow();
     if (unresolved.length) throw new BadRequestException('请先重新描述尚未支持或不明确的条件');
     if (!origin || !startDate || !endDate) throw new BadRequestException('请确认出发地与起止日期');
@@ -66,15 +68,19 @@ export class AiTripService {
           const first = new Date(route.segments[0].departureTime);
           const departure = first.toISOString();
           const arrivalAirport = route.segments[route.segments.length - 1].destination;
+          const city = airportCities.get(arrivalAirport);
           return departure >= now && (departureWeekday === null || first.getUTCDay() === departureWeekday)
             && (!departAfter || departure.slice(11, 16) >= departAfter)
-            && (!destination || arrivalAirport === destination || airportCities.get(arrivalAirport) === destination);
+            && !excluded.has(arrivalAirport) && (!city || !excluded.has(city))
+            && (!destination || arrivalAirport === destination || city === destination);
         },
         acceptReturn: (route) => {
           const last = new Date(route.segments[route.segments.length - 1].arrivalTime);
           const arrival = last.toISOString();
+          const returnDeparture = stamp(route.segments[0].departureTime);
           return arrival.slice(0, 10) <= end && (arrivalWeekday === null || last.getUTCDay() === arrivalWeekday)
-            && (!arriveBefore || arrival.slice(11, 16) <= arriveBefore);
+            && (!arriveBefore || arrival.slice(11, 16) <= arriveBefore)
+            && (!returnDepartAfter || returnDeparture.slice(11, 16) >= returnDepartAfter);
         },
         acceptPair: (out, back, leaveDays) => {
           const hours = durationHours(out, back);

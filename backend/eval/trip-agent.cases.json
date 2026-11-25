@@ -1,0 +1,9 @@
+[
+  {"id":"clarify-and-find","turns":[{"prompt":"12月1日至25日找个周末，周五下班后走、周日22点前落地，只用666卡、直飞、不请假、至少停留30小时。","clarify":"出发"},{"prompt":"上海出发。","criteria":{"origin":"上海","startDate":"2026-12-01","endDate":"2026-12-25","card":"666","maxTransfers":0,"maxLeaveDays":0,"minStayHours":30,"departureWeekday":5,"arrivalWeekday":0,"departAfter":"18:00","arriveBefore":"22:00"},"coverage":"full","minResults":1}]},
+  {"id":"carry-and-exclude","turns":[{"prompt":"上海出发，12月1日至25日找周末直飞，周五18点后出发、周日22点前落地，只用666卡、不请假、至少停留30小时。","criteria":{"origin":"上海","card":"666","maxTransfers":0},"coverage":"full","minResults":1},{"prompt":"排除北京，其他条件不变。","criteria":{"origin":"上海","startDate":"2026-12-01","endDate":"2026-12-25","card":"666","maxTransfers":0,"maxLeaveDays":0,"minStayHours":30,"departureWeekday":5,"arrivalWeekday":0,"departAfter":"18:00","arriveBefore":"22:00","excludeDestinations":["北京"]},"coverage":"full","minResults":1}]},
+  {"id":"explicit-route","turns":[{"prompt":"上海浦东往返天津，12月11日周五18点后去、12月13日周日22点前落地，只用666卡，直飞，至少停留30小时。","criteria":{"origin":"上海浦东","destination":"天津","startDate":"2026-12-11","endDate":"2026-12-13","card":"666","maxTransfers":0,"minStayHours":30,"departAfter":"18:00","arriveBefore":"22:00"},"coverage":"full","minResults":1}]},
+  {"id":"no-match-no-relaxation","turns":[{"prompt":"上海出发，12月1日至25日，周五18点后走周日22点前落地，666卡直飞不请假，至少停留60小时。","criteria":{"minStayHours":60,"card":"666","maxLeaveDays":0,"maxTransfers":0},"coverage":"full","maxResults":0}]},
+  {"id":"outside-snapshot","turns":[{"prompt":"上海出发，2027年1月8日至10日，666卡直飞往返，目的地不限。","criteria":{"startDate":"2027-01-08","endDate":"2027-01-10"},"coverage":"none","maxResults":0}]},
+  {"id":"partial-coverage","turns":[{"prompt":"上海出发，12月1日至31日找个周末，周五18点后走、周日22点前到，只用666卡，直飞，不请假，至少停留30小时。","criteria":{"endDate":"2026-12-31","card":"666"},"coverage":"partial","minResults":1}]},
+  {"id":"unsupported-condition","turns":[{"prompt":"上海出发12月11日到13日往返。必须保证旅游全程低于500元，做不到就不要给航班。","clarify":"预算|500|费用|金额"}]}
+]

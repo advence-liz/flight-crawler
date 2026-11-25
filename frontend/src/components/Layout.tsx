@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Layout as AntLayout, Menu, Drawer, Button, Grid, Modal, Input, message } from 'antd';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import { getAdminToken, setAdminToken, clearAdminToken } from '@/utils/auth';
+import { getAiTripStatus } from '@/api/ai-trip';
+
+const TripAgent = lazy(() => import('./TripAgent'));
 
 const { Header, Content } = AntLayout;
 const { useBreakpoint } = Grid;
@@ -21,6 +24,12 @@ function Layout() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [loginVisible, setLoginVisible] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
+  const [tripAgentEnabled, setTripAgentEnabled] = useState(false);
+  useEffect(() => {
+    let active = true;
+    getAiTripStatus().then(({ chatEnabled }) => { if (active) setTripAgentEnabled(chatEnabled === true); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
@@ -149,6 +158,10 @@ function Layout() {
       <Content style={{ padding: isMobile ? '16px' : '24px', background: '#f0f2f5' }}>
         <Outlet />
       </Content>
+
+      {tripAgentEnabled && <Suspense fallback={null}>
+        <TripAgent isAdmin={isAdmin} onLogin={() => setLoginVisible(true)} />
+      </Suspense>}
 
       <Modal
         title={<><UnlockOutlined /> 进入管理模式</>}

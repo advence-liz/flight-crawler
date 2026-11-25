@@ -1,0 +1,45 @@
+.launcher {
+  position: fixed;
+  z-index: 900;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  height: 44px;
+  padding-inline: 18px;
+  border-radius: 24px;
+  box-shadow: 0 4px 16px #07305a3b;
+  background: #104981;
+}
+
+.dialog :global(.ant-modal-wrap) { display: flex; align-items: flex-end; justify-content: flex-end; }
+.dialog :global(.ant-modal) { top: auto; margin: 0 20px 20px; padding-bottom: 0; max-width: calc(100vw - 40px); }
+.dialog :global(.ant-modal-content) { padding: 18px 20px; }
+.title { display: flex; align-items: center; gap: 9px; color: #112e49; }
+.panel { display: flex; flex-direction: column; height: min(610px, calc(100dvh - 118px)); min-height: 0; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-block: 4px 8px; border-bottom: 1px solid #dce6ee; color: #546779; font-size: 12px; }
+.history { flex: 1; min-height: 0; overflow: auto; padding: 12px 4px 12px 0; overscroll-behavior: contain; }
+.turn { margin-top: 14px; }
+.starters { display: grid; gap: 8px; margin: 8px 12px 0; }
+.starters button { background: #f0f6fc; color: #173e64; border: 1px solid #d2e1ef; border-radius: 8px; text-align: left; padding: 9px 12px; cursor: pointer; }
+.starters button:focus-visible, .option summary:focus-visible, .criteria summary:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+.options { display: grid; gap: 8px; margin: 7px 12px 0; }
+.option { background: #f7fafc; border: 1px solid #dce6ee; border-left: 3px solid #4383ba; border-radius: 6px; padding: 9px 10px; overflow-wrap: anywhere; }
+.option summary, .criteria summary { cursor: pointer; }
+.option summary span { margin-inline-start: 9px; color: #455e74; font-size: 12px; }
+.option summary small { display: block; margin-inline-start: 15px; }
+.segments { display: grid; gap: 8px; margin-top: 8px; font-size: 13px; }
+.segments p, .criteria p { margin: 0; }
+.segments small { display: block; }
+.criteria { margin: 8px 12px 0; color: #455e74; font-size: 12px; }
+.criteria p { margin-top: 5px; }
+.composer { padding-top: 10px; border-top: 1px solid #dce6ee; }
+.composer > small { display: block; margin-top: 5px; }
+.panel small { color: #536779; }
+.signIn { padding-block: 6px 12px; }
+
+@media (max-width: 767px) {
+  .dialog :global(.ant-modal) { width: 100vw !important; max-width: 100vw; margin: 0; }
+  .dialog :global(.ant-modal-content) { height: 100dvh; display: flex; flex-direction: column; border-radius: 0; padding: 16px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .dialog :global(.ant-modal-body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .panel { flex: 1; height: auto; }
+  .launcher { right: 16px; }
+}

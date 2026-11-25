@@ -60,6 +60,17 @@ describe('AI trip planning', () => {
     expect(routes.exploreDestinations).not.toHaveBeenCalled();
   });
 
+  it('enforces destination exclusions at city and airport level and a separate return takeoff cutoff', async () => {
+    const { service, flights, routes } = setup();
+    flights.getAirportCityMap.mockResolvedValue(new Map([['上海浦东', '上海'], ['北京首都', '北京']]));
+    await service.search({ ...intent, excludeDestinations: ['北京'], returnDepartAfter: '20:00' });
+    const [, filter] = routes.exploreDestinations.mock.calls[0];
+    expect(filter.acceptOutbound(route('2026-12-04T18:30Z', '2026-12-04T19:30Z', '上海浦东', '北京首都'))).toBe(false);
+    expect(filter.acceptOutbound(out)).toBe(true);
+    expect(filter.acceptReturn(back)).toBe(false);
+    expect(filter.acceptReturn(route('2026-12-06T20:00Z', '2026-12-06T21:00Z', '海口', '上海浦东'))).toBe(true);
+  });
+
   it('preserves hard constraints before the planner ranks candidates', async () => {
     const { service, model, routes } = setup();
     await expect(service.search(intent)).resolves.toMatchObject({ coverage: 'partial', destinations: [] });

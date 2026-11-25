@@ -1,0 +1,104 @@
+{
+  "protocol": "v1",
+  "suiteHash": "56461553ee928eb692536bcf7f4bff4225d7266a1944d1ab47c96bd1e11775b6",
+  "snapshotHash": "1bd181a176fc7f163c8ef23df1c14e10e942287341d0d2895a952b04651c21c3",
+  "frozenDate": "2026-11-25",
+  "repeats": 2,
+  "model": "deepseek-v4.1-flash",
+  "provider": "compatible-gateway",
+  "recordedAt": "2026-11-25T08:16:06.048Z",
+  "cases": [
+    {
+      "id": "clarify-and-find",
+      "samples": [
+        {
+          "pass": true,
+          "latencyMs": 4949
+        },
+        {
+          "pass": true,
+          "latencyMs": 3632
+        }
+      ]
+    },
+    {
+      "id": "carry-and-exclude",
+      "samples": [
+        {
+          "pass": true,
+          "latencyMs": 4837
+        },
+        {
+          "pass": true,
+          "latencyMs": 3552
+        }
+      ]
+    },
+    {
+      "id": "explicit-route",
+      "samples": [
+        {
+          "pass": true,
+          "latencyMs": 4019
+        },
+        {
+          "pass": true,
+          "latencyMs": 1695
+        }
+      ]
+    },
+    {
+      "id": "no-match-no-relaxation",
+      "samples": [
+        {
+          "pass": true,
+          "latencyMs": 1949
+        },
+        {
+          "pass": true,
+          "latencyMs": 1749
+        }
+      ]
+    },
+    {
+      "id": "outside-snapshot",
+      "samples": [
+        {
+          "pass": true,
+          "latencyMs": 1557
+        },
+        {
+          "pass": true,
+          "latencyMs": 1762
+        }
+      ]
+    },
+    {
+      "id": "partial-coverage",
+      "samples": [
+        {
+          "pass": true,
+          "latencyMs": 3098
+        },
+        {
+          "pass": true,
+          "latencyMs": 2458
+        }
+      ]
+    },
+    {
+      "id": "unsupported-condition",
+      "samples": [
+        {
+          "pass": true,
+          "latencyMs": 4023
+        },
+        {
+          "pass": true,
+          "latencyMs": 2650
+        }
+      ]
+    }
+  ],
+  "snapshotRevision": "e13fa22050ba9ee947f1da84453fb676e7c006be"
+}

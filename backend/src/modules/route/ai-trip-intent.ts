@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export const aiTripRequest = z.object({ text: z.string().trim().min(1).max(500) }).strict();
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable();
@@ -21,6 +21,11 @@ export const aiTripIntent = z.object({
   arriveBefore: clock,
   unresolved: z.array(z.string().trim().min(1).max(100)).max(8),
 }).strict();
+
+export const tripSearchCriteria = aiTripIntent.extend({
+  excludeDestinations: z.array(airport).max(10).nullish(),
+  returnDepartAfter: clock.optional(),
+});
 
 export type AiTripIntent = z.infer<typeof aiTripIntent>;
 export const MAX_SEARCH_DAYS = 42;

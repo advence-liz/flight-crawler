@@ -2,14 +2,27 @@ import { Body, Controller, Get, HttpCode, Post, ServiceUnavailableException, Use
 import { AdminGuard } from '../../admin.guard';
 import { AiTripService } from './ai-trip.service';
 import { DeepSeekTripModel } from './deepseek-trip-model';
+import { TripAgentService } from './trip-agent.service';
 
 @Controller('routes/ai-trip')
 export class AiTripController {
-  constructor(private readonly service: AiTripService, private readonly model: DeepSeekTripModel) {}
+  constructor(
+    private readonly service: AiTripService,
+    private readonly model: DeepSeekTripModel,
+    private readonly agent: TripAgentService,
+  ) {}
+
+  @UseGuards(AdminGuard)
+  @Post('chat')
+  @HttpCode(200)
+  chat(@Body() input: unknown) {
+    return this.agent.chat(input);
+  }
 
   @Get('status')
   status() {
-    return { enabled: this.model.enabled() };
+    const enabled = this.model.enabled();
+    return { enabled, chatEnabled: enabled };
   }
 
   @UseGuards(AdminGuard)

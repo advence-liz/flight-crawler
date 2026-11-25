@@ -31,6 +31,14 @@ export interface AiTripResults {
   destinations: AiDestination[];
 }
 
-export const getAiTripStatus = () => api.get<unknown, { enabled: boolean }>('/routes/ai-trip/status');
-export const interpretAiTrip = (text: string) => api.post<unknown, AiTripIntent>('/routes/ai-trip/interpret', { text });
-export const searchAiTrip = (intent: AiTripIntent) => api.post<unknown, AiTripResults>('/routes/ai-trip/search', intent);
+export type TripChatMessage = { role: 'user' | 'assistant'; content: string };
+export type TripSearchCriteria = AiTripIntent & { excludeDestinations?: string[] | null; returnDepartAfter?: string | null };
+export interface TripAgentReply {
+  text: string;
+  results?: AiTripResults;
+  criteria?: TripSearchCriteria;
+}
+
+export const getAiTripStatus = () => api.get<unknown, { chatEnabled?: boolean }>('/routes/ai-trip/status');
+export const chatWithTripAgent = (messages: TripChatMessage[], previous?: TripSearchCriteria) =>
+  api.post<unknown, TripAgentReply>('/routes/ai-trip/chat', { messages, previous }, { timeout: 55_000 });

@@ -42,7 +42,6 @@ import { PRESET_CITIES, mergeOriginOptions } from '@/utils/cities';
 import { formatFlightTime } from '@/utils/datetime';
 import { readSnapshot, writeSnapshot, snapshotKey, formatAge } from '@/utils/snapshot-cache';
 import CuteLoader from '@/components/CuteLoader';
-import AiTripPlanner from '@/components/AiTripPlanner';
 
 /** 结果快照有效期：航班数据每天更新一次，12 小时内复用没问题（命中后仍会后台刷新） */
 const SNAPSHOT_TTL_MS = 12 * 60 * 60 * 1000;
@@ -1156,7 +1155,6 @@ function RoutePlanner() {
 
   return (
     <div style={{ padding: '0 4px' }}>
-      <AiTripPlanner />
       <TripTab cities={cities} urlParams={urlParams} dateRange={dateRange} dataFreshness={freshness} />
     </div>
   );

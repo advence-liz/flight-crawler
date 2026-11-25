@@ -8,11 +8,12 @@ import { QueryCache } from './entities/query-cache.entity';
 import { AiTripController } from './ai-trip.controller';
 import { AiTripService } from './ai-trip.service';
 import { DeepSeekTripModel } from './deepseek-trip-model';
+import { TripAgentService } from './trip-agent.service';
 
 @Module({
   imports: [FlightModule, TypeOrmModule.forFeature([QueryCache])],
   controllers: [RouteController, AiTripController],
-  providers: [RouteService, RoundTripService, AiTripService, DeepSeekTripModel],
+  providers: [RouteService, RoundTripService, AiTripService, DeepSeekTripModel, TripAgentService],
   exports: [RouteService],
 })
 export class RouteModule {}
