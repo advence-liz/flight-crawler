@@ -95,6 +95,7 @@ export class TripAgentService {
       if (deadline.aborted) throw new GatewayTimeoutException('行程助手响应超时，请稍后重试');
       if (error instanceof HttpException) throw error;
       const cause = RetryError.isInstance(error) ? error.lastError : error;
+      if (cause instanceof HttpException) throw cause;
       const status = APICallError.isInstance(cause) ? ` HTTP ${cause.statusCode ?? 'unknown'}` : '';
       this.logger.warn(`Trip agent failed: ${cause instanceof Error ? cause.name : 'unknown error'}${status}`);
       throw new BadGatewayException('行程助手暂时无法回答，请重试或使用手动规划');

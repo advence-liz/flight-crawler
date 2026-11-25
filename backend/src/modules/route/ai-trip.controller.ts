@@ -33,10 +33,16 @@ export class AiTripController {
   }
 
   @UseGuards(AdminGuard)
+  @Get('usage')
+  usage() {
+    return this.model.usage();
+  }
+
+  @UseGuards(AdminGuard)
   @Post('search')
   @HttpCode(200)
   search(@Body() input: unknown) {
-    if (!this.model.enabled()) throw new ServiceUnavailableException('AI 行程规划未启用');
+    if (!this.model.searchEnabled()) throw new ServiceUnavailableException('AI 行程规划未启用');
     return this.service.search(input);
   }
 }
