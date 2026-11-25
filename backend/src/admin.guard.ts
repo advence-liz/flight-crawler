@@ -3,11 +3,11 @@ import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    // 本地开发环境直接放行
-    if (process.env.NODE_ENV === 'development') return true;
+    // Preserve the legacy local shortcut only when website accounts are disabled.
+    if (process.env.NODE_ENV === 'development' && process.env.SITE_AUTH_ENABLED !== 'true') return true;
 
-    const adminToken = process.env.ADMIN_TOKEN;
-    if (!adminToken) return true; // 未配置 Token 时放行
+    const adminToken = process.env.ADMIN_TOKEN?.trim();
+    if (!adminToken) throw new UnauthorizedException('未配置管理员 Token');
 
     const request = context.switchToHttp().getRequest();
     const authHeader = request.headers['authorization'];

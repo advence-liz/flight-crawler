@@ -12,7 +12,32 @@ const durationHours = (out: RouteResultDto, back: RouteResultDto) =>
 
 @Injectable()
 export class AiTripService {
-  private searching = false;
+  private activeSearch?: { lane: 'site' | 'mcp'; done: Promise<void> };
+  private siteWaiting = false;
+
+  private async takeSearchSlot(lane: 'site' | 'mcp') {
+    const busy = () => new HttpException('航班搜索正在忙，请稍后重试', HttpStatus.TOO_MANY_REQUESTS);
+    if (this.siteWaiting) throw busy();
+    if (this.activeSearch) {
+      if (lane === 'mcp' || this.activeSearch.lane === 'site') throw busy();
+      // One site search may wait briefly for a running MCP search. MCP never
+      // queues and cannot retake the slot while this site search is waiting.
+      this.siteWaiting = true;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([this.activeSearch.done, new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(busy()), 3000);
+        })]);
+      } finally {
+        clearTimeout(timer);
+        this.siteWaiting = false;
+      }
+    }
+    let finish!: () => void;
+    const done = new Promise<void>(resolve => { finish = resolve; });
+    this.activeSearch = { lane, done };
+    return () => { this.activeSearch = undefined; finish(); };
+  }
 
   constructor(
     private readonly model: DeepSeekTripModel,
@@ -28,7 +53,7 @@ export class AiTripService {
     return result.data;
   }
 
-  async search(input: unknown) {
+  async search(input: unknown, lane: 'site' | 'mcp' = 'site') {
     const result = tripSearchCriteria.safeParse(input);
     if (!result.success) throw new BadRequestException('行程条件格式不正确');
     const { origin, destination, startDate, endDate, card, maxTransfers, maxLeaveDays, minStayHours,
@@ -45,8 +70,7 @@ export class AiTripService {
     if (minStayHours !== null && maxStayHours !== null && minStayHours > maxStayHours) {
       throw new BadRequestException('最短停留时间不能大于最长停留时间');
     }
-    if (this.searching) throw new HttpException('航班搜索正在忙，请稍后重试', HttpStatus.TOO_MANY_REQUESTS);
-    this.searching = true;
+    const finishSearch = await this.takeSearchSlot(lane);
     try {
       const [range, { crawledAt }, airportCities] = await Promise.all([
         this.flights.getFlightDateRange(), this.flights.getDataFreshness(), this.flights.getAirportCityMap(),
@@ -107,7 +131,7 @@ export class AiTripService {
       return { coverage: start === startDate && end === endDate ? 'full' as const : 'partial' as const,
         range, crawledAt: crawledAt ? stamp(crawledAt) : null, destinations: picks };
     } finally {
-      this.searching = false;
+      finishSearch();
     }
   }
 }

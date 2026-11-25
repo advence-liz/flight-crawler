@@ -1,4 +1,7 @@
-import { Body, Controller, Get, HttpCode, Post, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpException, Post, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import { FlightMcpQuota } from './flight-mcp-quota';
+import { isSiteAdmin, SiteAuthService } from './site-auth.service';
 import { AdminGuard } from '../../admin.guard';
 import { AiTripService } from './ai-trip.service';
 import { DeepSeekTripModel } from './deepseek-trip-model';
@@ -10,12 +13,18 @@ export class AiTripController {
     private readonly service: AiTripService,
     private readonly model: DeepSeekTripModel,
     private readonly agent: TripAgentService,
+    private readonly auth: SiteAuthService,
+    private readonly access: FlightMcpQuota,
   ) {}
 
-  @UseGuards(AdminGuard)
   @Post('chat')
   @HttpCode(200)
-  chat(@Body() input: unknown) {
+  async chat(@Req() req: Request, @Body() input: unknown) {
+    if (!isSiteAdmin(req)) {
+      const { id } = await this.auth.user(req, true);
+      if (!this.model.enabled()) throw new ServiceUnavailableException('行程助手未启用');
+      if (!await this.access.reserveChat(id, 10)) throw new HttpException('今日行程助手额度已用完，北京时间零点重置。', 429);
+    }
     return this.agent.chat(input);
   }
 

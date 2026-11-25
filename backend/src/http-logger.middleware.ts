@@ -1,12 +1,20 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import { FlightSitePriority } from './modules/route/flight-site-priority';
 
 @Injectable()
 export class HttpLoggerMiddleware implements NestMiddleware {
   private readonly logger = new Logger('HTTP');
 
+  constructor(private readonly priority: FlightSitePriority) {}
+
   use(req: Request, res: Response, next: NextFunction) {
     const { method, originalUrl } = req;
+    if (method !== 'OPTIONS' && /^\/api\/(?:flights|routes)(?=\/|\?|$)/.test(originalUrl)) {
+      const finish = this.priority.begin();
+      res.once('finish', finish);
+      res.once('close', finish);
+    }
     const start = Date.now();
 
     res.on('finish', () => {

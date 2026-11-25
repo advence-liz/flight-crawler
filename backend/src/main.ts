@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
+import { SiteAuthService } from './modules/route/site-auth.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -51,6 +52,10 @@ async function bootstrap() {
     // 用 Authorization 头传 token，不用 cookie，因此不需要 credentials
     credentials: false,
   });
+
+  const siteAuth = app.get(SiteAuthService);
+  siteAuth.initialize();
+  app.use(siteAuth.middleware);
 
   // 设置全局路由前缀
   app.setGlobalPrefix('api');

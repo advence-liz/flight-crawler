@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Layout as AntLayout, Menu, Drawer, Button, Grid, Modal, Input, message } from 'antd';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
+import { CompassOutlined, AimOutlined, DatabaseOutlined, UnorderedListOutlined, EnvironmentOutlined, GlobalOutlined, HddOutlined, MenuOutlined, FieldTimeOutlined, LockOutlined, UnlockOutlined, BookOutlined, TeamOutlined } from '@ant-design/icons';
 import { getAdminToken, setAdminToken, clearAdminToken } from '@/utils/auth';
 import { getAiTripStatus } from '@/api/ai-trip';
+import { getLoginOptions, getSiteAccount } from '@/api/site-auth';
 
 const TripAgent = lazy(() => import('./TripAgent'));
 
@@ -11,6 +12,7 @@ const { Header, Content } = AntLayout;
 const { useBreakpoint } = Grid;
 
 const ADMIN_PATHS = [
+  '/user-management',
   '/flight-management',
   '/airport-management',
   '/data-management',
@@ -25,9 +27,15 @@ function Layout() {
   const [loginVisible, setLoginVisible] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
   const [tripAgentEnabled, setTripAgentEnabled] = useState(false);
+  const [loginEnabled, setLoginEnabled] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
     let active = true;
     getAiTripStatus().then(({ chatEnabled }) => { if (active) setTripAgentEnabled(chatEnabled === true); }).catch(() => {});
+    getLoginOptions().then(options => { if (active && options && Object.values(options).some(Boolean)) {
+      setLoginEnabled(true);
+      void getSiteAccount().then(account => { if (active && account.email) setSignedIn(true); }).catch(() => {});
+    } }).catch(() => {});
     return () => { active = false; };
   }, []);
   const screens = useBreakpoint();
@@ -62,6 +70,9 @@ function Layout() {
     { key: '/destination', icon: <CompassOutlined />, label: '目的地查询' },
     { key: '/flight-map', icon: <GlobalOutlined />, label: '航线地图' },
     { key: '/route-planner', icon: <AimOutlined />, label: '行程规划' },
+    { key: '/guide', icon: <BookOutlined />, label: '使用指南' },
+    ...(loginEnabled ? [{ key: '/account', label: signedIn ? '我的账号' : '登录' }] : []),
+    { key: '/user-management', icon: <TeamOutlined />, label: '用户管理', adminOnly: true },
     { key: '/flight-management', icon: <UnorderedListOutlined />, label: '航班管理', adminOnly: true },
     { key: '/airport-management', icon: <EnvironmentOutlined />, label: '机场管理', adminOnly: true },
     { key: '/data-management', icon: <DatabaseOutlined />, label: '数据管理', adminOnly: true },
@@ -159,8 +170,8 @@ function Layout() {
         <Outlet />
       </Content>
 
-      {tripAgentEnabled && <Suspense fallback={null}>
-        <TripAgent isAdmin={isAdmin} onLogin={() => setLoginVisible(true)} />
+      {(isAdmin || signedIn) && tripAgentEnabled && <Suspense fallback={null}>
+        <TripAgent isAdmin={isAdmin} />
       </Suspense>}
 
       <Modal

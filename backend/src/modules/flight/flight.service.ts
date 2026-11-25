@@ -206,7 +206,11 @@ export class FlightService {
   /**
    * 查询指定航线的航班 - 只查询666和2666权益卡航班
    */
-  async queryFlights(dto: QueryFlightsDto & { origins?: string[] }): Promise<Flight[]> {
+  async queryFlights(dto: QueryFlightsDto & { origins?: string[] }, options?: {
+    destinations: string[];
+    notBefore: Date;
+    limit: number;
+  }): Promise<Flight[]> {
     const { origin, origins, destination, startDate, endDate, flightType } = dto;
 
     const startDateTime = new Date(startDate);
@@ -222,7 +226,11 @@ export class FlightService {
       .andWhere('flight.departureTime <= :endDateTime', { endDateTime })
       .orderBy('flight.departureTime', 'ASC');
 
-    if (destination) {
+    if (options) {
+      query.andWhere('flight.destination IN (:...destinations)', { destinations: options.destinations })
+        .andWhere('flight.departureTime >= :notBefore', { notBefore: options.notBefore })
+        .addOrderBy('flight.flightNo', 'ASC').addOrderBy('flight.id', 'ASC').take(options.limit);
+    } else if (destination) {
       query = query.andWhere('flight.destination = :destination', { destination });
     }
 

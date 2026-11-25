@@ -11,8 +11,11 @@ const DataManagement = lazy(() => import('./pages/DataManagement'));
 const FlightManagement = lazy(() => import('./pages/FlightManagement'));
 const AirportManagement = lazy(() => import('./pages/AirportManagement'));
 const FlightMap = lazy(() => import('./pages/FlightMap'));
+const UsageGuide = lazy(() => import('./pages/UsageGuide'));
 const CacheManagement = lazy(() => import('./pages/CacheManagement'));
 const CronManagement = lazy(() => import('./pages/CronManagement'));
+const UserManagement = lazy(() => import('./pages/UserManagement'));
+const Account = lazy(() => import('./pages/Account'));
 
 // 管理员路由保护：无 token 时重定向到首页
 function AdminRoute({ children }: { children: React.ReactNode }) {
@@ -34,6 +37,9 @@ function App() {
           <Route path="destination" element={<DestinationQuery />} />
           <Route path="route-planner" element={<RoutePlanner />} />
           <Route path="flight-map" element={<FlightMap />} />
+          <Route path="guide" element={<UsageGuide />} />
+          <Route path="account" element={<Account />} />
+          <Route path="user-management" element={<AdminRoute><UserManagement /></AdminRoute>} />
           <Route path="data-management" element={<AdminRoute><DataManagement /></AdminRoute>} />
           <Route path="flight-management" element={<AdminRoute><FlightManagement /></AdminRoute>} />
           <Route path="airport-management" element={<AdminRoute><AirportManagement /></AdminRoute>} />

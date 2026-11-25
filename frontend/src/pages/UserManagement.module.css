@@ -1,0 +1,20 @@
+.page { max-width: 920px; margin-inline: auto; color: #102a43; }
+.header { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: flex-start; justify-content: space-between; margin-block-end: 20px; }
+.header h1 { margin: 0 0 5px; font-size: clamp(25px, 4vw, 32px); line-height: 1.25; }
+.header p, .caption { margin: 0; color: #486581; }
+.roster { margin-top: 16px; background: white; border: 1px solid #d6e2ee; border-radius: 8px; }
+.row, .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(96px, auto) 70px minmax(232px, auto); align-items: center; gap: 12px; padding: 12px 16px; }
+.columns { color: #486581; background: #eef5fb; border-radius: 7px 7px 0 0; font-size: 13px; }
+.row { border-top: 1px solid #e2ebf3; }
+.row:first-child { border-top: 0; }
+.name { overflow-wrap: anywhere; }
+.calls { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mobileLabel { display: none; }
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.secret { margin-block: 12px; }
+@media (max-width: 680px) {
+  .columns { display: none; }
+  .row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 12px; }
+  .row > :last-child { grid-column: 1 / -1; }
+  .mobileLabel { display: inline; color: #486581; }
+}

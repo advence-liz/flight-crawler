@@ -30,7 +30,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       message.error('Token 错误或未设置，请在数据管理页面配置管理员 Token');
     }
-    console.error('API Error:', error);
+    // The Axios error object can include Authorization headers and response bodies.
+    console.error('API Error:', error.code, error.response?.status);
     return Promise.reject(error);
   }
 );
