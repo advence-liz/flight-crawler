@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Pool, QueryResultRow } from 'pg';
+import { Pool, PoolClient, QueryResultRow } from 'pg';
 import { BUDGET_MODEL, dailyLimitNanoCny, MAX_ATTEMPT_NANO_CNY, TARIFF_VERSION, UsageQuote } from './trip-ai-pricing';
 
 type Channel = 'chat' | 'interpret';
@@ -63,7 +63,7 @@ export class TripAiLedger implements OnModuleDestroy {
     values?: unknown[]) {
     const start = performance.now();
     let phase: 'connect' | 'query' = 'connect';
-    let client;
+    let client: PoolClient | undefined;
     let discard = false;
     try {
       client = await pool.connect();
