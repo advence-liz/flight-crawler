@@ -215,7 +215,19 @@ jobs:
             exit 1
           fi
 
-      - name: 发布 db 到 data 分支（orphan force-push，不进 main 历史）
+      - name: 从本轮 SQLite 生成公开首页快照
+        if: ${{ github.event.inputs.skip_crawl != 'true' }}
+        working-directory: backend
+        timeout-minutes: 1
+        env:
+          LANG: C
+        run: |
+          if ! timeout 30s node scripts/generate-default-preview.cjs data/flight-crawler.db "$RUNNER_TEMP/default-destinations.v1.json"; then
+            rm -f "$RUNNER_TEMP/default-destinations.v1.json"
+            echo "::warning::首页快照未生成，本轮仍发布航班库，首页回退实时查询"
+          fi
+
+      - name: 发布 db 和首页快照到 data 分支
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -225,6 +237,12 @@ jobs:
           mkdir -p "$TMP_DIR/backend/data"
           cp "$DB_PATH" "$TMP_DIR/backend/data/flight-crawler.db"
           cd "$TMP_DIR"
+          if [ -s "$RUNNER_TEMP/default-destinations.v1.json" ]; then
+            cp "$RUNNER_TEMP/default-destinations.v1.json" default-destinations.v1.json
+            git add -f default-destinations.v1.json
+          else
+            git rm --ignore-unmatch -- default-destinations.v1.json
+          fi
           git add -f backend/data/flight-crawler.db
           git commit --allow-empty -m "data: 自动更新航班数据库 $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push origin data
@@ -238,4 +256,13 @@ jobs:
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
             -H "Content-Type: application/json" \
             -d '{"clearCache":"do_not_clear"}'
-          echo "已触发 Render 重新部署"
+          echo "已触发 Render 后端重新部署"
+
+      - name: 更新 Render 静态站的首页快照
+        if: ${{ env.RENDER_API_KEY != '' && github.event.inputs.skip_crawl != 'true' }}
+        run: |
+          curl -sSf --max-time 30 -X POST "https://api.render.com/v1/services/srv-d6t9dunpm1nc739e4dr0/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' >/dev/null
+          echo "已触发 Render 前端重新部署"

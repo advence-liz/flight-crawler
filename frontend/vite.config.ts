@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { defaultPreview } from './scripts/default-preview-plugin';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), defaultPreview()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

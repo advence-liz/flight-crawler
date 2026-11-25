@@ -56,13 +56,15 @@ export class FlightService {
    */
   async queryDestinations(
     dto: QueryFlightsDto,
+    { useCache = true }: { useCache?: boolean } = {},
   ): Promise<DestinationsResponseDto> {
     const { origin, startDate, endDate, flightType, includeReturn = true } = dto;
+    const cacheResult = includeReturn && useCache;
     // 默认 2666（显示全部），选 666 时只显示 666 可用航班
     const flightTypeKey = flightType || '2666权益卡航班';
 
     // 仅在包含返程时使用缓存
-    if (includeReturn) {
+    if (cacheResult) {
       const cacheKey = `destinations|${origin}|${startDate}|${endDate}|${flightTypeKey}`;
       const cached = await readCache<DestinationsResponseDto>(this.queryCacheRepository, cacheKey);
       if (cached) {
@@ -177,7 +179,7 @@ export class FlightService {
     };
 
     // 仅 includeReturn=true 时写入缓存
-    if (includeReturn) {
+    if (cacheResult) {
       const cacheKey = `destinations|${origin}|${startDate}|${endDate}|${flightTypeKey}`;
       await writeCache(this.queryCacheRepository, cacheKey, result, DESTINATIONS_CACHE_TTL_MS);
       this.logger.log(`目的地查询结果已写入缓存: ${cacheKey}`);

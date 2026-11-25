@@ -228,16 +228,36 @@ function DestinationCard({ row, onShowDetail, onShowTransferRoutes, onPlan }: De
 
 // ─── 主页面 ──────────────────────────────────────────────────
 
+type LandingPreview = {
+  query: { origin: string; startDate: string; endDate: string; flightType: string };
+  result: { destinations: DestinationResult[] };
+  crawledAt: string;
+};
+
+declare global {
+  interface Window { __flightLandingPreview?: LandingPreview }
+}
+
+function loadLandingPreview() {
+  const preview = window.__flightLandingPreview;
+  if (!preview || !['', '#/', '#/destination'].includes(window.location.hash) || window.location.search) return;
+  const [start, end] = getDefaultDateRange();
+  const age = Date.now() - Date.parse(preview.crawledAt);
+  if (getDefaultOrigin() === preview.query.origin && start === preview.query.startDate && end === preview.query.endDate &&
+      age >= 0 && age <= 24 * 60 * 60 * 1000) return preview;
+}
+
 function DestinationQuery() {
+  const [landingPreview] = useState(loadLandingPreview);
   const [form] = Form.useForm();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const screens = useBreakpoint();
   const isMobile = !screens.md; // < 768px
   const [loading, setLoading] = useState(false);
-  const [destinations, setDestinations] = useState<DestinationResult[]>([]);
-  /** 当前展示的是本地快照时的年龄，真实结果回来后清空 */
-  const [snapshotAge, setSnapshotAge] = useState<number | null>(null);
+  const [destinations, setDestinations] = useState<DestinationResult[]>(() => landingPreview?.result.destinations ?? []);
+  const [snapshotAge, setSnapshotAge] = useState<number | null>(() => landingPreview ? Date.now() - Date.parse(landingPreview.crawledAt) : null);
+  const initialPreview = useRef(landingPreview);
   /** 首屏先出"仅去程"结果，返程信息在后台补——补齐前明确告知用户，避免误以为没有往返 */
   const [enrichingReturn, setEnrichingReturn] = useState(false);
   const [availableOrigins, setAvailableOrigins] = useState<string[]>([]);
@@ -346,12 +366,19 @@ function DestinationQuery() {
     setDiscoverTransferLoading(false);
 
     const snapshotK = snapshotKey('destinations', queryParams);
-    const snapshot = readSnapshot<DestinationResult[]>(snapshotK, SNAPSHOT_TTL_MS);
+    const saved = readSnapshot<DestinationResult[]>(snapshotK, SNAPSHOT_TTL_MS);
+    const preview = initialPreview.current;
+    initialPreview.current = undefined;
+    const previewQuery = preview?.query;
+    const snapshot = preview && previewQuery && previewQuery.origin === queryParams.origin && previewQuery.startDate === queryParams.startDate &&
+      previewQuery.endDate === queryParams.endDate && previewQuery.flightType === queryParams.flightType
+      ? { data: preview.result.destinations, ageMs: Date.now() - Date.parse(preview.crawledAt) }
+      : saved;
     const hasSnapshot = Boolean(snapshot?.data.length);
     setDestinations(snapshot?.data ?? []);
     setSnapshotAge(hasSnapshot && snapshot ? snapshot.ageMs : null);
     setLoading(!hasSnapshot);
-    setEnrichingReturn(hasSnapshot);
+    setEnrichingReturn(hasSnapshot && snapshot === saved);
 
     // The complete lookup is one small response (and has a server cache). Use the
     // one-way endpoint only as a fallback, not as a prerequisite on every search.
@@ -838,7 +865,7 @@ function DestinationQuery() {
               <Alert
                 type="warning"
                 showIcon
-                message={`正在更新为最新数据（当前显示的是 ${formatAge(snapshotAge)}的结果）`}
+                message={`显示 ${formatAge(snapshotAge)}的航班快照（非实时余票）`}
               />
             </div>
           )}
