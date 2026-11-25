@@ -57,4 +57,10 @@ debug-screenshots/
 debug-screenshots-view/
 debug-*.png
 .deploy.pid
-.claude/
+# Keep local Claude configuration and worktrees private; track only the project runbook.
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/flight-crawler-ops/
+/.claude/skills/flight-crawler-ops/*
+!/.claude/skills/flight-crawler-ops/SKILL.md

@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 后端 (backend/)
 - **框架**: NestJS 10 + TypeScript (Strict mode)
-- **数据库**: SQLite (开发环境) / PostgreSQL (生产环境)
+- **数据库**: 航班数据用 SQLite（开发和 Render）；账号、权限和额度记录用 Neon PostgreSQL
 - **ORM**: TypeORM - 实体自动同步 (synchronize: true)
 - **爬虫**: Puppeteer - 模拟浏览器操作
 - **定时任务**: @nestjs/schedule - 定时爬取数据
@@ -26,6 +26,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **日期处理**: dayjs
 
 ## 常用命令
+
+查 Render、连接 Neon、检查航班快照或验证发布时，使用项目 skill `/flight-crawler-ops`。
 
 ### 开发环境
 ```bash
@@ -53,7 +55,7 @@ npm run lint         # ESLint 检查
   本地打开经常是空的。线上数据由每日爬虫推到 `data` 分支，先停后端再执行
   `./pull-prod-db.sh` 即可把线上库拉到本地（该文件在 git 中受跟踪，提交时注意排除）
 - TypeORM 自动同步模式已启用 (synchronize: true)，实体变更会自动更新数据库结构
-- 生产环境需切换到 PostgreSQL 并关闭 synchronize
+- Render 航班库仍为 SQLite；Neon PostgreSQL 存放的账号、会话和额度不会随航班快照一起替换
 - **重要**: 修改 Entity 后无需手动创建迁移，TypeORM 会自动同步表结构
 
 ### 测试与代码质量
